@@ -1,0 +1,165 @@
+import { CARD_NAME } from '../data/cardDefs'
+import { isRedCard } from '../data/deck'
+import { hasSkill, speciesDef, skillDef } from '../data/species'
+import type {
+  Card,
+  CardKind,
+  DamageCtx,
+  GameState,
+  PlayerIndex,
+  SkillId,
+  VirtualCard,
+} from '../types'
+import { otherPlayer } from '../util'
+
+/** 一张手牌在某语境下的一个可选"牌面"：直接用，或经技能转化后用 */
+export interface CardOption {
+  as: CardKind
+  via?: SkillId
+}
+
+/**
+ * 已实现的全部技能。新增物种时先在这里登记，
+ * passive.test.ts 会校验「8 个物种的技能集合」与它完全一致，防止漏实现。
+ */
+export const IMPLEMENTED_SKILLS: SkillId[] = [
+  'pounce',
+  'roar',
+  'flicker',
+  'snatch',
+  'herb',
+  'mend',
+  'menace',
+  'overexert',
+  'guile',
+]
+
+/** 生成虚拟牌 */
+export function toVirtual(card: Card, option: CardOption): VirtualCard {
+  if (option.via) return { as: option.as, source: card, via: option.via }
+  return { as: option.as, source: card }
+}
+
+/** 按钮文案：「使用【打击】（猛扑）」 */
+export function optionLabel(
+  option: CardOption,
+  verb: '使用' | '打出' | '当',
+): string {
+  if (option.via) {
+    return `${verb}【${CARD_NAME[option.as]}】（${skillDef(option.via).name}）`
+  }
+  return `${verb}【${CARD_NAME[option.as]}】`
+}
+
+/**
+ * 「使用」语境（出牌阶段主动使用 / 濒死求【回复】）下的全部牌面。
+ * 注意：只列出机制上说得通的牌面，具体合法性（次数、体力是否已满）由 legality 判定。
+ */
+export function useOptions(
+  state: GameState,
+  p: PlayerIndex,
+  card: Card,
+): CardOption[] {
+  const player = state.players[p]
+  const options: CardOption[] = []
+
+  // 直接使用：【防御】永远不会被主动使用
+  if (card.kind === 'strike' || card.kind === 'heal') {
+    options.push({ as: card.kind })
+  }
+
+  // 猛扑：红色牌当【打击】
+  if (card.kind !== 'strike' && isRedCard(card) && hasSkill(player.species, 'pounce')) {
+    options.push({ as: 'strike', via: 'pounce' })
+  }
+
+  // 疾影：【防御】当【打击】
+  if (card.kind === 'defend' && hasSkill(player.species, 'flicker')) {
+    options.push({ as: 'strike', via: 'flicker' })
+  }
+
+  // 灵草：回合外可将红色牌当【回复】
+  if (
+    card.kind !== 'heal' &&
+    isRedCard(card) &&
+    hasSkill(player.species, 'herb') &&
+    state.active !== p
+  ) {
+    options.push({ as: 'heal', via: 'herb' })
+  }
+
+  return options
+}
+
+/** 「打出」语境（响应【打击】）下的全部牌面：本作中只有【防御】有意义 */
+export function playOptions(
+  state: GameState,
+  p: PlayerIndex,
+  card: Card,
+): CardOption[] {
+  const player = state.players[p]
+  const options: CardOption[] = []
+
+  if (card.kind === 'defend') options.push({ as: 'defend' })
+
+  // 疾影：【打击】当【防御】打出
+  if (card.kind === 'strike' && hasSkill(player.species, 'flicker')) {
+    options.push({ as: 'defend', via: 'flicker' })
+  }
+
+  return options
+}
+
+/** 当前可发动的主动技 */
+export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
+  const player = state.players[p]
+  const out: SkillId[] = []
+  if (state.phase !== 'play' || state.active !== p || !player.alive) return out
+
+  if (hasSkill(player.species, 'overexert')) out.push('overexert')
+
+  if (hasSkill(player.species, 'mend') && !player.mendUsedThisTurn && player.hand.length >= 1) {
+    // 疗愈必须指定一名"已受伤"的角色
+    const opponent = state.players[otherPlayer(p)]
+    const anyWounded =
+      player.hp < player.maxHp || (opponent.alive && opponent.hp < opponent.maxHp)
+    if (anyWounded) out.push('mend')
+  }
+
+  return out
+}
+
+/** 受到伤害后可以发动的技能（按物种技能表顺序） */
+export function triggerSkillsFor(state: GameState, ctx: DamageCtx): SkillId[] {
+  const target = state.players[ctx.target]
+  if (!target.alive) return []
+
+  const out: SkillId[] = []
+  for (const skill of speciesDef(target.species).skills) {
+    if (skill.kind !== 'trigger') continue
+
+    if (skill.id === 'snatch') {
+      const card = ctx.card
+      // 造成伤害的牌必须还在处理区才能被取回
+      if (card && state.processing.some((c) => c.uid === card.source.uid)) {
+        out.push('snatch')
+      }
+    }
+
+    if (skill.id === 'guile') {
+      const source = state.players[ctx.source]
+      if (source.alive && source.hand.length > 0) out.push('guile')
+    }
+  }
+  return out
+}
+
+/** 【打击】需要目标打出几张【防御】才能抵消 */
+export function defendNeedAgainst(state: GameState, source: PlayerIndex): number {
+  return hasSkill(state.players[source].species, 'menace') ? 2 : 1
+}
+
+/** 每回合可使用【打击】的张数上限（怒吼为无限） */
+export function strikeLimit(state: GameState, p: PlayerIndex): number {
+  return hasSkill(state.players[p].species, 'roar') ? Number.POSITIVE_INFINITY : 1
+}

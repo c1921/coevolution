@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+
+@theme {
+  /* 牌桌木质配色 */
+  --color-table-950: #100d09;
+  --color-table-900: #1a140f;
+  --color-table-800: #251d15;
+  --color-table-700: #37291d;
+  --color-table-600: #4d3a28;
+
+  /* 文字 */
+  --color-ink-100: #f4ece1;
+  --color-ink-300: #c9b8a2;
+  --color-ink-500: #94826d;
+
+  /* 牌面 */
+  --color-face: #f7f1e6;
+  --color-face-red: #b8342a;
+  --color-face-black: #2b2b2b;
+
+  /* 强调色 */
+  --color-jade-400: #5fbf9a;
+  --color-jade-600: #2f8a68;
+  --color-ember-400: #e0834a;
+  --color-ember-600: #b45a24;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    color: var(--color-ink-100);
+    font-family: system-ui, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    background-color: var(--color-table-950);
+    background-image: radial-gradient(
+      circle at 50% 0%,
+      var(--color-table-800) 0%,
+      var(--color-table-950) 70%
+    );
+    background-attachment: fixed;
+  }
+
+  button {
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}

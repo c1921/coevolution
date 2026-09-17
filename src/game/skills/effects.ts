@@ -1,0 +1,87 @@
+import { skillDef } from '../data/species'
+import { log, plainLabel, playerLabel } from '../log'
+import { nextInt } from '../rng'
+import { findInHand, moveHandToDiscard, takeFromProcessing } from '../rules/cardZones'
+import { loseHp } from '../rules/damage'
+import type { Card, DamageCtx, GameState, PlayerIndex, SkillId } from '../types'
+import { RuleError } from '../util'
+
+/**
+ * 主动技（出牌阶段发动）：透支 / 疗愈。
+ * 调用方（引擎）已完成合法性校验，这里只负责结算与战报。
+ */
+export function applyActiveSkill(
+  state: GameState,
+  p: PlayerIndex,
+  skill: SkillId,
+  card: Card | undefined,
+  target: PlayerIndex,
+): void {
+  if (skill === 'overexert') {
+    log(state, `${playerLabel(state, p)} 发动【透支】`)
+    // 失去体力会立即做濒死检查，存活之后才摸两张牌
+    state.stack.push({ kind: 'draw', player: p, count: 2 })
+    loseHp(state, p, 1)
+    return
+  }
+
+  if (skill === 'mend') {
+    const real = card ? findInHand(state, p, card.uid) : undefined
+    if (!real) throw new RuleError('疗愈需要弃置一张手牌')
+    moveHandToDiscard(state, p, real)
+    state.players[p].mendUsedThisTurn = true
+
+    const targetPlayer = state.players[target]
+    targetPlayer.hp = Math.min(targetPlayer.hp + 1, targetPlayer.maxHp)
+    log(
+      state,
+      `${playerLabel(state, p)} 发动【疗愈】，弃置 ${plainLabel(real)}，令 ${playerLabel(state, target)} 回复 1 点体力（体力 ${targetPlayer.hp}/${targetPlayer.maxHp}）`,
+    )
+    return
+  }
+
+  throw new RuleError(`【${skillDef(skill).name}】无法主动发动`)
+}
+
+/**
+ * 「受到伤害后」的可选技能：夺食 / 狡计。
+ * 注意此刻造成伤害的牌仍在处理区，夺食正是从处理区把它取回手牌。
+ */
+export function applyTriggerSkill(
+  state: GameState,
+  p: PlayerIndex,
+  skill: SkillId,
+  ctx: DamageCtx,
+): void {
+  if (skill === 'snatch') {
+    const virtual = ctx.card
+    if (!virtual || !takeFromProcessing(state, virtual.source)) {
+      log(state, `${playerLabel(state, p)} 发动【夺食】，但该牌已不在处理区`)
+      return
+    }
+    state.players[p].hand.push(virtual.source)
+    log(state, `${playerLabel(state, p)} 发动【夺食】，获得 ${plainLabel(virtual.source)}`)
+    return
+  }
+
+  if (skill === 'guile') {
+    const source = state.players[ctx.source]
+    if (source.hand.length === 0) {
+      log(state, `${playerLabel(state, p)} 发动【狡计】，但对方没有手牌`)
+      return
+    }
+    const pick = nextInt(state.rngState, source.hand.length)
+    state.rngState = pick.state
+    const taken = source.hand.splice(pick.value, 1)[0]
+    if (!taken) throw new RuleError('狡计取牌失败')
+    state.players[p].hand.push(taken)
+    // 手牌是隐藏信息，战报不公开具体是哪一张
+    log(
+      state,
+      `${playerLabel(state, p)} 发动【狡计】，获得 ${playerLabel(state, ctx.source)} 的一张手牌`,
+    )
+    return
+  }
+
+  throw new RuleError(`【${skillDef(skill).name}】不是受到伤害后可发动的技能`)
+}
