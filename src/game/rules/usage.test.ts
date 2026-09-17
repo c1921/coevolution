@@ -39,7 +39,7 @@ describe('使用次数记录', () => {
     })
     submit(state, { kind: 'cancel' })
 
-    // 用掉的是【打击】本回合的那一次，而【防御】的次数不变
+    // 记在【打击】名下，而【防御】的次数不变
     expect(cardUseCount(state, 0, 'strike')).toBe(1)
     expect(cardUseCount(state, 0, 'defend')).toBe(0)
   })

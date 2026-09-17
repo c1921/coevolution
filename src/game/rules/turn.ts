@@ -3,6 +3,7 @@ import type { GameState, PlayerIndex, TurnPhase } from '../types'
 import { otherPlayer } from '../util'
 import { drawCards } from './cardZones'
 import { loseHp } from './damage'
+import { energyTag, refillEnergy } from './energy'
 import { buildTurnPlan, finishPhaseBody, runTiming, takeNextPhase } from './phase'
 import type { TimingEffect } from './phase'
 import { resetTurnUsage } from './usage'
@@ -140,9 +141,15 @@ function stepTurnTiming(
           log(state, `${playerLabel(state, winner)} 获胜！`)
           return
         }
-        log(state, `—— 第 ${state.turn} 回合 · ${playerLabel(state, state.active)} ——`)
-        // 使用次数在回合开始时重置
+        // 使用次数在回合开始时重置，能量在回合开始时回复至上限（先回满再写回合标题，
+        // 标题里的能量才是本回合的起始值）。位置在「回合开始时」的规则效果（消耗战等）
+        // 之前，因此因消耗战进入濒死的角色看到的是回满后的能量。
         resetTurnUsage(state, state.active)
+        refillEnergy(state, state.active)
+        log(
+          state,
+          `—— 第 ${state.turn} 回合 · ${playerLabel(state, state.active)}${energyTag(state, state.active)} ——`,
+        )
         // 本回合的阶段计划：可被「跳过阶段」删减，也可插入「额外的阶段」
         state.phaseQueue = buildTurnPlan()
       }

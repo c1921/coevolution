@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{ pick: [uid: number] }>()
 
 const red = computed(() => isRedCard(props.card))
+const cost = computed(() => CARD_DEFS[props.card.kind].cost)
 </script>
 
 <template>
@@ -32,6 +33,13 @@ const red = computed(() => isRedCard(props.card))
       :class="red ? 'text-face-red' : 'text-face-black'"
     >
       {{ SUIT_SYMBOL[card.suit] }}{{ rankLabel(card.rank) }}
+    </span>
+    <!-- 能量费用：与牌面说明一致（打击 1 / 防御 1 / 回复 2） -->
+    <span
+      class="absolute top-0.5 right-1 rounded-sm border border-jade-600 bg-jade-400/90 px-1 text-[10px] leading-tight font-bold text-table-950"
+      title="使用 / 打出这张牌需要支付的能量"
+    >
+      {{ cost }}
     </span>
     <span class="mt-7 block text-center text-sm font-bold text-face-black">
       {{ CARD_NAME[card.kind] }}

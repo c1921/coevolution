@@ -1,5 +1,6 @@
 import { buildDeck } from './data/deck'
 import { SPECIES } from './data/species'
+import { refillEnergy } from './rules/energy'
 import { TURN_PHASES, buildTurnPlan } from './rules/phase'
 import { newCardUseRecord } from './rules/usage'
 import type {
@@ -38,6 +39,10 @@ export interface MakeStateOptions {
   aiHand?: HandSpec[]
   playerHp?: number
   aiHp?: number
+  /** 玩家（下标 0）的当前能量；缺省为上限（回合开始时回满后的常态） */
+  playerEnergy?: number
+  /** AI（下标 1）的当前能量；缺省为上限 */
+  aiEnergy?: number
   /** 当前回合角色，默认玩家 */
   active?: PlayerIndex
   phase?: Phase
@@ -81,11 +86,13 @@ export function makeState(o: MakeStateOptions): GameState {
     maxHp: SPECIES[species].maxHp,
     alive: true,
     hand,
+    // 先置 0，构造完 state 后统一回满（上限可能带技能修正）
+    energy: 0,
     usedCardsThisTurn: newCardUseRecord(),
     usedSkillsThisTurn: [],
   })
 
-  return {
+  const state: GameState = {
     seed: o.seed ?? 1,
     rngState: o.seed ?? 1,
     deck: pool,
@@ -107,6 +114,14 @@ export function makeState(o: MakeStateOptions): GameState {
     log: [],
     result: null,
   }
+
+  // 默认双方能量都是满的（等价于「回合开始时回满」的常态），可按需覆盖
+  refillEnergy(state, 0)
+  refillEnergy(state, 1)
+  if (o.playerEnergy !== undefined) state.players[0].energy = o.playerEnergy
+  if (o.aiEnergy !== undefined) state.players[1].energy = o.aiEnergy
+
+  return state
 }
 
 /** 把牌堆中某张牌移到牌堆顶（drawCards 从数组末尾取牌） */

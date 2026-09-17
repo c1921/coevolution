@@ -5,6 +5,7 @@ import { createGame, isOver, rollDraft, submit } from '../game/engine'
 import { playerLabel } from '../game/log'
 import { PHASE_NAME } from '../game/rules/phase'
 import { checkPlayCardAsDefend, checkUseCard } from '../game/rules/legality'
+import { energyCost, energyMax } from '../game/rules/energy'
 import { ATTRITION_TURN } from '../game/rules/turn'
 import { activeOptions, optionLabel, playOptions, useOptions, type CardOption } from '../game/skills'
 import type {
@@ -114,6 +115,15 @@ export const opponent = computed(() => gameState.value?.players[AI_PLAYER] ?? nu
 export const over = computed(() => (gameState.value ? isOver(gameState.value) : false))
 export const isHumanTurn = computed(() => gameState.value?.active === HUMAN)
 
+/** 人类的能量与上限（上限可能被技能修正，如熊的怒吼） */
+export const humanEnergy = computed(() => gameState.value?.players[HUMAN].energy ?? 0)
+export const humanEnergyMax = computed(() =>
+  gameState.value ? energyMax(gameState.value, HUMAN) : 0,
+)
+export const opponentEnergyMax = computed(() =>
+  gameState.value ? energyMax(gameState.value, AI_PLAYER) : 0,
+)
+
 export const humanPending = computed<Prompt | null>(() => {
   const pending = gameState.value?.pending
   return pending && pending.player === HUMAN ? pending : null
@@ -174,7 +184,8 @@ export function legalOptions(card: Card): CardOption[] {
 }
 
 export function optionText(option: CardOption): string {
-  return optionLabel(option, humanPending.value?.kind === 'respond' ? '打出' : '使用')
+  const verb = humanPending.value?.kind === 'respond' ? '打出' : '使用'
+  return `${optionLabel(option, verb)}（${energyCost(option.as)} 能量）`
 }
 
 export function isSelectable(card: Card): boolean {
@@ -183,6 +194,18 @@ export function isSelectable(card: Card): boolean {
   if (pending.kind === 'discard') return true
   return legalOptions(card).length > 0
 }
+
+/** 出牌阶段是否还有任何打得出的牌（手牌为空或能量见底时为 false） */
+export const hasPlayableCard = computed(() => {
+  const state = gameState.value
+  if (!state || humanPending.value?.kind !== 'play') return false
+  return state.players[HUMAN].hand.some((card) => isSelectable(card))
+})
+
+/** 出牌阶段却一张牌都打不出（能量不够付任何牌面） */
+export const cannotPlayAnything = computed(
+  () => humanPending.value?.kind === 'play' && !hasPlayableCard.value,
+)
 
 export function isSelected(uid: number): boolean {
   return selected.value.includes(uid)
@@ -210,15 +233,18 @@ export const pendingHint = computed(() => {
 
   switch (pending.kind) {
     case 'play':
-      return '你的出牌阶段：点选一张手牌再选择用法，或直接结束出牌阶段'
+      return `你的出牌阶段（能量 ${humanEnergy.value}/${humanEnergyMax.value}）：点选一张手牌再选择用法，或直接结束出牌阶段`
     case 'respond': {
       const need = pending.need - pending.got
-      return `对手对你使用【打击】，还需打出 ${need} 张【防御】才能抵消（威压需两张）`
+      return `对手对你使用【打击】，还需打出 ${need} 张【防御】才能抵消（威压需两张）· 每张 ${energyCost('defend')} 点能量（当前 ${state.players[HUMAN].energy}）`
     }
-    case 'dying':
+    case 'dying': {
+      const cost = energyCost('heal')
+      const energy = `需 ${cost} 点能量（当前 ${state.players[HUMAN].energy}）`
       return pending.dying === HUMAN
-        ? '你已濒死，使用【回复】自救；放弃则阵亡'
-        : `${playerLabel(state, pending.dying)} 濒死，你可以用【回复】救援（对手救你通常是亏的）`
+        ? `你已濒死，使用【回复】自救（${energy}）；放弃则阵亡`
+        : `${playerLabel(state, pending.dying)} 濒死，你可以用【回复】救援（${energy}；对手救你通常是亏的）`
+    }
     case 'discard':
       return `弃牌阶段（手牌上限 = 当前体力）：请选择 ${pending.count} 张手牌弃置`
     case 'trigger':

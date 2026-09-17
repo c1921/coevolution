@@ -18,7 +18,7 @@ const SKILLS: Record<SkillId, SkillDef> = {
     id: 'roar',
     name: '怒吼',
     kind: 'passive',
-    text: '你使用【打击】无次数限制。',
+    text: '你每回合的能量上限 +2。',
   },
   flicker: {
     id: 'flicker',

@@ -81,8 +81,14 @@ export interface PlayerState {
   alive: boolean
   hand: Card[]
   /**
+   * 当前能量。上限由 rules/energy.ts 的 energyMax() 计算（基础值 + 技能修正），
+   * 在**回合开始时**回复至上限；使用 / 打出卡牌都要按「当作的牌面」支付能量。
+   */
+  energy: number
+  /**
    * 本回合各牌名的「使用次数」（使用次数在回合开始时重置）。
-   * 转化牌按其当作的牌名计数；上限判定见 rules/usage.ts 与 skills 的 strikeLimit。
+   * 转化牌按其当作的牌名计数。出牌的实际约束是**能量**（rules/energy.ts），
+   * 这份记录只作统计与战报用，不再构成任何上限。
    */
   usedCardsThisTurn: Record<CardKind, number>
   /** 本回合已发动过的「出牌阶段限一次」技能（如疗愈） */

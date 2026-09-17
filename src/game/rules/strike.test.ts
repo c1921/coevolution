@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
+import { ROAR_ENERGY_BONUS } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 import { assertConservation } from './cardZones'
+import { BASE_ENERGY_MAX } from './energy'
 import { cardUseCount } from './usage'
 
 describe('【打击】结算', () => {
@@ -49,7 +51,7 @@ describe('【打击】结算', () => {
     assertConservation(state)
   })
 
-  it('每回合只能使用一次【打击】', () => {
+  it('【打击】没有次数限制：能量足够就能连续使用', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
@@ -62,28 +64,63 @@ describe('【打击】结算', () => {
     expect(cardUseCount(state, 0, 'strike')).toBe(1)
 
     const second = state.players[0].hand[0]!
+    submit(state, { kind: 'use-card', card: second })
+    submit(state, { kind: 'play-card', card: state.players[1].hand[0]! })
+
+    // 两次【打击】都被抵消，账面上只花掉 2 点能量
+    expect(cardUseCount(state, 0, 'strike')).toBe(2)
+    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - 2)
+    expect(state.players[1].hp).toBe(4)
+    assertConservation(state)
+  })
+
+  it('能量耗尽后无法再使用【打击】', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+      ],
+      aiHand: [{ kind: 'defend' }, { kind: 'defend' }, { kind: 'defend' }],
+    })
+
+    // 3 点能量正好打三张【打击】，第三张之后能量见底
+    for (let i = 0; i < BASE_ENERGY_MAX; i++) {
+      submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
+      submit(state, { kind: 'play-card', card: state.players[1].hand[0]!, as: 'defend' })
+    }
+    expect(state.players[0].energy).toBe(0)
+    expect(state.players[1].hand).toHaveLength(0)
+    expect(state.players[0].hand).toHaveLength(1)
+    expect(state.players[1].hp).toBe(4)
+
     const before = snapshot(state)
-    expect(() => submit(state, { kind: 'use-card', card: second })).toThrow(
-      '本回合你已经使用过【打击】了',
-    )
+    expect(() =>
+      submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' }),
+    ).toThrow('能量不足')
     expect(state).toEqual(before)
     assertConservation(state)
   })
 
-  it('怒吼：同一回合可以连续使用【打击】', () => {
+  it('怒吼：能量上限 +2，同一回合可以打出更多【打击】', () => {
     const state = makeState({
       playerSpecies: 'bear',
       aiSpecies: 'tiger',
-      playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
-      aiHand: [{ kind: 'defend' }, { kind: 'defend' }],
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
+      aiHand: [{ kind: 'defend' }, { kind: 'defend' }, { kind: 'defend' }],
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'play-card', card: state.players[1].hand[0]! })
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'play-card', card: state.players[1].hand[0]! })
+    for (let i = 0; i < 3; i++) {
+      submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
+      submit(state, { kind: 'play-card', card: state.players[1].hand[0]!, as: 'defend' })
+    }
 
-    expect(cardUseCount(state, 0, 'strike')).toBe(2)
+    // 熊的上限是 5，打完三张还剩 2 点（虎只能打三张）
+    expect(cardUseCount(state, 0, 'strike')).toBe(3)
+    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX + ROAR_ENERGY_BONUS - 3)
     expect(state.players[1].hp).toBe(4)
     assertConservation(state)
   })

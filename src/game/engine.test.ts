@@ -3,6 +3,7 @@ import { aiDecide } from './ai'
 import { SPECIES_IDS } from './data/species'
 import { createGame, isOver, rollDraft, submit } from './engine'
 import { assertConservation, drawCards } from './rules/cardZones'
+import { assertEnergyBounds } from './rules/energy'
 import { FIRST_TURN_DRAW, INITIAL_HAND } from './rules/turn'
 import { makeState } from './testUtils'
 import type { GameState, SpeciesId } from './types'
@@ -25,6 +26,7 @@ function runToEnd(state: GameState, label: string): { state: GameState; steps: n
     submit(state, aiDecide(state))
   }
   assertConservation(state)
+  assertEnergyBounds(state)
   return { state, steps }
 }
 

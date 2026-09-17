@@ -1,12 +1,18 @@
 import { isRedCard } from '../data/deck'
 import { hasSkill } from '../data/species'
-import { cardUseCount } from '../rules/usage'
-import { activeOptions, strikeLimit } from '../skills'
+import { canPayEnergy, energyCost } from '../rules/energy'
+import { activeOptions, playOptions } from '../skills'
 import type { Action, Card, GameState, PlayerIndex } from '../types'
 import { otherPlayer, RuleError } from '../util'
 
 /** AI 思考延迟（毫秒）：只影响界面节奏，引擎与单测不受影响 */
 export const AI_DELAY_MS = 600
+
+/**
+ * 预留给防御的能量：手上还有能打出的【防御】（含疾影转化）时，
+ * 进攻到只剩这么多能量就收手，留着拦对手下回合的【打击】。
+ */
+export const DEFENSE_RESERVE = 1
 
 /**
  * 规则式 AI：读取当前待输入项并返回一个动作。
@@ -32,12 +38,17 @@ export function aiDecide(state: GameState): Action {
   }
 }
 
-/** 出牌阶段决策：回血 → 疗愈 → 透支 → 打击 → 结束阶段 */
+/**
+ * 出牌阶段决策：疗愈 → 回血 → 透支 → 打击（受能量约束）→ 结束阶段。
+ *
+ * 每次 submit 只走一步，引擎再把待输入项交回这里，所以「能打几张【打击】」
+ * 由循环自然形成：付得起就打，付不起或要留防御余量就结束出牌阶段。
+ */
 function decidePlay(state: GameState, p: PlayerIndex): Action {
   const player = state.players[p]
   const skills = activeOptions(state, p)
 
-  // 1. 疗愈：自己已受伤，且弃得起（留至少一张手牌）
+  // 1. 疗愈：自己已受伤，且弃得起（留至少一张手牌）。技能不消耗能量
   if (skills.includes('mend') && player.hp < player.maxHp && player.hand.length >= 2) {
     const fodder = worstCard(player.hand)
     if (fodder) {
@@ -45,8 +56,8 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     }
   }
 
-  // 2. 体力告急就用【回复】
-  if (player.hp <= 2 && player.hp < player.maxHp) {
+  // 2. 体力告急就用【回复】（要付得起 2 点能量）
+  if (player.hp <= 2 && player.hp < player.maxHp && canPayEnergy(state, p, 'heal')) {
     const heal = player.hand.find((c) => c.kind === 'heal')
     if (heal) return { kind: 'use-card', card: heal, as: 'heal' }
   }
@@ -63,11 +74,24 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
   return { kind: 'end-phase' }
 }
 
-/** 找出可用于【打击】的最佳方案，优先真牌，其次技能转化 */
+/** 手上是否还有能打出【防御】的牌（真【防御】或疾影把【打击】当【防御】） */
+function holdsDefense(state: GameState, p: PlayerIndex): boolean {
+  return state.players[p].hand.some((card) =>
+    playOptions(state, p, card).some((o) => o.as === 'defend'),
+  )
+}
+
+/**
+ * 找出可用于【打击】的最佳方案，优先真牌，其次技能转化。
+ * 【打击】没有次数限制，唯一的门槛是能量：除了这一张的费用，还要留出防御余量。
+ */
 function bestStrike(state: GameState, p: PlayerIndex): Action | null {
   const player = state.players[p]
-  if (cardUseCount(state, p, 'strike') >= strikeLimit(state, p)) return null
+  if (!canPayEnergy(state, p, 'strike')) return null
   if (!state.players[otherPlayer(p)].alive) return null
+
+  const reserve = holdsDefense(state, p) ? DEFENSE_RESERVE : 0
+  if (player.energy - energyCost('strike') < reserve) return null
 
   const direct = player.hand.find((c) => c.kind === 'strike')
   if (direct) return { kind: 'use-card', card: direct, as: 'strike' }
@@ -96,9 +120,10 @@ function bestStrike(state: GameState, p: PlayerIndex): Action | null {
   return null
 }
 
-/** 响应【打击】：能抵消就抵消，优先真【防御】，其次疾影转化 */
+/** 响应【打击】：付得起就抵消（优先真【防御】，其次疾影转化），否则承受伤害 */
 function decideRespond(state: GameState, p: PlayerIndex): Action {
   const player = state.players[p]
+  if (!canPayEnergy(state, p, 'defend')) return { kind: 'cancel' }
 
   const direct = player.hand.find((c) => c.kind === 'defend')
   if (direct) return { kind: 'play-card', card: direct, as: 'defend' }
@@ -111,17 +136,18 @@ function decideRespond(state: GameState, p: PlayerIndex): Action {
   return { kind: 'cancel' }
 }
 
-/** 濒死求【回复】：只救自己，绝不救对手 */
+/** 濒死求【回复】：只救自己，绝不救对手；付不起 2 点能量就只能放弃 */
 function decideDying(state: GameState, p: PlayerIndex, dying: PlayerIndex): Action {
   if (p !== dying) return { kind: 'cancel' }
 
   const player = state.players[p]
   if (player.hp > 0) return { kind: 'cancel' }
+  if (!canPayEnergy(state, p, 'heal')) return { kind: 'cancel' }
 
   const heal = player.hand.find((c) => c.kind === 'heal')
   if (heal) return { kind: 'use-card', card: heal, as: 'heal' }
 
-  // 灵草：回合外可以用红牌当【回复】
+  // 灵草：回合外可以用红牌当【回复】（同样按【回复】的费用付费）
   if (hasSkill(player.species, 'herb') && state.active !== p) {
     const red = player.hand.find((c) => isRedCard(c))
     if (red) return { kind: 'use-card', card: red, as: 'heal', via: 'herb' }

@@ -99,7 +99,7 @@ describe('转化型技能', () => {
     submit(state, { kind: 'cancel' })
 
     expect(state.players[1].hp).toBe(3)
-    // 转化牌按「当作的牌名」计入使用次数：用掉的是【打击】本回合的那一次
+    // 转化牌按「当作的牌名」计数与付费：这一张算一次【打击】（1 点能量）
     expect(cardUseCount(state, 0, 'strike')).toBe(1)
     assertConservation(state)
   })

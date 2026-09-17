@@ -1,12 +1,12 @@
 import { CARD_NAME } from '../data/cardDefs'
 import { skillDef } from '../data/species'
-import { activeOptions, playOptions, strikeLimit, useOptions } from '../skills'
+import { activeOptions, playOptions, useOptions } from '../skills'
 import type { SkillId } from '../types'
 import { findInHand } from './cardZones'
 import type { Card, CardKind, GameState, PlayerIndex } from '../types'
 import { otherPlayer, RuleError } from '../util'
 import { isInRange } from './distance'
-import { cardUseCount } from './usage'
+import { canPayEnergy, shortfallReason } from './energy'
 
 export type Legality = { ok: true } | { ok: false; reason: string }
 
@@ -63,11 +63,11 @@ export function checkUseCard(
       return fail(describeBadOption(card, as, via))
     }
 
+    // 能量：所有「使用」都要按「当作的牌面」付费，付不起就不能用
+    if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
+
     if (as === 'strike') {
-      // 使用次数上限：默认每回合一张【打击】，【怒吼】改为无限制
-      if (cardUseCount(state, p, 'strike') >= strikeLimit(state, p)) {
-        return fail('本回合你已经使用过【打击】了')
-      }
+      // 【打击】没有次数限制，出牌的实际约束就是能量
       const target = otherPlayer(p)
       if (!state.players[target].alive) return fail('对方已阵亡')
       if (!isInRange(p, target)) return fail('对方不在你的攻击范围内')
@@ -88,6 +88,8 @@ export function checkUseCard(
     if (!matchesOption(useOptions(state, p, card), as, via)) {
       return fail(describeBadOption(card, as, via))
     }
+    // 濒死自救 / 救援同样要付能量：能量不足就只能放弃
+    if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
     return OK
   }
 
@@ -113,10 +115,12 @@ export function checkPlayCardAsDefend(
   if (!matchesOption(playOptions(state, p, card), as, via)) {
     return fail(describeBadOption(card, as, via))
   }
+  // 响应也要付能量：能量不足时只能放弃响应
+  if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
   return OK
 }
 
-/** 发动主动技：透支 / 疗愈 */
+/** 发动主动技：透支 / 疗愈。技能不是「使用一张牌」，不消耗能量。 */
 export function checkActivate(
   state: GameState,
   p: PlayerIndex,

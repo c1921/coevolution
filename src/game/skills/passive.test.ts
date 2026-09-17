@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { SPECIES, SPECIES_IDS } from '../data/species'
-import { defendNeedAgainst, IMPLEMENTED_SKILLS, strikeLimit } from '../skills'
+import { BASE_ENERGY_MAX, energyMax } from '../rules/energy'
+import { defendNeedAgainst, energyMaxBonus, IMPLEMENTED_SKILLS } from '../skills'
 import { makeState } from '../testUtils'
 
 describe('常驻型技能', () => {
-  it('怒吼：解除每回合一次【打击】的限制', () => {
+  it('怒吼：能量上限 +2', () => {
     const bear = makeState({ playerSpecies: 'bear', aiSpecies: 'tiger' })
     const tiger = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
 
-    expect(strikeLimit(bear, 0)).toBe(Number.POSITIVE_INFINITY)
-    expect(strikeLimit(tiger, 0)).toBe(1)
+    expect(energyMaxBonus(bear, 0)).toBe(2)
+    expect(energyMaxBonus(tiger, 0)).toBe(0)
+    expect(energyMax(bear, 0)).toBe(BASE_ENERGY_MAX + 2)
+    expect(energyMax(tiger, 0)).toBe(BASE_ENERGY_MAX)
   })
 
   it('威压：使目标需要两张【防御】才能抵消', () => {

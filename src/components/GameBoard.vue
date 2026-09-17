@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { gameState, human, isHumanTurn, isSelectable, isSelected, pickCard, deckCount, opponent, turnLabel } from '../stores/game'
+import { cannotPlayAnything, gameState, human, humanEnergyMax, isHumanTurn, isSelectable, isSelected, pickCard, deckCount, opponent, opponentEnergyMax, turnLabel } from '../stores/game'
 import ActionBar from './ActionBar.vue'
 import HandCard from './HandCard.vue'
 import LogPanel from './LogPanel.vue'
@@ -20,6 +20,7 @@ import PromptOverlay from './PromptOverlay.vue'
 
     <PlayerPanel
       :player="opponent"
+      :energy-max="opponentEnergyMax"
       :active="!isHumanTurn"
       :human="false"
       :show-hand-count="true"
@@ -29,7 +30,13 @@ import PromptOverlay from './PromptOverlay.vue'
       <LogPanel :entries="gameState.log" />
     </section>
 
-    <PlayerPanel :player="human" :active="isHumanTurn" :human="true" :show-hand-count="false" />
+    <PlayerPanel
+      :player="human"
+      :energy-max="humanEnergyMax"
+      :active="isHumanTurn"
+      :human="true"
+      :show-hand-count="false"
+    />
 
     <section class="flex min-h-28 items-end gap-2 overflow-x-auto pb-1">
       <HandCard
@@ -42,6 +49,9 @@ import PromptOverlay from './PromptOverlay.vue'
       />
       <span v-if="human.hand.length === 0" class="text-sm text-ink-500">
         没有手牌 —— 只能结束阶段
+      </span>
+      <span v-else-if="cannotPlayAnything" class="text-sm text-ink-500">
+        能量不足 —— 这些牌都打不出，只能结束阶段
       </span>
     </section>
 

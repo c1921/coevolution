@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assertConservation } from './cardZones'
+import { energyMax } from './energy'
 import { advance, submit } from '../engine'
 import { makeState, logTexts } from '../testUtils'
 import {
@@ -56,8 +57,13 @@ describe('回合流程', () => {
     expect(state.players[1].hand).toHaveLength(DRAW_PER_TURN)
   })
 
-  it('回合开始时清零使用记录（使用次数于回合开始时重置）', () => {
-    const state = makeState({ playerSpecies: 'bear', aiSpecies: 'tiger', phase: 'turn-start' })
+  it('回合开始时清零使用记录并把能量回满', () => {
+    const state = makeState({
+      playerSpecies: 'bear',
+      aiSpecies: 'tiger',
+      phase: 'turn-start',
+      playerEnergy: 1,
+    })
     recordCardUse(state, 0, 'strike')
     recordCardUse(state, 0, 'strike')
     recordSkillUse(state, 0, 'mend')
@@ -69,6 +75,8 @@ describe('回合流程', () => {
     expect(cardUseCount(state, 0, 'strike')).toBe(0)
     expect(cardUseCount(state, 0, 'defend')).toBe(0)
     expect(skillUsed(state, 0, 'mend')).toBe(false)
+    // 熊的能量上限是 3 + 2
+    expect(state.players[0].energy).toBe(energyMax(state, 0))
   })
 
   it('弃牌阶段：手牌上限等于当前体力值', () => {

@@ -5,6 +5,8 @@ import HealthBar from './HealthBar.vue'
 
 const props = defineProps<{
   player: PlayerState
+  /** 能量上限（可能被技能修正，如熊的怒吼），由上层按引擎规则计算 */
+  energyMax: number
   active: boolean
   human: boolean
   /** 人类玩家的手牌单独展示，这里只显示张数 */
@@ -44,6 +46,22 @@ const species = () => SPECIES[props.player.species]
 
         <div class="mt-1">
           <HealthBar :hp="player.hp" :max-hp="player.maxHp" />
+        </div>
+
+        <!-- 能量：回合开始时回复至上限，使用 / 打出卡牌都要支付 -->
+        <div class="mt-1 flex items-center gap-1" title="回合开始时回复至上限；使用与打出卡牌都要消耗能量">
+          <span class="mr-0.5 text-xs text-ink-500">能量</span>
+          <span
+            v-for="i in energyMax"
+            :key="i"
+            class="h-3 w-3 rounded-sm border"
+            :class="
+              i <= player.energy
+                ? 'border-jade-600 bg-jade-400'
+                : 'border-table-600 bg-table-800'
+            "
+          />
+          <span class="ml-1 text-xs text-ink-500">{{ player.energy }}/{{ energyMax }}</span>
         </div>
 
         <div class="mt-2 flex flex-wrap items-center gap-1">

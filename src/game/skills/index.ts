@@ -160,10 +160,16 @@ export function defendNeedAgainst(state: GameState, source: PlayerIndex): number
   return hasSkill(state.players[source].species, 'menace') ? 2 : 1
 }
 
+/** 【怒吼】的能量上限加成 */
+export const ROAR_ENERGY_BONUS = 2
+
 /**
- * 【打击】每回合的使用次数上限（默认每回合 1 张）。
- * 实际次数记在 rules/usage.ts 的 usedCardsThisTurn 中，回合开始时重置。
+ * 能量上限的技能修正（基础值见 rules/energy.ts 的 BASE_ENERGY_MAX）。
+ *
+ * 【打击】的次数限制已从规则层面整体去除，所以原来的「无次数限制」不再是效果；
+ * 【怒吼】改为「更多能量」，让熊依然打得更凶，同时避开另一条死路：
+ * 任何把【打击】降成 0 费的效果都会与「无次数限制」组合成无限连击。
  */
-export function strikeLimit(state: GameState, p: PlayerIndex): number {
-  return hasSkill(state.players[p].species, 'roar') ? Number.POSITIVE_INFINITY : 1
+export function energyMaxBonus(state: GameState, p: PlayerIndex): number {
+  return hasSkill(state.players[p].species, 'roar') ? ROAR_ENERGY_BONUS : 0
 }

@@ -115,4 +115,59 @@ describe('濒死结算', () => {
     ).toThrow('濒死结算中只能使用【回复】')
     assertConservation(state)
   })
+
+  it('能量不足时无法自救，只能放弃并阵亡', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      active: 1,
+      playerHp: 1,
+      playerHand: [{ kind: 'heal' }],
+      // 差 1 点就付不起【回复】的 2 点能量
+      playerEnergy: 1,
+      aiHand: [{ kind: 'strike' }],
+    })
+
+    submit(state, { kind: 'use-card', card: state.players[1].hand[0]!, as: 'strike' })
+    submit(state, { kind: 'cancel' })
+    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
+
+    expect(() =>
+      submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'heal' }),
+    ).toThrow('能量不足')
+
+    submit(state, { kind: 'cancel' }) // 自己放弃
+    submit(state, { kind: 'cancel' }) // 对手也不救
+    expect(state.players[0].alive).toBe(false)
+    expect(state.result).toEqual({ winner: 1 })
+    assertConservation(state)
+  })
+
+  it('能量不足时无法救援对手', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'strike' }, { kind: 'heal' }],
+      // 打出这次【打击】之后能量见底，救不了人
+      playerEnergy: 1,
+      aiHp: 1,
+    })
+
+    submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
+    submit(state, { kind: 'cancel' })
+    expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
+    expect(state.players[0].energy).toBe(0)
+
+    submit(state, { kind: 'cancel' })
+    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 1 })
+
+    expect(() =>
+      submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'heal' }),
+    ).toThrow('能量不足')
+
+    submit(state, { kind: 'cancel' })
+    expect(state.players[1].alive).toBe(false)
+    expect(state.result).toEqual({ winner: 0 })
+    assertConservation(state)
+  })
 })

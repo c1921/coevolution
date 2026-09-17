@@ -15,6 +15,12 @@ import { dealDamage } from './rules/damage'
 import { killPlayer } from './rules/death'
 import { pushDying } from './rules/dying'
 import {
+  assertEnergyBounds,
+  energyTag,
+  payEnergy,
+  refillEnergy,
+} from './rules/energy'
+import {
   checkActivate,
   checkDiscard,
   checkEndPhase,
@@ -118,6 +124,8 @@ export function createGame(options: CreateGameOptions): GameState {
     maxHp: SPECIES[species].maxHp,
     alive: true,
     hand: [],
+    // 能量上限由技能决定（见 rules/energy.ts），因此先置 0 再统一回满
+    energy: 0,
     usedCardsThisTurn: newCardUseRecord(),
     usedSkillsThisTurn: [],
   })
@@ -143,12 +151,16 @@ export function createGame(options: CreateGameOptions): GameState {
   }
 
   log(state, `对局开始：${playerLabel(state, PLAYER)} 对阵 ${playerLabel(state, AI)}`)
+  // 开局双方能量回满（此后每个回合开始时各自回满）
+  refillEnergy(state, PLAYER)
+  refillEnergy(state, AI)
   drawCards(state, PLAYER, INITIAL_HAND)
   drawCards(state, AI, INITIAL_HAND)
   log(state, `双方各摸 ${INITIAL_HAND} 张起手牌`)
 
   advance(state)
   assertConservation(state)
+  assertEnergyBounds(state)
   return state
 }
 
@@ -161,13 +173,15 @@ export function isOver(state: GameState): boolean {
 }
 
 /**
- * 提交一个动作：先校验（不通过则抛规则错误且状态不变）→ 应用 → 自动推进 → 校验牌数守恒。
+ * 提交一个动作：先校验（不通过则抛规则错误且状态不变）→ 应用 → 自动推进
+ * → 校验牌数守恒与能量不变式。
  */
 export function submit(state: GameState, action: Action): void {
   if (state.result) throw new RuleError('对局已经结束')
   applyAction(state, action)
   advance(state)
   assertConservation(state)
+  assertEnergyBounds(state)
 }
 
 /**
@@ -311,6 +325,8 @@ function applyUseCard(
   const as: CardKind = action.as ?? action.card.kind
   ensure(checkUseCard(state, p, action.card, as, action.via))
   const card = requireInHand(state, p, action.card)
+  // 付费按「当作的牌面」：转化牌付转化后那张牌的费用
+  payEnergy(state, p, as)
 
   if (pending.kind === 'dying') {
     moveHandToDiscard(state, p, card)
@@ -318,7 +334,7 @@ function applyUseCard(
     dying.hp = Math.min(dying.hp + 1, dying.maxHp)
     log(
       state,
-      `${playerLabel(state, p)} 使用${plainLabel(card)}救援 ${playerLabel(state, pending.dying)}（体力 ${dying.hp}/${dying.maxHp}）`,
+      `${playerLabel(state, p)} 使用${plainLabel(card)}救援 ${playerLabel(state, pending.dying)}（体力 ${dying.hp}/${dying.maxHp}）${energyTag(state, p)}`,
     )
     if (dying.hp > 0) {
       const top = state.stack[state.stack.length - 1]
@@ -333,9 +349,9 @@ function applyUseCard(
   if (as === 'strike') {
     const target = otherPlayer(p)
     moveHandToProcessing(state, p, card)
-    // 记录「使用次数」；转化牌按当作的牌名计数
+    // 记录「使用次数」（只作统计，【打击】已无次数限制）；转化牌按当作的牌名计数
     recordCardUse(state, p, 'strike')
-    log(state, describeUse(state, p, target, card, 'strike', action.via))
+    log(state, `${describeUse(state, p, target, card, 'strike', action.via)}${energyTag(state, p)}`)
     pushStrike(
       state,
       p,
@@ -351,12 +367,12 @@ function applyUseCard(
     if (action.via) {
       log(
         state,
-        `${playerLabel(state, p)} 发动【${skillDef(action.via).name}】，将 ${plainLabel(card)} 当【回复】使用，体力回复至 ${player.hp}/${player.maxHp}`,
+        `${playerLabel(state, p)} 发动【${skillDef(action.via).name}】，将 ${plainLabel(card)} 当【回复】使用，体力回复至 ${player.hp}/${player.maxHp}${energyTag(state, p)}`,
       )
     } else {
       log(
         state,
-        `${playerLabel(state, p)} 使用${plainLabel(card)}，体力回复至 ${player.hp}/${player.maxHp}`,
+        `${playerLabel(state, p)} 使用${plainLabel(card)}，体力回复至 ${player.hp}/${player.maxHp}${energyTag(state, p)}`,
       )
     }
     return
@@ -377,6 +393,8 @@ function applyPlayCard(
   const as: CardKind = action.as ?? action.card.kind
   ensure(checkPlayCardAsDefend(state, p, action.card, as, action.via))
   const card = requireInHand(state, p, action.card)
+  // 响应【打击】也要付费：能量不足就只能放弃响应
+  payEnergy(state, p, as)
 
   const top = state.stack[state.stack.length - 1]
   if (!top || top.kind !== 'strike') {
@@ -390,10 +408,10 @@ function applyPlayCard(
   if (action.via) {
     log(
       state,
-      `${playerLabel(state, p)} 发动【${skillDef(action.via).name}】，将 ${plainLabel(card)} 当【防御】打出`,
+      `${playerLabel(state, p)} 发动【${skillDef(action.via).name}】，将 ${plainLabel(card)} 当【防御】打出${energyTag(state, p)}`,
     )
   } else {
-    log(state, `${playerLabel(state, p)} 打出${plainLabel(card)}`)
+    log(state, `${playerLabel(state, p)} 打出${plainLabel(card)}${energyTag(state, p)}`)
   }
 
   if (top.got >= top.need) {

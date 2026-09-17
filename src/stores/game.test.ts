@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiDecide } from '../game/ai'
 import { isOver } from '../game/engine'
+import { assertEnergyBounds, energyCost } from '../game/rules/energy'
 import * as store from './game'
 
 /** 固定种子：对局随机只影响"抽到什么物种/什么牌"，测试用固定种子避免偶发失败 */
@@ -48,6 +49,44 @@ describe('界面状态与驱动循环', () => {
 
     expect(store.over.value).toBe(true)
     expect(store.resultText.value).toMatch(/获胜/)
+    expect(store.errorMessage.value).toBeNull()
+    // 全程能量都落在 0..上限 之内（AI 也没有因付不起能量而卡住）
+    assertEnergyBounds(store.gameState.value!)
+  })
+
+  it('界面提交的出牌会按牌面扣除能量', () => {
+    store.beginDraft(FIXED_SEED)
+    store.chooseSpecies(store.draftOptions.value[0]!)
+    const state = store.gameState.value!
+
+    const card = state.players[0].hand.find((c) => store.legalOptions(c).length > 0)!
+    const option = store.legalOptions(card)[0]!
+    const before = state.players[0].energy
+
+    store.pickCard(card.uid)
+    store.submitOption(card, option)
+
+    expect(store.errorMessage.value).toBeNull()
+    expect(state.players[0].energy).toBe(before - energyCost(option.as))
+    expect(store.optionText(option)).toContain(`${energyCost(option.as)} 能量`)
+  })
+
+  it('能量见底后没有可选的牌，只能结束出牌阶段', () => {
+    store.beginDraft(FIXED_SEED)
+    store.chooseSpecies(store.draftOptions.value[0]!)
+    const state = store.gameState.value!
+
+    // 直接把能量清零，模拟「打光了」的局面
+    state.players[0].energy = 0
+
+    expect(store.humanEnergy.value).toBe(0)
+    expect(store.hasPlayableCard.value).toBe(false)
+    for (const card of state.players[0].hand) {
+      expect(store.isSelectable(card)).toBe(false)
+    }
+    expect(store.pendingHint.value).toContain('能量')
+
+    store.submitEndPhase()
     expect(store.errorMessage.value).toBeNull()
   })
 
