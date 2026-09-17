@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
 import { assertConservation } from '../rules/cardZones'
+import { skillUsed } from '../rules/usage'
 import { activeOptions } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 
@@ -105,7 +106,7 @@ describe('主动技', () => {
 
     submit(state, { kind: 'activate', skill: 'mend', cards: [state.players[0].hand[0]!] })
     expect(state.players[0].hp).toBe(2)
-    expect(state.players[0].mendUsedThisTurn).toBe(true)
+    expect(skillUsed(state, 0, 'mend')).toBe(true)
 
     const before = snapshot(state)
     expect(() =>

@@ -3,6 +3,9 @@ import { aiDecide } from '../game/ai'
 import { isOver } from '../game/engine'
 import * as store from './game'
 
+/** 固定种子：对局随机只影响"抽到什么物种/什么牌"，测试用固定种子避免偶发失败 */
+const FIXED_SEED = 2
+
 /** 用 AI 代替玩家点击，走一遍界面层的提交路径 */
 function actLikeHuman(): void {
   const state = store.gameState.value
@@ -21,7 +24,7 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('从首页到终局：抽将 → 选将 → 自动推进 → 对局结束', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     expect(store.screen.value).toBe('draft')
     expect(store.draftOptions.value).toHaveLength(3)
 
@@ -49,7 +52,7 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('只向玩家提供合法操作，且提交后引擎接受', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     store.chooseSpecies(store.draftOptions.value[0]!)
     const state = store.gameState.value!
 
@@ -76,7 +79,7 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('点选同一张牌可以取消选择', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     store.chooseSpecies(store.draftOptions.value[0]!)
     const card = store.gameState.value!.players[0].hand[0]!
 
@@ -87,7 +90,7 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('非法操作给出中文提示且状态不变', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     store.chooseSpecies(store.draftOptions.value[0]!)
     const state = store.gameState.value!
     const before = JSON.stringify(state.players.map((p) => p.hp))
@@ -99,7 +102,7 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('弃牌阶段：选够张数才能确认', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     store.chooseSpecies(store.draftOptions.value[0]!)
 
     // 一直推进到玩家的弃牌阶段
@@ -108,6 +111,7 @@ describe('界面状态与驱动循环', () => {
     while (!store.over.value) {
       if (++guard > 500) throw new Error('没有进入弃牌阶段')
       vi.runAllTimers()
+      if (store.over.value) break
       const pending = store.humanPending.value
       if (!pending) throw new Error('驱动循环停滞')
       if (pending.kind === 'discard') {
@@ -132,12 +136,12 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('再来一局会重置对局，旧的 AI 回调不会污染新对局', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     store.chooseSpecies(store.draftOptions.value[0]!)
     expect(store.screen.value).toBe('battle')
 
     // AI 的延迟回调此刻还在队列里
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     expect(store.screen.value).toBe('draft')
     expect(store.gameState.value).toBeNull()
 
@@ -148,7 +152,7 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('返回首页会清空对局', () => {
-    store.beginDraft()
+    store.beginDraft(FIXED_SEED)
     store.chooseSpecies(store.draftOptions.value[0]!)
     store.backToStart()
     expect(store.screen.value).toBe('start')

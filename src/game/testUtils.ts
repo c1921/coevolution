@@ -1,14 +1,18 @@
 import { buildDeck } from './data/deck'
 import { SPECIES } from './data/species'
+import { TURN_PHASES, buildTurnPlan } from './rules/phase'
+import { newCardUseRecord } from './rules/usage'
 import type {
   Card,
   CardKind,
   GameState,
   SpeciesId,
   Phase,
+  PhaseStage,
   PlayerIndex,
   PlayerState,
   Suit,
+  TurnPhase,
 } from './types'
 
 export interface HandSpec {
@@ -37,7 +41,18 @@ export interface MakeStateOptions {
   /** 当前回合角色，默认玩家 */
   active?: PlayerIndex
   phase?: Phase
+  /** 当前阶段的子步骤，默认 'start'（状态处在阶段的起点） */
+  phaseStage?: PhaseStage
+  /** 本回合尚余的阶段计划，缺省按 phase 推导 */
+  phaseQueue?: TurnPhase[]
   seed?: number
+}
+
+/** 按当前阶段推导「本回合尚余的阶段计划」 */
+function defaultQueueFor(phase: Phase): TurnPhase[] {
+  if (phase === 'turn-start') return buildTurnPlan()
+  if (phase === 'turn-end' || phase === 'game-over') return []
+  return TURN_PHASES.slice(TURN_PHASES.indexOf(phase) + 1)
 }
 
 /**
@@ -51,6 +66,8 @@ export function makeState(o: MakeStateOptions): GameState {
 
   const active: PlayerIndex = o.active ?? 0
   const phase: Phase = o.phase ?? 'play'
+  const phaseStage: PhaseStage = o.phaseStage ?? 'start'
+  const phaseQueue: TurnPhase[] = o.phaseQueue ?? defaultQueueFor(phase)
 
   const makePlayer = (
     index: PlayerIndex,
@@ -64,8 +81,8 @@ export function makeState(o: MakeStateOptions): GameState {
     maxHp: SPECIES[species].maxHp,
     alive: true,
     hand,
-    strikesUsedThisTurn: 0,
-    mendUsedThisTurn: false,
+    usedCardsThisTurn: newCardUseRecord(),
+    usedSkillsThisTurn: [],
   })
 
   return {
@@ -82,6 +99,8 @@ export function makeState(o: MakeStateOptions): GameState {
     firstPlayer: 0,
     turn: 1,
     phase,
+    phaseStage,
+    phaseQueue,
     pending: phase === 'play' ? { kind: 'play', player: active } : null,
     stack: [],
     lastDamage: null,

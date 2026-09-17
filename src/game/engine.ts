@@ -24,7 +24,9 @@ import {
   ensure,
 } from './rules/legality'
 import { pushStrike } from './rules/respond'
+import { buildTurnPlan, finishPhaseBody } from './rules/phase'
 import { advanceTurn, INITIAL_HAND } from './rules/turn'
+import { newCardUseRecord, recordCardUse } from './rules/usage'
 import { applyActiveSkill, applyTriggerSkill } from './skills/effects'
 import type {
   Action,
@@ -116,8 +118,8 @@ export function createGame(options: CreateGameOptions): GameState {
     maxHp: SPECIES[species].maxHp,
     alive: true,
     hand: [],
-    strikesUsedThisTurn: 0,
-    mendUsedThisTurn: false,
+    usedCardsThisTurn: newCardUseRecord(),
+    usedSkillsThisTurn: [],
   })
 
   const state: GameState = {
@@ -131,6 +133,8 @@ export function createGame(options: CreateGameOptions): GameState {
     firstPlayer,
     turn: 1,
     phase: 'turn-start',
+    phaseStage: 'start',
+    phaseQueue: buildTurnPlan(),
     pending: null,
     stack: [],
     lastDamage: null,
@@ -329,7 +333,8 @@ function applyUseCard(
   if (as === 'strike') {
     const target = otherPlayer(p)
     moveHandToProcessing(state, p, card)
-    player.strikesUsedThisTurn += 1
+    // 记录「使用次数」；转化牌按当作的牌名计数
+    recordCardUse(state, p, 'strike')
     log(state, describeUse(state, p, target, card, 'strike', action.via))
     pushStrike(
       state,
@@ -457,6 +462,8 @@ function applyDiscard(
     state,
     `${playerLabel(state, p)} 弃置了 ${action.cards.length} 张手牌：${names.join('、')}`,
   )
+  // 弃牌阶段的效果已完成，交回回合循环执行「阶段结束时」
+  finishPhaseBody(state)
 }
 
 function applyEndPhase(state: GameState): void {
@@ -464,7 +471,8 @@ function applyEndPhase(state: GameState): void {
   if (!pending || pending.kind !== 'play') throw new RuleError('现在不是你的出牌阶段')
   ensure(checkEndPhase(state, pending.player))
   log(state, `${playerLabel(state, pending.player)} 结束出牌阶段`)
-  state.phase = 'discard'
+  // 出牌阶段的效果已完成，交回回合循环执行「阶段结束时」并推进到弃牌阶段
+  finishPhaseBody(state)
 }
 
 function applyCancel(state: GameState): void {

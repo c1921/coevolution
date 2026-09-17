@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
 import { assertConservation } from '../rules/cardZones'
+import { cardUseCount } from '../rules/usage'
 import { playOptions, useOptions } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 
@@ -98,7 +99,8 @@ describe('转化型技能', () => {
     submit(state, { kind: 'cancel' })
 
     expect(state.players[1].hp).toBe(3)
-    expect(state.players[0].strikesUsedThisTurn).toBe(1)
+    // 转化牌按「当作的牌名」计入使用次数：用掉的是【打击】本回合的那一次
+    expect(cardUseCount(state, 0, 'strike')).toBe(1)
     assertConservation(state)
   })
 

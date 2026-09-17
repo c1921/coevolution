@@ -8,7 +8,11 @@ import {
   FIRST_TURN_DRAW,
   attritionLoss,
   ATTRITION_TURN,
+  discardCount,
+  drawCount,
+  handLimit,
 } from './turn'
+import { cardUseCount, recordCardUse, recordSkillUse, skillUsed } from './usage'
 
 describe('回合流程', () => {
   it('摸牌阶段摸 2 张', () => {
@@ -52,14 +56,19 @@ describe('回合流程', () => {
     expect(state.players[1].hand).toHaveLength(DRAW_PER_TURN)
   })
 
-  it('回合开始时清零回合内标记', () => {
+  it('回合开始时清零使用记录（使用次数于回合开始时重置）', () => {
     const state = makeState({ playerSpecies: 'bear', aiSpecies: 'tiger', phase: 'turn-start' })
-    state.players[0].strikesUsedThisTurn = 3
-    state.players[0].mendUsedThisTurn = true
+    recordCardUse(state, 0, 'strike')
+    recordCardUse(state, 0, 'strike')
+    recordSkillUse(state, 0, 'mend')
+    expect(cardUseCount(state, 0, 'strike')).toBe(2)
+    expect(skillUsed(state, 0, 'mend')).toBe(true)
 
     advanceTurn(state)
-    expect(state.players[0].strikesUsedThisTurn).toBe(0)
-    expect(state.players[0].mendUsedThisTurn).toBe(false)
+
+    expect(cardUseCount(state, 0, 'strike')).toBe(0)
+    expect(cardUseCount(state, 0, 'defend')).toBe(0)
+    expect(skillUsed(state, 0, 'mend')).toBe(false)
   })
 
   it('弃牌阶段：手牌上限等于当前体力值', () => {
@@ -153,6 +162,15 @@ describe('回合流程', () => {
     expect(state.pending).toBeNull()
     expect(state.result).toEqual({ winner: 0 })
   })
+
+  it('回合开始时若回合角色已阵亡，则兜底判定对手获胜', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'turn-start' })
+    state.players[0].alive = false
+
+    expect(advanceTurn(state)).toBe('over')
+    expect(state.result).toEqual({ winner: 1 })
+    expect(state.phase).toBe('game-over')
+  })
 })
 
 describe('消耗战（终止规则）', () => {
@@ -203,6 +221,59 @@ describe('消耗战（终止规则）', () => {
     // 消耗战扣体力只发生了一次
     const losses = state.log.filter((e) => e.text.startsWith('消耗战：'))
     expect(losses).toHaveLength(1)
+    assertConservation(state)
+  })
+})
+
+describe('规范额度', () => {
+  it('摸牌数：默认 2 张，先手角色的第一回合为 1 张', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    state.firstPlayer = 0
+    state.active = 0
+    state.turn = 1
+    expect(drawCount(state, 0)).toBe(FIRST_TURN_DRAW)
+    expect(drawCount(state, 1)).toBe(DRAW_PER_TURN)
+
+    state.turn = 2
+    expect(drawCount(state, 0)).toBe(DRAW_PER_TURN)
+
+    state.active = 1
+    expect(drawCount(state, 1)).toBe(DRAW_PER_TURN)
+  })
+
+  it('手牌上限等于当前体力值，弃牌数是超出的部分', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 3,
+      playerHand: [
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+      ],
+    })
+
+    expect(handLimit(state, 0)).toBe(3)
+    expect(discardCount(state, 0)).toBe(2)
+
+    state.players[0].hp = -1
+    expect(handLimit(state, 0)).toBe(0)
+  })
+
+  it('消耗战挂在「回合开始时」时机：先失去体力，再进行摸牌阶段', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'turn-start' })
+    state.turn = ATTRITION_TURN
+
+    advance(state)
+
+    const texts = state.log.map((e) => e.text)
+    const attritionAt = texts.findIndex((t) => t.startsWith('消耗战：'))
+    const drawAt = texts.findIndex((t) => t.includes('摸了'))
+    expect(attritionAt).toBeGreaterThanOrEqual(0)
+    expect(drawAt).toBeGreaterThan(attritionAt)
+    expect(state.players[0].hp).toBe(3)
     assertConservation(state)
   })
 })

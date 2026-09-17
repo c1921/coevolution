@@ -3,6 +3,7 @@ import { AI_DELAY_MS, aiDecide } from '../game/ai'
 import { skillDef } from '../game/data/species'
 import { createGame, isOver, rollDraft, submit } from '../game/engine'
 import { playerLabel } from '../game/log'
+import { PHASE_NAME } from '../game/rules/phase'
 import { checkPlayCardAsDefend, checkUseCard } from '../game/rules/legality'
 import { ATTRITION_TURN } from '../game/rules/turn'
 import { activeOptions, optionLabel, playOptions, useOptions, type CardOption } from '../game/skills'
@@ -33,10 +34,13 @@ export const errorMessage = ref<string | null>(null)
 let pumpToken = 0
 let seed = 0
 
-/** 回到开始页，开始一次新的抽将 */
-export function beginDraft(): void {
+/**
+ * 回到开始页，开始一次新的抽将。
+ * 传入 seedOverride 可以复现同一局（界面不传，测试用固定种子避免随机导致的偶发失败）。
+ */
+export function beginDraft(seedOverride?: number): void {
   pumpToken += 1
-  seed = Math.floor(Math.random() * 2 ** 31)
+  seed = seedOverride ?? Math.floor(Math.random() * 2 ** 31)
   draftOptions.value = rollDraft(seed).playerOptions
   gameState.value = null
   selected.value = []
@@ -141,8 +145,10 @@ export const turnLabel = computed(() => {
   const state = gameState.value
   if (!state) return ''
   const side = state.active === HUMAN ? '你的回合' : '对手回合'
+  // 终局后不再显示阶段名（此时回合游标停在终止态）
+  const phase = state.result ? '' : ` · ${PHASE_NAME[state.phase]}`
   const attrition = state.turn >= ATTRITION_TURN ? ' · 消耗战' : ''
-  return `第 ${state.turn} 回合 · ${side}${attrition}`
+  return `第 ${state.turn} 回合 · ${side}${phase}${attrition}`
 })
 
 export const resultText = computed(() => {

@@ -1,6 +1,7 @@
 import { CARD_NAME } from '../data/cardDefs'
 import { isRedCard } from '../data/deck'
 import { hasSkill, speciesDef, skillDef } from '../data/species'
+import { skillUsed } from '../rules/usage'
 import type {
   Card,
   CardKind,
@@ -118,7 +119,7 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
 
   if (hasSkill(player.species, 'overexert')) out.push('overexert')
 
-  if (hasSkill(player.species, 'mend') && !player.mendUsedThisTurn && player.hand.length >= 1) {
+  if (hasSkill(player.species, 'mend') && !skillUsed(state, p, 'mend') && player.hand.length >= 1) {
     // 疗愈必须指定一名"已受伤"的角色
     const opponent = state.players[otherPlayer(p)]
     const anyWounded =
@@ -159,7 +160,10 @@ export function defendNeedAgainst(state: GameState, source: PlayerIndex): number
   return hasSkill(state.players[source].species, 'menace') ? 2 : 1
 }
 
-/** 每回合可使用【打击】的张数上限（怒吼为无限） */
+/**
+ * 【打击】每回合的使用次数上限（默认每回合 1 张）。
+ * 实际次数记在 rules/usage.ts 的 usedCardsThisTurn 中，回合开始时重置。
+ */
 export function strikeLimit(state: GameState, p: PlayerIndex): number {
   return hasSkill(state.players[p].species, 'roar') ? Number.POSITIVE_INFINITY : 1
 }

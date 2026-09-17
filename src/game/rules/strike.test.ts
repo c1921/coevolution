@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
 import { makeState, snapshot } from '../testUtils'
 import { assertConservation } from './cardZones'
+import { cardUseCount } from './usage'
 
 describe('【打击】结算', () => {
   it('目标打出【防御】即抵消，双方无伤害且两张牌都进弃牌堆', () => {
@@ -58,7 +59,7 @@ describe('【打击】结算', () => {
     const first = state.players[0].hand[0]!
     submit(state, { kind: 'use-card', card: first })
     submit(state, { kind: 'play-card', card: state.players[1].hand[0]! })
-    expect(state.players[0].strikesUsedThisTurn).toBe(1)
+    expect(cardUseCount(state, 0, 'strike')).toBe(1)
 
     const second = state.players[0].hand[0]!
     const before = snapshot(state)
@@ -82,7 +83,7 @@ describe('【打击】结算', () => {
     submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
     submit(state, { kind: 'play-card', card: state.players[1].hand[0]! })
 
-    expect(state.players[0].strikesUsedThisTurn).toBe(2)
+    expect(cardUseCount(state, 0, 'strike')).toBe(2)
     expect(state.players[1].hp).toBe(4)
     assertConservation(state)
   })

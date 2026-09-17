@@ -3,6 +3,7 @@ import { log, plainLabel, playerLabel } from '../log'
 import { nextInt } from '../rng'
 import { findInHand, moveHandToDiscard, takeFromProcessing } from '../rules/cardZones'
 import { loseHp } from '../rules/damage'
+import { recordSkillUse } from '../rules/usage'
 import type { Card, DamageCtx, GameState, PlayerIndex, SkillId } from '../types'
 import { RuleError } from '../util'
 
@@ -29,7 +30,8 @@ export function applyActiveSkill(
     const real = card ? findInHand(state, p, card.uid) : undefined
     if (!real) throw new RuleError('疗愈需要弃置一张手牌')
     moveHandToDiscard(state, p, real)
-    state.players[p].mendUsedThisTurn = true
+    // 疗愈是「出牌阶段限一次」的技能，记入本回合的技能使用记录
+    recordSkillUse(state, p, 'mend')
 
     const targetPlayer = state.players[target]
     targetPlayer.hp = Math.min(targetPlayer.hp + 1, targetPlayer.maxHp)

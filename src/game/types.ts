@@ -80,19 +80,30 @@ export interface PlayerState {
   maxHp: number
   alive: boolean
   hand: Card[]
-  /** 本回合已使用【打击】的张数，回合开始时清零 */
-  strikesUsedThisTurn: number
-  /** 疗愈每回合限一次 */
-  mendUsedThisTurn: boolean
+  /**
+   * 本回合各牌名的「使用次数」（使用次数在回合开始时重置）。
+   * 转化牌按其当作的牌名计数；上限判定见 rules/usage.ts 与 skills 的 strikeLimit。
+   */
+  usedCardsThisTurn: Record<CardKind, number>
+  /** 本回合已发动过的「出牌阶段限一次」技能（如疗愈） */
+  usedSkillsThisTurn: SkillId[]
 }
 
-export type Phase =
-  | 'turn-start'
-  | 'draw'
-  | 'play'
-  | 'discard'
-  | 'turn-end'
-  | 'game-over'
+/** 回合内的六个阶段，顺序固定：准备 → 判定 → 摸牌 → 出牌 → 弃牌 → 结束 */
+export type TurnPhase = 'prepare' | 'judge' | 'draw' | 'play' | 'discard' | 'end'
+
+/**
+ * 阶段的子步骤。每个阶段都有「阶段开始时」「阶段结束时」两个时机，
+ * 中间是阶段本身的进行过程；引擎据此把「移游标」与「产生效果」分开，
+ * 使结算被打断（濒死等）后恢复时不会重复执行同一子步骤。
+ */
+export type PhaseStage = 'start' | 'body' | 'end'
+
+/**
+ * 回合游标：六个阶段 + 「回合开始时 / 回合结束时」两个时机 + 终局标记。
+ * 注意 'game-over' 不是阶段，只是引擎的终止态。
+ */
+export type Phase = 'turn-start' | TurnPhase | 'turn-end' | 'game-over'
 
 /** 伤害上下文：供「受到伤害后」技能与日志使用 */
 export interface DamageCtx {
@@ -181,7 +192,12 @@ export interface GameState {
   firstPlayer: PlayerIndex
   /** 从 1 开始计数；每次切换回合 +1 */
   turn: number
+  /** 当前阶段/时机 */
   phase: Phase
+  /** 当前阶段的子步骤（阶段开始时 / 阶段进行 / 阶段结束时） */
+  phaseStage: PhaseStage
+  /** 本回合尚未进行的阶段：可被「跳过阶段」移除，也可插入「额外的阶段」 */
+  phaseQueue: TurnPhase[]
   /** 当前待输入项；为 null 表示引擎正在自动推进或已终局 */
   pending: Prompt | null
   /** 结算帧栈 */

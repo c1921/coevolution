@@ -1,5 +1,6 @@
 import { isRedCard } from '../data/deck'
 import { hasSkill } from '../data/species'
+import { cardUseCount } from '../rules/usage'
 import { activeOptions, strikeLimit } from '../skills'
 import type { Action, Card, GameState, PlayerIndex } from '../types'
 import { otherPlayer, RuleError } from '../util'
@@ -65,7 +66,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
 /** 找出可用于【打击】的最佳方案，优先真牌，其次技能转化 */
 function bestStrike(state: GameState, p: PlayerIndex): Action | null {
   const player = state.players[p]
-  if (player.strikesUsedThisTurn >= strikeLimit(state, p)) return null
+  if (cardUseCount(state, p, 'strike') >= strikeLimit(state, p)) return null
   if (!state.players[otherPlayer(p)].alive) return null
 
   const direct = player.hand.find((c) => c.kind === 'strike')

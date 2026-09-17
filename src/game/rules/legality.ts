@@ -6,6 +6,7 @@ import { findInHand } from './cardZones'
 import type { Card, CardKind, GameState, PlayerIndex } from '../types'
 import { otherPlayer, RuleError } from '../util'
 import { isInRange } from './distance'
+import { cardUseCount } from './usage'
 
 export type Legality = { ok: true } | { ok: false; reason: string }
 
@@ -63,7 +64,8 @@ export function checkUseCard(
     }
 
     if (as === 'strike') {
-      if (player.strikesUsedThisTurn >= strikeLimit(state, p)) {
+      // 使用次数上限：默认每回合一张【打击】，【怒吼】改为无限制
+      if (cardUseCount(state, p, 'strike') >= strikeLimit(state, p)) {
         return fail('本回合你已经使用过【打击】了')
       }
       const target = otherPlayer(p)
