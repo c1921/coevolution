@@ -40,6 +40,10 @@ const emit = defineEmits<{ pick: [species: SpeciesId] }>()
             <p class="text-sm font-semibold text-jade-400">{{ skill.name }}</p>
             <p class="text-xs leading-snug text-ink-300">{{ skill.text }}</p>
           </div>
+          <!-- 暂时没有技能的物种（如虎）：原来的技能依赖卡牌花色，已被移除 -->
+          <p v-if="SPECIES[id].skills.length === 0" class="text-xs text-ink-500">
+            暂无技能（待重新设计）
+          </p>
         </div>
 
         <button :class="BTN_PRIMARY" class="mt-4" @click="emit('pick', id)">

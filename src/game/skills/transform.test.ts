@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SPECIES } from '../data/species'
 import { submit } from '../engine'
 import { assertConservation } from '../rules/cardZones'
 import { cardUseCount } from '../rules/usage'
@@ -6,67 +7,12 @@ import { playOptions, useOptions } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 
 describe('转化型技能', () => {
-  it('猛扑：红色牌可以当【打击】使用', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
-      playerHand: [{ kind: 'defend', suit: 'diamond' }],
-    })
-    const card = state.players[0].hand[0]!
-
-    submit(state, { kind: 'use-card', card, as: 'strike', via: 'pounce' })
-    expect(state.pending).toMatchObject({ kind: 'respond', player: 1, need: 1 })
-
-    submit(state, { kind: 'cancel' })
-    expect(state.players[1].hp).toBe(3)
-    expect(state.discard.map((c) => c.uid)).toContain(card.uid)
-    assertConservation(state)
-  })
-
-  it('猛扑：只有红色牌能被转化', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
-      playerHand: [
-        { kind: 'strike', suit: 'club' },
-        { kind: 'defend', suit: 'diamond' },
-      ],
-    })
-    const blackStrike = state.players[0].hand[0]!
-    const redDefend = state.players[0].hand[1]!
-
-    expect(useOptions(state, 0, blackStrike).some((o) => o.via === 'pounce')).toBe(false)
-    expect(useOptions(state, 0, redDefend).some((o) => o.via === 'pounce')).toBe(true)
-  })
-
-  it('猛扑不能把非【防御】的牌当【防御】打出（猛扑只产出【打击】）', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'lion',
-      active: 1,
-      playerHand: [{ kind: 'heal', suit: 'heart' }],
-      aiHand: [{ kind: 'strike' }],
-    })
-
-    submit(state, { kind: 'use-card', card: state.players[1].hand[0]! })
-    expect(state.pending).toMatchObject({ kind: 'respond', player: 0, need: 2 })
-
-    const redHeal = state.players[0].hand[0]!
-    expect(playOptions(state, 0, redHeal)).toHaveLength(0)
-
-    const before = snapshot(state)
-    expect(() =>
-      submit(state, { kind: 'play-card', card: redHeal, as: 'defend', via: 'pounce' }),
-    ).toThrow()
-    expect(state).toEqual(before)
-  })
-
   it('疾影：【打击】可以当【防御】打出', () => {
     const state = makeState({
       playerSpecies: 'leopard',
       aiSpecies: 'lion',
       active: 1,
-      playerHand: [{ kind: 'strike', suit: 'spade' }],
+      playerHand: [{ kind: 'strike' }],
       aiHand: [{ kind: 'strike' }],
     })
 
@@ -91,7 +37,7 @@ describe('转化型技能', () => {
     const state = makeState({
       playerSpecies: 'leopard',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'defend', suit: 'diamond' }],
+      playerHand: [{ kind: 'defend' }],
     })
     const card = state.players[0].hand[0]!
 
@@ -104,58 +50,29 @@ describe('转化型技能', () => {
     assertConservation(state)
   })
 
-  it('灵草：回合外可以用红色牌当【回复】自救', () => {
+  it('疾影只能双向转化，不能把【回复】当【打击】', () => {
     const state = makeState({
-      playerSpecies: 'deer',
+      playerSpecies: 'leopard',
       aiSpecies: 'bear',
-      active: 1,
-      playerHand: [{ kind: 'strike', suit: 'heart' }],
-      playerHp: 1,
-      aiHand: [{ kind: 'strike' }],
+      playerHand: [{ kind: 'heal' }],
     })
+    const heal = state.players[0].hand[0]!
 
-    submit(state, { kind: 'use-card', card: state.players[1].hand[0]! })
-    submit(state, { kind: 'cancel' })
-
-    expect(state.players[0].hp).toBe(0)
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
-
-    submit(state, {
-      kind: 'use-card',
-      card: state.players[0].hand[0]!,
-      as: 'heal',
-      via: 'herb',
-    })
-
-    expect(state.players[0].hp).toBe(1)
-    expect(state.players[0].alive).toBe(true)
-    assertConservation(state)
-  })
-
-  it('灵草：自己的回合内不能发动', () => {
-    const state = makeState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      active: 0,
-      playerHand: [{ kind: 'strike', suit: 'heart' }],
-      playerHp: 2,
-    })
-    const card = state.players[0].hand[0]!
-
-    expect(useOptions(state, 0, card).some((o) => o.via === 'herb')).toBe(false)
+    expect(useOptions(state, 0, heal).some((o) => o.via === 'flicker')).toBe(false)
+    expect(playOptions(state, 0, heal)).toHaveLength(0)
 
     const before = snapshot(state)
     expect(() =>
-      submit(state, { kind: 'use-card', card, as: 'heal', via: 'herb' }),
-    ).toThrow()
+      submit(state, { kind: 'use-card', card: heal, as: 'strike', via: 'flicker' }),
+    ).toThrow('无法发动【疾影】')
     expect(state).toEqual(before)
   })
 
   it('没有对应技能时不能冒用转化', () => {
     const state = makeState({
       playerSpecies: 'bear',
-      aiSpecies: 'tiger',
-      playerHand: [{ kind: 'defend', suit: 'diamond' }],
+      aiSpecies: 'leopard',
+      playerHand: [{ kind: 'defend' }],
     })
     const before = snapshot(state)
     expect(() =>
@@ -163,9 +80,22 @@ describe('转化型技能', () => {
         kind: 'use-card',
         card: state.players[0].hand[0]!,
         as: 'strike',
-        via: 'pounce',
+        via: 'flicker',
       }),
-    ).toThrow('无法发动【猛扑】')
+    ).toThrow('无法发动【疾影】')
     expect(state).toEqual(before)
+  })
+
+  it('虎与鹿暂时没有转化技（猛扑 / 灵草因卡牌移除花色而移除）', () => {
+    expect(SPECIES.tiger.skills).toHaveLength(0)
+    expect(SPECIES.deer.skills.map((s) => s.id)).toEqual(['mend'])
+
+    // 虎拿着【防御】也只有「打出【防御】」这一种用法，没有当【打击】的转化
+    const tiger = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'defend' }],
+    })
+    expect(useOptions(tiger, 0, tiger.players[0].hand[0]!)).toHaveLength(0)
   })
 })

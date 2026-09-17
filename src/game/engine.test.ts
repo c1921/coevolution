@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aiDecide } from './ai'
+import { buildDeck, DECK_SIZE } from './data/deck'
 import { SPECIES_IDS } from './data/species'
 import { createGame, isOver, rollDraft, submit } from './engine'
 import { assertConservation, drawCards } from './rules/cardZones'
@@ -171,5 +172,69 @@ describe('开局与选将', () => {
     const state = createGame({ seed, playerSpecies, aiSpecies })
     expect(state.players[1].species).toBe(aiSpecies)
     expect(state.players[1].hp).toBe(state.players[1].maxHp)
+  })
+})
+
+describe('私有牌组', () => {
+  it('开局双方各有一副 20 张私有牌组，uid 全局不重叠', () => {
+    const seed = 11
+    const playerSpecies = rollDraft(seed).playerOptions[0] as SpeciesId
+    const state = createGame({ seed, playerSpecies })
+
+    for (const p of [0, 1] as const) {
+      const player = state.players[p]
+      const all = [...player.deck, ...player.discard, ...player.hand]
+      expect(all).toHaveLength(DECK_SIZE)
+      // 牌组的牌种构成与物种牌组一致（暂时所有物种共用同一套）
+      const kinds = all.map((c) => c.kind).sort()
+      expect(kinds).toEqual(buildDeck(player.species).map((c) => c.kind).sort())
+    }
+
+    const uids = [
+      ...state.players[0].deck,
+      ...state.players[0].discard,
+      ...state.players[0].hand,
+      ...state.players[1].deck,
+      ...state.players[1].discard,
+      ...state.players[1].hand,
+    ].map((c) => c.uid)
+    expect(new Set(uids).size).toBe(DECK_SIZE * 2)
+    assertConservation(state)
+  })
+
+  it('摸牌只动自己的牌组：对手的牌组与手牌不受影响', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const before = {
+      deck: state.players[1].deck.map((c) => c.uid),
+      hand: state.players[1].hand.length,
+      discard: state.players[1].discard.length,
+    }
+
+    drawCards(state, 0, 2)
+
+    expect(state.players[1].deck.map((c) => c.uid)).toEqual(before.deck)
+    expect(state.players[1].hand).toHaveLength(before.hand)
+    expect(state.players[1].discard).toHaveLength(before.discard)
+    assertConservation(state)
+  })
+
+  it('【夺食】拿走的牌归获得者所有，双方池子此消彼长但全局仍守恒', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'wolf',
+      playerHand: [{ kind: 'strike' }],
+    })
+
+    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
+    submit(state, { kind: 'cancel' })
+    submit(state, { kind: 'trigger-choice', accept: true })
+
+    const poolOf = (p: 0 | 1) =>
+      state.players[p].deck.length + state.players[p].discard.length + state.players[p].hand.length
+    // 狼夺回了那张【打击】：自己 21 张，虎只剩下 19 张
+    expect(poolOf(1)).toBe(DECK_SIZE + 1)
+    expect(poolOf(0)).toBe(DECK_SIZE - 1)
+    // 全局依旧一张不多不少
+    assertConservation(state)
   })
 })

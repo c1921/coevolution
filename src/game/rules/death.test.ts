@@ -35,8 +35,9 @@ describe('死亡与胜负结算', () => {
   it('阵亡时处理区残留的牌会进入弃牌堆', () => {
     const state = killAi([{ kind: 'defend' }, { kind: 'heal' }])
     expect(state.processing).toHaveLength(0)
-    // 打击牌 + 阵亡者 2 张手牌
-    expect(state.discard.length).toBeGreaterThanOrEqual(3)
+    // 打击牌进攻击方（玩家 0）的弃牌堆，阵亡者的 2 张手牌进他自己的弃牌堆
+    expect(state.players[0].discard.length).toBeGreaterThanOrEqual(1)
+    expect(state.players[1].discard.length).toBeGreaterThanOrEqual(2)
     assertConservation(state)
   })
 

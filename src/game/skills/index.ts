@@ -1,6 +1,6 @@
 import { CARD_NAME } from '../data/cardDefs'
-import { isRedCard } from '../data/deck'
 import { hasSkill, speciesDef, skillDef } from '../data/species'
+import { isInProcessing } from '../rules/cardZones'
 import { skillUsed } from '../rules/usage'
 import type {
   Card,
@@ -22,13 +22,14 @@ export interface CardOption {
 /**
  * 已实现的全部技能。新增物种时先在这里登记，
  * passive.test.ts 会校验「8 个物种的技能集合」与它完全一致，防止漏实现。
+ *
+ * 注：【猛扑】（虎）与【灵草】（鹿）原本以「红色牌」为判定依据，
+ * 卡牌移除花色后暂时整条移除；重新设计出不含花色的效果后再登记回这里。
  */
 export const IMPLEMENTED_SKILLS: SkillId[] = [
-  'pounce',
   'roar',
   'flicker',
   'snatch',
-  'herb',
   'mend',
   'menace',
   'overexert',
@@ -69,24 +70,9 @@ export function useOptions(
     options.push({ as: card.kind })
   }
 
-  // 猛扑：红色牌当【打击】
-  if (card.kind !== 'strike' && isRedCard(card) && hasSkill(player.species, 'pounce')) {
-    options.push({ as: 'strike', via: 'pounce' })
-  }
-
   // 疾影：【防御】当【打击】
   if (card.kind === 'defend' && hasSkill(player.species, 'flicker')) {
     options.push({ as: 'strike', via: 'flicker' })
-  }
-
-  // 灵草：回合外可将红色牌当【回复】
-  if (
-    card.kind !== 'heal' &&
-    isRedCard(card) &&
-    hasSkill(player.species, 'herb') &&
-    state.active !== p
-  ) {
-    options.push({ as: 'heal', via: 'herb' })
   }
 
   return options
@@ -142,7 +128,7 @@ export function triggerSkillsFor(state: GameState, ctx: DamageCtx): SkillId[] {
     if (skill.id === 'snatch') {
       const card = ctx.card
       // 造成伤害的牌必须还在处理区才能被取回
-      if (card && state.processing.some((c) => c.uid === card.source.uid)) {
+      if (card && isInProcessing(state, card.source.uid)) {
         out.push('snatch')
       }
     }

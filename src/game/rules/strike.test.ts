@@ -11,8 +11,8 @@ describe('【打击】结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike', suit: 'spade' }],
-      aiHand: [{ kind: 'defend', suit: 'diamond' }],
+      playerHand: [{ kind: 'strike' }],
+      aiHand: [{ kind: 'defend' }],
     })
     const strike = state.players[0].hand[0]!
     const dodge = state.players[1].hand[0]!
@@ -25,9 +25,9 @@ describe('【打击】结算', () => {
     expect(state.players[0].hp).toBe(4)
     expect(state.players[1].hp).toBe(4)
     expect(state.processing).toHaveLength(0)
-    expect(state.discard.map((c) => c.uid).sort((a, b) => a - b)).toEqual(
-      [strike.uid, dodge.uid].sort((a, b) => a - b),
-    )
+    // 牌组私有化：打击牌进使用者的弃牌堆，防御牌进响应者的弃牌堆
+    expect(state.players[0].discard.map((c) => c.uid)).toEqual([strike.uid])
+    expect(state.players[1].discard.map((c) => c.uid)).toEqual([dodge.uid])
     expect(state.pending).toEqual({ kind: 'play', player: 0 })
     assertConservation(state)
   })
@@ -46,7 +46,7 @@ describe('【打击】结算', () => {
 
     expect(state.players[1].hp).toBe(3)
     expect(state.processing).toHaveLength(0)
-    expect(state.discard.map((c) => c.uid)).toContain(strike.uid)
+    expect(state.players[0].discard.map((c) => c.uid)).toContain(strike.uid)
     expect(state.pending).toEqual({ kind: 'play', player: 0 })
     assertConservation(state)
   })
@@ -185,7 +185,7 @@ describe('【打击】结算', () => {
     const heal = state.players[0].hand[0]!
     submit(state, { kind: 'use-card', card: heal })
     expect(state.players[0].hp).toBe(3)
-    expect(state.discard.map((c) => c.uid)).toContain(heal.uid)
+    expect(state.players[0].discard.map((c) => c.uid)).toContain(heal.uid)
     assertConservation(state)
   })
 
@@ -208,7 +208,7 @@ describe('【打击】结算', () => {
     expect(() =>
       submit(state, {
         kind: 'use-card',
-        card: { uid: 9999, kind: 'strike', suit: 'spade', rank: 7 },
+        card: { uid: 9999, kind: 'strike' },
       }),
     ).toThrow('不在你的手牌中')
     expect(state).toEqual(before)

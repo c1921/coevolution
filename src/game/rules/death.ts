@@ -16,16 +16,18 @@ export function killPlayer(state: GameState, p: PlayerIndex): void {
 
   if (player.hand.length > 0) {
     const count = player.hand.length
-    state.discard.push(...player.hand)
+    player.discard.push(...player.hand)
     player.hand = []
     log(state, `${playerLabel(state, p)} 弃置了 ${count} 张手牌`)
   }
 
-  // 结算栈与处理区一并清空：未收尾的牌直接进弃牌堆
+  // 结算栈与处理区一并清空：未收尾的牌按归属直接进各自的弃牌堆
   state.stack = []
   state.pending = null
   if (state.processing.length > 0) {
-    state.discard.push(...state.processing)
+    for (const entry of state.processing) {
+      state.players[entry.owner].discard.push(entry.card)
+    }
     state.processing = []
   }
 

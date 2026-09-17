@@ -57,12 +57,14 @@ export function applyTriggerSkill(
 ): void {
   if (skill === 'snatch') {
     const virtual = ctx.card
-    if (!virtual || !takeFromProcessing(state, virtual.source)) {
+    const taken = virtual ? takeFromProcessing(state, virtual.source.uid) : undefined
+    if (!taken) {
       log(state, `${playerLabel(state, p)} 发动【夺食】，但该牌已不在处理区`)
       return
     }
-    state.players[p].hand.push(virtual.source)
-    log(state, `${playerLabel(state, p)} 发动【夺食】，获得 ${plainLabel(virtual.source)}`)
+    // 夺来的牌从此归获得者所有：之后弃置 / 洗回都进获得者自己的牌区
+    state.players[p].hand.push(taken.card)
+    log(state, `${playerLabel(state, p)} 发动【夺食】，获得 ${plainLabel(taken.card)}`)
     return
   }
 

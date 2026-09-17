@@ -83,31 +83,23 @@ describe('能量系统', () => {
     expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - 2)
   })
 
-  it('转化牌按「当作的牌面」付费：灵草把红牌当【回复】要付 2 点', () => {
+  it('转化牌按「当作的牌面」付费：疾影把【防御】当【打击】仍按【打击】收费', () => {
     const state = makeState({
-      playerSpecies: 'deer',
+      playerSpecies: 'leopard',
       aiSpecies: 'bear',
-      active: 1,
-      playerHand: [{ kind: 'strike', suit: 'heart' }],
-      playerHp: 1,
-      aiHand: [{ kind: 'strike' }],
+      playerHand: [{ kind: 'defend' }],
     })
 
-    // 对手把玩家打到濒死
-    submit(state, { kind: 'use-card', card: state.players[1].hand[0]!, as: 'strike' })
-    submit(state, { kind: 'cancel' })
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
-
-    // 灵草：红牌当【回复】，费用按【回复】算
     submit(state, {
       kind: 'use-card',
       card: state.players[0].hand[0]!,
-      as: 'heal',
-      via: 'herb',
+      as: 'strike',
+      via: 'flicker',
     })
 
-    expect(state.players[0].hp).toBe(1)
-    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - energyCost('heal'))
+    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - energyCost('strike'))
+    // 注：【打击】与【防御】目前同费（都是 1），所以「源牌与目标牌费用不同」的强断言
+    // 要等出现一个源牌更便宜的转化技（如已移除的【灵草】红牌→2 费【回复】）才能复现。
   })
 
   it('能量不足时拒绝使用且状态完全不变', () => {

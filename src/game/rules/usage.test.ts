@@ -26,16 +26,16 @@ describe('使用次数记录', () => {
 
   it('转化牌按「当作的牌名」计数', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
+      playerSpecies: 'leopard',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'defend', suit: 'heart' }],
+      playerHand: [{ kind: 'defend' }],
     })
 
     submit(state, {
       kind: 'use-card',
       card: state.players[0].hand[0]!,
       as: 'strike',
-      via: 'pounce',
+      via: 'flicker',
     })
     submit(state, { kind: 'cancel' })
 

@@ -3,25 +3,23 @@
 // 注意：tsconfig 开启了 erasableSyntaxOnly，因此禁止使用 enum，
 // 所有枚举语义一律用字符串字面量联合类型表达。
 
-/** 花色 */
-export type Suit = 'spade' | 'heart' | 'club' | 'diamond'
-
 /** 基本牌种类：打击 / 防御 / 回复 */
 export type CardKind = 'strike' | 'defend' | 'heal'
 
 export type PlayerIndex = 0 | 1
 
+/**
+ * 一张牌：只有「牌种」与「唯一编号」。
+ * 牌种同时决定卡面效果与费用（见 data/cardDefs.ts），卡牌没有花色与点数。
+ */
 export interface Card {
-  /** 全局唯一；洗牌与牌区流转都不改变它，用于"牌数守恒"校验 */
+  /** 全局唯一（跨双方牌组也不重复）；洗牌与牌区流转都不改变它，用于"牌数守恒"校验 */
   uid: number
   kind: CardKind
-  suit: Suit
-  /** 1=A，11=J，12=Q，13=K。MVP 无判定，点数仅用于展示 */
-  rank: number
 }
 
 /**
- * 转化后的"虚拟牌"。猛扑 / 疾影 / 灵草产生的牌统一用它表示，
+ * 转化后的"虚拟牌"。疾影等转化型技能产生的牌统一用它表示，
  * 响应、伤害、日志、弃牌全部只认 VirtualCard，避免结算与展示分叉。
  */
 export interface VirtualCard {
@@ -44,11 +42,9 @@ export type SpeciesId =
   | 'fox'
 
 export type SkillId =
-  | 'pounce'
   | 'roar'
   | 'flicker'
   | 'snatch'
-  | 'herb'
   | 'mend'
   | 'menace'
   | 'overexert'
@@ -80,6 +76,13 @@ export interface PlayerState {
   maxHp: number
   alive: boolean
   hand: Card[]
+  /**
+   * 私有牌组：只属于这个物种（玩家）的 20 张牌，摸牌只从自己的牌组摸。
+   * 每个物种暂时共用同一套牌（见 data/deck.ts 的 SPECIES_DECKS）。
+   */
+  deck: Card[]
+  /** 私有弃牌堆：自己使用 / 弃置的牌；自己的牌组耗尽时洗回自己的牌组 */
+  discard: Card[]
   /**
    * 当前能量。上限由 rules/energy.ts 的 energyMax() 计算（基础值 + 技能修正），
    * 在**回合开始时**回复至上限；使用 / 打出卡牌都要按「当作的牌面」支付能量。
@@ -160,6 +163,16 @@ export interface LogEntry {
 }
 
 /**
+ * 处理区条目：结算中的牌 + 它属于谁。
+ * 一次【打击】的收尾会把攻方的打击牌与守方的防御牌一起送去弃牌堆，
+ * 而弃牌堆是私有的，所以每张处理中的牌都必须记住自己的归属。
+ */
+export interface ProcessingCard {
+  card: Card
+  owner: PlayerIndex
+}
+
+/**
  * 结算帧（continuation stack）。栈顶帧结算完毕才回到下一帧。
  * 打击的响应 → 伤害 → 濒死 → 收尾 这条链就是靠帧的压栈/退栈来保证顺序的。
  */
@@ -173,15 +186,15 @@ export type Frame =
       /** 需要打出的【防御】张数（威压为 2） */
       need: number
       got: number
-      /** 本次结算消耗的牌（打击牌 + 已打出的防御牌），收尾时由处理区进弃牌堆 */
-      spent: Card[]
+      /** 本次结算消耗的牌（打击牌 + 已打出的防御牌），收尾时各自进自己的弃牌堆 */
+      spent: ProcessingCard[]
     }
   /** 伤害已扣减体力：先依次询问「受到伤害后」技能，再做濒死检查 */
   | { kind: 'damage'; ctx: DamageCtx; triggers: SkillId[] }
   /** 濒死询问队列：按顺序逐个询问是否使用【回复】 */
   | { kind: 'dying'; dying: PlayerIndex; ask: PlayerIndex[] }
-      /** 结算收尾：把仍在处理区的牌移入弃牌堆（已被夺食取走的牌自动跳过） */
-  | { kind: 'flush'; cards: Card[] }
+  /** 结算收尾：把仍在处理区的牌按归属移入各自的弃牌堆（已被夺食取走的牌自动跳过） */
+  | { kind: 'flush'; cards: ProcessingCard[] }
   /** 延迟摸牌（透支在濒死结算存活后再摸两张） */
   | { kind: 'draw'; player: PlayerIndex; count: number }
 
@@ -189,10 +202,8 @@ export interface GameState {
   seed: number
   /** PRNG 内部状态，随状态一起序列化，保证可复现 */
   rngState: number
-  deck: Card[]
-  discard: Card[]
-  /** 处理区：结算中的牌暂存于此，结算完全结束后才进弃牌堆（夺食即从此处取回） */
-  processing: Card[]
+  /** 处理区（双方共享）：结算中的牌暂存于此，结算完全结束后才进各自的弃牌堆（夺食即从此处取回） */
+  processing: ProcessingCard[]
   players: [PlayerState, PlayerState]
   active: PlayerIndex
   firstPlayer: PlayerIndex

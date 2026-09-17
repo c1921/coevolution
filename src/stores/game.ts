@@ -149,7 +149,13 @@ export const humanSkills = computed<SkillId[]>(() => {
   return activeOptions(state, HUMAN)
 })
 
-export const deckCount = computed(() => gameState.value?.deck.length ?? 0)
+/** 双方各自的私有牌组剩余张数（牌组私有化后不再有公共牌堆） */
+export const humanDeckCount = computed(
+  () => gameState.value?.players[HUMAN].deck.length ?? 0,
+)
+export const opponentDeckCount = computed(
+  () => gameState.value?.players[AI_PLAYER].deck.length ?? 0,
+)
 
 export const turnLabel = computed(() => {
   const state = gameState.value

@@ -113,7 +113,7 @@ describe('回合流程', () => {
     expect(state.turn).toBe(2)
   })
 
-  it('牌堆耗尽时把弃牌堆洗回牌堆', () => {
+  it('牌组耗尽时把自己的弃牌堆洗回自己的牌组', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
@@ -121,20 +121,24 @@ describe('回合流程', () => {
       playerHand: [{ kind: 'heal' }],
     })
     state.turn = 2
-    const deckSize = state.deck.length
-    state.discard = state.deck
-    state.deck = []
+    const player = state.players[0]
+    const aiDeckBefore = state.players[1].deck.length
+    const deckSize = player.deck.length
+    player.discard = player.deck
+    player.deck = []
 
     advanceTurn(state)
 
-    expect(state.players[0].hand).toHaveLength(3)
-    expect(state.discard).toHaveLength(0)
-    expect(state.deck).toHaveLength(deckSize - DRAW_PER_TURN)
+    expect(player.hand).toHaveLength(3)
+    expect(player.discard).toHaveLength(0)
+    expect(player.deck).toHaveLength(deckSize - DRAW_PER_TURN)
+    // 私有牌组互不干扰：对手的牌组一张没动
+    expect(state.players[1].deck).toHaveLength(aiDeckBefore)
     expect(logTexts(state)).toContain('洗回牌堆')
     assertConservation(state)
   })
 
-  it('牌堆与弃牌堆同时耗尽时跳过摸牌并记录日志', () => {
+  it('牌组与弃牌堆同时耗尽时跳过摸牌并记录日志', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
@@ -142,14 +146,15 @@ describe('回合流程', () => {
       playerHand: [{ kind: 'heal' }],
     })
     state.turn = 2
-    // 把牌堆的牌全部挪到 AI 手里，制造"牌堆与弃牌堆同时为空"的极端情况（牌数依旧守恒）
-    state.players[1].hand.push(...state.deck)
-    state.discard = []
-    state.deck = []
+    const player = state.players[0]
+    // 把玩家自己的牌组全部挪到对手手里，制造"牌组与弃牌堆同时为空"的极端情况（全局牌数依旧守恒）
+    state.players[1].hand.push(...player.deck)
+    player.discard = []
+    player.deck = []
 
     advanceTurn(state)
 
-    expect(state.players[0].hand).toHaveLength(1)
+    expect(player.hand).toHaveLength(1)
     expect(logTexts(state)).toContain('均已耗尽')
     expect(state.phase).toBe('play')
     assertConservation(state)

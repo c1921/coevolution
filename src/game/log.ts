@@ -1,5 +1,4 @@
 import { CARD_NAME } from './data/cardDefs'
-import { cardLabel } from './data/deck'
 import { SPECIES } from './data/species'
 import type { Card, GameState, PlayerIndex, VirtualCard } from './types'
 
@@ -15,14 +14,17 @@ export function playerLabel(s: GameState, p: PlayerIndex): string {
   return `${species.emoji} ${species.name}`
 }
 
-/** 「【打击】♠7」；经技能转化时附带来源，如「【防御】♠7(由打击转化)」 */
+/**
+ * 「【防御】(由【打击】转化)」。
+ * 卡牌没有花色与点数，同名牌之间完全等价，所以标签只含牌名。
+ */
 export function virtualLabel(v: VirtualCard): string {
-  const base = `【${CARD_NAME[v.as]}】${cardLabel(v.source)}`
+  const base = `【${CARD_NAME[v.as]}】`
   if (!v.via || v.source.kind === v.as) return base
   return `${base}(由${CARD_NAME[v.source.kind]}转化)`
 }
 
-/** 「【防御】♦4」 */
+/** 「【防御】」 */
 export function plainLabel(card: Card): string {
-  return `【${CARD_NAME[card.kind]}】${cardLabel(card)}`
+  return `【${CARD_NAME[card.kind]}】`
 }

@@ -91,7 +91,7 @@ describe('主动技', () => {
     submit(state, { kind: 'activate', skill: 'mend', cards: [discard] })
 
     expect(state.players[0].hp).toBe(3)
-    expect(state.discard.map((c) => c.uid)).toContain(discard.uid)
+    expect(state.players[0].discard.map((c) => c.uid)).toContain(discard.uid)
     expect(state.players[0].hand).toHaveLength(1)
     assertConservation(state)
   })

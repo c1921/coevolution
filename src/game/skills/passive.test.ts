@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SPECIES, SPECIES_IDS } from '../data/species'
+import { hasSkill, SPECIES, SPECIES_IDS } from '../data/species'
 import { BASE_ENERGY_MAX, energyMax } from '../rules/energy'
 import { defendNeedAgainst, energyMaxBonus, IMPLEMENTED_SKILLS } from '../skills'
 import { makeState } from '../testUtils'
@@ -28,18 +28,23 @@ describe('常驻型技能', () => {
     expect(fromSpecies).toEqual(new Set(IMPLEMENTED_SKILLS))
   })
 
-  it('每个物种都有名称、头像、体力上限与技能说明', () => {
+  it('每个物种都有名称、头像与体力上限', () => {
     expect(SPECIES_IDS).toHaveLength(8)
     for (const id of SPECIES_IDS) {
       const species = SPECIES[id]
       expect(species.name.length).toBeGreaterThan(0)
       expect(species.emoji.length).toBeGreaterThan(0)
       expect(species.maxHp).toBeGreaterThanOrEqual(3)
-      expect(species.skills.length).toBeGreaterThan(0)
       for (const skill of species.skills) {
         expect(skill.text.length).toBeGreaterThan(0)
       }
     }
+  })
+
+  it('暂时：虎没有技能（【猛扑】依赖花色，已随花色一起移除）', () => {
+    expect(SPECIES.tiger.skills).toHaveLength(0)
+    expect(SPECIES.deer.skills.map((s) => s.id)).toEqual(['mend'])
+    expect(hasSkill('tiger', 'roar')).toBe(false)
   })
 
   it('物种名与技能名都不重复', () => {

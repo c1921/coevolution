@@ -1,74 +1,63 @@
-import type { Card, CardKind, Suit } from '../types'
+import type { Card, CardKind, SpeciesId } from '../types'
 
-export const SUIT_SYMBOL: Record<Suit, string> = {
-  spade: '♠',
-  heart: '♥',
-  club: '♣',
-  diamond: '♦',
+/**
+ * 每个物种私有牌组的构成：共 20 张。
+ *  - 打击 ×11：主要输出，1 点能量
+ *  - 防御 ×6 ：响应【打击】，1 点能量
+ *  - 回复 ×3 ：回血与濒死自救，2 点能量
+ *
+ * 比例沿用此前 53 张公共牌堆的 30 : 15 : 8，因此攻防节奏基本不变。
+ * 这是牌组侧唯一的平衡旋钮：改动后同步 deck.test.ts 的期望值。
+ */
+const DECK_TABLE: { kind: CardKind; count: number }[] = [
+  { kind: 'strike', count: 11 },
+  { kind: 'defend', count: 6 },
+  { kind: 'heal', count: 3 },
+]
+
+/** 每副私有牌组的张数（测试与守恒校验的基准） */
+export const DECK_SIZE = DECK_TABLE.reduce((sum, row) => sum + row.count, 0)
+
+/** 牌组的牌种序列，按牌表顺序展开 */
+const BASIC_DECK: CardKind[] = DECK_TABLE.flatMap((row) =>
+  Array.from({ length: row.count }, () => row.kind),
+)
+
+/**
+ * 每个物种的私有牌组（牌种序列）。
+ * 暂时 8 个物种共用同一套 20 张；将来要按物种分化时，把 BASIC_DECK 换成各自的序列即可，
+ * uid 分配、守恒校验（speciesDeckSize）与洗牌逻辑都不需要改。
+ */
+export const SPECIES_DECKS: Record<SpeciesId, CardKind[]> = {
+  tiger: BASIC_DECK,
+  bear: BASIC_DECK,
+  leopard: BASIC_DECK,
+  wolf: BASIC_DECK,
+  deer: BASIC_DECK,
+  lion: BASIC_DECK,
+  ox: BASIC_DECK,
+  fox: BASIC_DECK,
 }
 
-export const SUIT_NAME: Record<Suit, string> = {
-  spade: '黑桃',
-  heart: '红桃',
-  club: '梅花',
-  diamond: '方块',
+/** 某个物种私有牌组的牌种序列（返回副本，避免调用方改到牌表本身） */
+export function speciesDeck(species: SpeciesId): CardKind[] {
+  return [...SPECIES_DECKS[species]]
 }
 
-/** 红色花色 —— 猛扑与灵草的判定依据 */
-export function isRedSuit(suit: Suit): boolean {
-  return suit === 'heart' || suit === 'diamond'
-}
-
-export function isRedCard(card: Card): boolean {
-  return isRedSuit(card.suit)
-}
-
-/** 1=A，11=J，12=Q，13=K */
-export function rankLabel(rank: number): string {
-  if (rank === 1) return 'A'
-  if (rank === 11) return 'J'
-  if (rank === 12) return 'Q'
-  if (rank === 13) return 'K'
-  return String(rank)
+/** 某个物种私有牌组的张数（「牌数守恒」按它求和） */
+export function speciesDeckSize(species: SpeciesId): number {
+  return SPECIES_DECKS[species].length
 }
 
 /**
- * 完整牌表：共 53 张。
- *  - 打击 ×30：♠10 + ♣13 + ♥3 + ♦4（红 7 / 黑 23，整体以黑为主）
- *  - 防御 ×15：♦10 + ♥5（全红）
- *  - 回复 ×8 ：♥7 + ♦1（全红）
- * 合计 红 30 / 黑 23。
- *
- * 防御与回复全红是刻意设计：它们是【猛扑】【灵草】转化的唯一来源，
- * 全红可保证红牌占到 30/53，让转化型技能始终有牌可用。
- * 这是唯一的平衡旋钮：改动后同步 deck.test.ts 的期望值。
+ * 构建某个物种的私有牌组。
+ * uidBase 让双方的牌张 uid 全局唯一（处理区由双方共享，uid 不能撞车）。
  */
-const DECK_TABLE: { kind: CardKind; suit: Suit; ranks: number[] }[] = [
-  { kind: 'strike', suit: 'spade', ranks: [7, 8, 8, 8, 9, 9, 9, 10, 10, 10] },
-  { kind: 'strike', suit: 'club', ranks: [2, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11] },
-  { kind: 'strike', suit: 'heart', ranks: [10, 10, 11] },
-  { kind: 'strike', suit: 'diamond', ranks: [6, 7, 8, 9] },
-  { kind: 'defend', suit: 'diamond', ranks: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
-  { kind: 'defend', suit: 'heart', ranks: [2, 2, 3, 4, 5] },
-  { kind: 'heal', suit: 'heart', ranks: [3, 4, 6, 7, 8, 9, 12] },
-  { kind: 'heal', suit: 'diamond', ranks: [12] },
-]
-
-/** 牌堆总张数（测试与守恒校验的基准） */
-export const DECK_SIZE = DECK_TABLE.reduce((sum, row) => sum + row.ranks.length, 0)
-
-/** 构建 53 张牌，uid 按牌表顺序从 0 开始分配 */
-export function buildDeck(): Card[] {
-  const cards: Card[] = []
-  for (const row of DECK_TABLE) {
-    for (const rank of row.ranks) {
-      cards.push({ uid: cards.length, kind: row.kind, suit: row.suit, rank })
-    }
-  }
-  return cards
+export function buildDeck(species: SpeciesId, uidBase = 0): Card[] {
+  return speciesDeck(species).map((kind, i) => ({ uid: uidBase + i, kind }))
 }
 
-/** 「♠7」这样的短标签 */
-export function cardLabel(card: Card): string {
-  return `${SUIT_SYMBOL[card.suit]}${rankLabel(card.rank)}`
+/** 双方私有牌组合计的张数：全局「牌数守恒」的基准 */
+export function totalDeckSize(speciesA: SpeciesId, speciesB: SpeciesId): number {
+  return speciesDeckSize(speciesA) + speciesDeckSize(speciesB)
 }

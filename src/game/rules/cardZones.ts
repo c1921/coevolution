@@ -1,7 +1,7 @@
-import { DECK_SIZE } from '../data/deck'
-import { log } from '../log'
+import { totalDeckSize } from '../data/deck'
+import { log, playerLabel } from '../log'
 import { shuffle } from '../rng'
-import type { Card, GameState, PlayerIndex } from '../types'
+import type { Card, GameState, PlayerIndex, ProcessingCard } from '../types'
 import { RuleError } from '../util'
 
 /** 某人的手牌 */
@@ -24,58 +24,68 @@ export function removeFromHand(state: GameState, p: PlayerIndex, card: Card): vo
   hand.splice(i, 1)
 }
 
-/** 手牌 → 处理区（结算中的牌） */
+/** 手牌 → 处理区（结算中的牌）；条目记住归属，收尾时才知道该进谁的弃牌堆 */
 export function moveHandToProcessing(
   state: GameState,
   p: PlayerIndex,
   card: Card,
 ): void {
   removeFromHand(state, p, card)
-  state.processing.push(card)
+  state.processing.push({ card, owner: p })
 }
 
-/** 手牌 → 弃牌堆 */
+/** 手牌 → 自己的弃牌堆 */
 export function moveHandToDiscard(state: GameState, p: PlayerIndex, card: Card): void {
   removeFromHand(state, p, card)
-  state.discard.push(card)
+  state.players[p].discard.push(card)
 }
 
-/** 从处理区取走一张牌；不在处理区则返回 false（夺食可能已经取走过） */
-export function takeFromProcessing(state: GameState, card: Card): boolean {
-  const i = state.processing.findIndex((c) => c.uid === card.uid)
-  if (i < 0) return false
-  state.processing.splice(i, 1)
-  return true
+/** 从处理区取走一张牌；不在处理区则返回 undefined（夺食可能已经取走过） */
+export function takeFromProcessing(
+  state: GameState,
+  uid: number,
+): ProcessingCard | undefined {
+  const i = state.processing.findIndex((e) => e.card.uid === uid)
+  if (i < 0) return undefined
+  return state.processing.splice(i, 1)[0]
 }
 
-/** 处理区 → 弃牌堆；已不在处理区的牌自动跳过 */
-export function flushProcessing(state: GameState, cards: Card[]): void {
-  for (const card of cards) {
-    if (takeFromProcessing(state, card)) state.discard.push(card)
+/** 某张牌是否还在处理区 */
+export function isInProcessing(state: GameState, uid: number): boolean {
+  return state.processing.some((e) => e.card.uid === uid)
+}
+
+/** 处理区 → 各自的弃牌堆（按条目归属分流）；已不在处理区的牌自动跳过 */
+export function flushProcessing(state: GameState, entries: ProcessingCard[]): void {
+  for (const entry of entries) {
+    const taken = takeFromProcessing(state, entry.card.uid)
+    if (taken) state.players[taken.owner].discard.push(taken.card)
   }
 }
 
 /**
- * 摸牌。牌堆耗尽时把弃牌堆洗回牌堆；两者都空则跳过并记录日志。
+ * 摸牌：只从该玩家自己的私有牌组摸。
+ * 自己的牌组耗尽时，把**自己的**弃牌堆洗回自己的牌组；两者都空则跳过并记录日志。
  * 返回实际摸到的牌。
  */
 export function drawCards(state: GameState, p: PlayerIndex, count: number): Card[] {
+  const player = state.players[p]
   const drawn: Card[] = []
   for (let i = 0; i < count; i++) {
-    if (state.deck.length === 0) {
-      if (state.discard.length === 0) {
-        log(state, `牌堆与弃牌堆均已耗尽，${count - i} 张牌无法摸取，跳过`)
+    if (player.deck.length === 0) {
+      if (player.discard.length === 0) {
+        log(state, `${playerLabel(state, p)} 的牌组与弃牌堆均已耗尽，${count - i} 张牌无法摸取，跳过`)
         break
       }
-      const result = shuffle(state.discard, state.rngState)
-      state.deck = result.items
+      const result = shuffle(player.discard, state.rngState)
+      player.deck = result.items
       state.rngState = result.state
-      state.discard = []
-      log(state, `牌堆耗尽，弃牌堆的 ${state.deck.length} 张牌洗回牌堆`)
+      player.discard = []
+      log(state, `${playerLabel(state, p)} 的牌组耗尽，弃牌堆的 ${player.deck.length} 张牌洗回牌堆`)
     }
-    const card = state.deck.pop()
+    const card = player.deck.pop()
     if (!card) break
-    state.players[p].hand.push(card)
+    player.hand.push(card)
     drawn.push(card)
   }
   return drawn
@@ -84,22 +94,29 @@ export function drawCards(state: GameState, p: PlayerIndex, count: number): Card
 /** 汇总所有牌区，用于「牌数守恒」校验 */
 export function allCards(state: GameState): Card[] {
   return [
-    ...state.deck,
-    ...state.discard,
-    ...state.processing,
+    ...state.players[0].deck,
+    ...state.players[0].discard,
     ...state.players[0].hand,
+    ...state.players[1].deck,
+    ...state.players[1].discard,
     ...state.players[1].hand,
+    ...state.processing.map((e) => e.card),
   ]
 }
 
 /**
- * 牌数守恒：全 53 张牌必须各自恰好属于一个牌区。
+ * 牌数守恒：双方私有牌组合计张数（当前 20 + 20 = 40）必须一张不多不少，
+ * 每张牌恰好属于一个牌区，且 uid 全局唯一（处理区由双方共享）。
  * 任何结算漏牌 / 重复放牌都会在这里被立刻发现。
+ *
+ * 注意：不要求「每方恒为 20 张」——【夺食】会把对手的牌拿进自己手里，
+ * 之后再弃置就归获得者的弃牌堆，因此双方池子的张数可能此消彼长，但全局总数不变。
  */
 export function assertConservation(state: GameState): void {
+  const expected = totalDeckSize(state.players[0].species, state.players[1].species)
   const all = allCards(state)
-  if (all.length !== DECK_SIZE) {
-    throw new Error(`牌数守恒被破坏：共 ${all.length} 张，应为 ${DECK_SIZE} 张`)
+  if (all.length !== expected) {
+    throw new Error(`牌数守恒被破坏：共 ${all.length} 张，应为 ${expected} 张`)
   }
   const uids = new Set(all.map((c) => c.uid))
   if (uids.size !== all.length) {

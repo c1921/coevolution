@@ -8,12 +8,6 @@ import type { SpeciesDef, SpeciesId, SkillDef, SkillId } from '../types'
  *  - active    主动型：出牌阶段主动发动
  */
 const SKILLS: Record<SkillId, SkillDef> = {
-  pounce: {
-    id: 'pounce',
-    name: '猛扑',
-    kind: 'transform',
-    text: '你可以将一张红色牌当【打击】使用或打出。',
-  },
   roar: {
     id: 'roar',
     name: '怒吼',
@@ -31,12 +25,6 @@ const SKILLS: Record<SkillId, SkillDef> = {
     name: '夺食',
     kind: 'trigger',
     text: '当你受到伤害后，你可以获得造成此伤害的牌。',
-  },
-  herb: {
-    id: 'herb',
-    name: '灵草',
-    kind: 'transform',
-    text: '你的回合外，你可以将一张红色牌当【回复】使用。',
   },
   mend: {
     id: 'mend',
@@ -65,12 +53,13 @@ const SKILLS: Record<SkillId, SkillDef> = {
 }
 
 export const SPECIES: Record<SpeciesId, SpeciesDef> = {
+  // 虎：原本的【猛扑】依赖「红色牌」，卡牌移除花色后暂时没有技能（等重新设计）
   tiger: {
     id: 'tiger',
     name: '虎',
     emoji: '🐯',
     maxHp: 4,
-    skills: [SKILLS.pounce],
+    skills: [],
   },
   bear: {
     id: 'bear',
@@ -93,12 +82,13 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
     maxHp: 4,
     skills: [SKILLS.snatch],
   },
+  // 鹿：原本的【灵草】同样依赖「红色牌」，暂时只保留【疗愈】
   deer: {
     id: 'deer',
     name: '鹿',
     emoji: '🦌',
     maxHp: 3,
-    skills: [SKILLS.herb, SKILLS.mend],
+    skills: [SKILLS.mend],
   },
   lion: {
     id: 'lion',

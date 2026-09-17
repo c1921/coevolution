@@ -64,19 +64,16 @@ export interface DraftRoll {
 /**
  * 随机抽将：玩家先抽 3 个物种，AI 从剩余池再抽 3 个（双方候选互不重复）。
  * 纯函数，同 seed 必定同结果。
+ *
+ * 这里只负责抽样物种：牌组是每个物种私有的，只有在双方物种都确定之后
+ * （createGame）才能构建并洗牌，所以抽将阶段不再预洗任何牌组。
  */
 export function rollDraft(seed: number): DraftRoll {
-  // 与 createGame 保持同样的随机消耗顺序，保证界面看到的候选与实际开局一致
-  const deckShuffle = shuffle(buildDeck(), seed)
-  let rngState = deckShuffle.state
-
-  const first = sample(SPECIES_IDS, DRAFT_SIZE, rngState)
-  rngState = first.state
+  const first = sample(SPECIES_IDS, DRAFT_SIZE, seed)
   const rest = SPECIES_IDS.filter((id) => !first.values.includes(id))
-  const second = sample(rest, DRAFT_SIZE, rngState)
-  rngState = second.state
+  const second = sample(rest, DRAFT_SIZE, first.state)
 
-  return { playerOptions: first.values, aiOptions: second.values, rngState }
+  return { playerOptions: first.values, aiOptions: second.values, rngState: second.state }
 }
 
 export interface CreateGameOptions {
@@ -90,8 +87,8 @@ export interface CreateGameOptions {
 }
 
 /**
- * 创建一局：确定双方物种 → 洗牌 → 各摸 4 张起手牌 → 推进到玩家的第一个出牌阶段。
- * 返回时 state.pending 已经就绪，可以直接 submit。
+ * 创建一局：确定双方物种 → 各自洗一副私有牌组 → 各摸 4 张起手牌
+ * → 推进到玩家的第一个出牌阶段。返回时 state.pending 已经就绪，可以直接 submit。
  */
 export function createGame(options: CreateGameOptions): GameState {
   const { seed, playerSpecies } = options
@@ -115,15 +112,23 @@ export function createGame(options: CreateGameOptions): GameState {
     rngState = aiPick.state
   }
 
-  const deckShuffle = shuffle(buildDeck(), rngState)
+  const firstDeck = shuffle(buildDeck(playerSpecies, 0), rngState)
+  // 玩家 1 的 uid 从玩家 0 的牌组之后开始分配，保证全局唯一
+  const secondDeck = shuffle(buildDeck(aiSpecies, firstDeck.items.length), firstDeck.state)
 
-  const makePlayer = (index: PlayerIndex, species: SpeciesId): PlayerState => ({
+  const makePlayer = (
+    index: PlayerIndex,
+    species: SpeciesId,
+    deck: Card[],
+  ): PlayerState => ({
     index,
     species,
     hp: SPECIES[species].maxHp,
     maxHp: SPECIES[species].maxHp,
     alive: true,
     hand: [],
+    deck,
+    discard: [],
     // 能量上限由技能决定（见 rules/energy.ts），因此先置 0 再统一回满
     energy: 0,
     usedCardsThisTurn: newCardUseRecord(),
@@ -132,11 +137,12 @@ export function createGame(options: CreateGameOptions): GameState {
 
   const state: GameState = {
     seed,
-    rngState: deckShuffle.state,
-    deck: deckShuffle.items,
-    discard: [],
+    rngState: secondDeck.state,
     processing: [],
-    players: [makePlayer(PLAYER, playerSpecies), makePlayer(AI, aiSpecies)],
+    players: [
+      makePlayer(PLAYER, playerSpecies, firstDeck.items),
+      makePlayer(AI, aiSpecies, secondDeck.items),
+    ],
     active: firstPlayer,
     firstPlayer,
     turn: 1,
@@ -402,7 +408,7 @@ function applyPlayCard(
   }
 
   moveHandToProcessing(state, p, card)
-  top.spent.push(card)
+  top.spent.push({ card, owner: p })
   top.got += 1
 
   if (action.via) {

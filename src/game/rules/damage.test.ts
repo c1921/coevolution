@@ -20,7 +20,7 @@ describe('伤害结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'wolf',
-      playerHand: [{ kind: 'strike', suit: 'spade' }],
+      playerHand: [{ kind: 'strike' }],
       aiHp: 1,
     })
     const strike = state.players[0].hand[0]!
@@ -31,7 +31,7 @@ describe('伤害结算', () => {
     // 先询问夺食，此时造成伤害的牌仍在处理区
     expect(state.players[1].hp).toBe(0)
     expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'snatch' })
-    expect(state.processing.map((c) => c.uid)).toContain(strike.uid)
+    expect(state.processing.map((e) => e.card.uid)).toContain(strike.uid)
 
     submit(state, { kind: 'trigger-choice', accept: true })
 
@@ -57,7 +57,8 @@ describe('伤害结算', () => {
 
     expect(state.players[1].hp).toBe(3)
     expect(state.processing).toHaveLength(0)
-    expect(state.discard.map((c) => c.uid)).toContain(strike.uid)
+    // 打击牌归使用者（虎）：进他自己的弃牌堆
+    expect(state.players[0].discard.map((c) => c.uid)).toContain(strike.uid)
     expect(state.pending).toEqual({ kind: 'play', player: 0 })
     assertConservation(state)
   })

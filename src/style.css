@@ -13,9 +13,8 @@
   --color-ink-300: #c9b8a2;
   --color-ink-500: #94826d;
 
-  /* 牌面 */
+  /* 牌面（卡牌没有花色，因此只有一个正文色） */
   --color-face: #f7f1e6;
-  --color-face-red: #b8342a;
   --color-face-black: #2b2b2b;
 
   /* 强调色 */

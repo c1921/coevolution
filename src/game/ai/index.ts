@@ -1,4 +1,3 @@
-import { isRedCard } from '../data/deck'
 import { hasSkill } from '../data/species'
 import { canPayEnergy, energyCost } from '../rules/energy'
 import { activeOptions, playOptions } from '../skills'
@@ -97,21 +96,8 @@ function bestStrike(state: GameState, p: PlayerIndex): Action | null {
   if (direct) return { kind: 'use-card', card: direct, as: 'strike' }
 
   const defends = player.hand.filter((c) => c.kind === 'defend')
-  const heals = player.hand.filter((c) => c.kind === 'heal')
 
-  // 猛扑：红牌当【打击】——优先牺牲富余的【防御】，满血时才牺牲富余的【回复】
-  if (hasSkill(player.species, 'pounce')) {
-    if (defends.length >= 2) {
-      const spare = defends[defends.length - 1]
-      if (spare) return { kind: 'use-card', card: spare, as: 'strike', via: 'pounce' }
-    }
-    if (player.hp >= player.maxHp && heals.length >= 2) {
-      const spare = heals[heals.length - 1]
-      if (spare) return { kind: 'use-card', card: spare, as: 'strike', via: 'pounce' }
-    }
-  }
-
-  // 疾影：【防御】当【打击】，同样只在有富余时
+  // 疾影：【防御】当【打击】，只在有富余时
   if (hasSkill(player.species, 'flicker') && defends.length >= 2) {
     const spare = defends[defends.length - 1]
     if (spare) return { kind: 'use-card', card: spare, as: 'strike', via: 'flicker' }
@@ -147,31 +133,26 @@ function decideDying(state: GameState, p: PlayerIndex, dying: PlayerIndex): Acti
   const heal = player.hand.find((c) => c.kind === 'heal')
   if (heal) return { kind: 'use-card', card: heal, as: 'heal' }
 
-  // 灵草：回合外可以用红牌当【回复】（同样按【回复】的费用付费）
-  if (hasSkill(player.species, 'herb') && state.active !== p) {
-    const red = player.hand.find((c) => isRedCard(c))
-    if (red) return { kind: 'use-card', card: red, as: 'heal', via: 'herb' }
-  }
-
   return { kind: 'cancel' }
 }
 
-/** 弃牌优先级：黑【打击】→ 红【打击】→【防御】→【回复】；同级弃点数最小者 */
+/**
+ * 弃牌优先级：【打击】→【防御】→【回复】；同级弃 uid 最小者。
+ * 【打击】每个牌组有 11 张且只要 1 点能量，多出来的打击最不值得留。
+ */
 function cardScore(card: Card): number {
-  if (card.kind === 'strike') return isRedCard(card) ? 1 : 0
-  if (card.kind === 'defend') return 2
-  return 3
+  if (card.kind === 'strike') return 0
+  if (card.kind === 'defend') return 1
+  return 2
 }
 
 function worstCard(hand: Card[]): Card | undefined {
-  return [...hand].sort(
-    (a, b) => cardScore(a) - cardScore(b) || a.rank - b.rank || a.uid - b.uid,
-  )[0]
+  return [...hand].sort((a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid)[0]
 }
 
 function decideDiscard(state: GameState, p: PlayerIndex, count: number): Action {
   const sorted = [...state.players[p].hand].sort(
-    (a, b) => cardScore(a) - cardScore(b) || a.rank - b.rank || a.uid - b.uid,
+    (a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid,
   )
   return { kind: 'discard-cards', cards: sorted.slice(0, count) }
 }
