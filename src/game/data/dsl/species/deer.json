@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "species",
+  "id": "deer",
+  "priority": 50,
+  "name": "鹿",
+  "emoji": "🦌",
+  "maxHp": 3,
+  "skills": ["mend"],
+  "deck": "basic"
+}

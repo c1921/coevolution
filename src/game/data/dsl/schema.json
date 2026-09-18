@@ -1,0 +1,1001 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coevolution.local/dsl/schema.json",
+  "title": "协同进化 · 内容 DSL",
+  "description": "由 src/game/dsl/schema.ts 从 kinds.ts 词表与 validate.ts 字段表生成，请勿手改；语义约束（引用完整性、费用下限、牌区组合、占位符角色）由加载期校验器强制。",
+  "$defs": {
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "ref": {
+          "enum": [
+            "hp",
+            "maxHp",
+            "handCount",
+            "deckCount",
+            "discardCount",
+            "energy",
+            "energyMax",
+            "turn",
+            "damageAmount"
+          ]
+        },
+        "of": {
+          "oneOf": [
+            {
+              "enum": [
+                "self",
+                "target",
+                "source",
+                "active",
+                "dying",
+                "opponent"
+              ]
+            },
+            {
+              "$ref": "#/$defs/value"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/value"
+              }
+            }
+          ]
+        },
+        "by": {
+          "$ref": "#/$defs/value"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "channel": {
+          "enum": [
+            "energy-max",
+            "defend-need-against",
+            "draw-count",
+            "hand-limit",
+            "card-cost",
+            "attack-range"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "const",
+            "ref",
+            "add",
+            "sub",
+            "mul",
+            "min",
+            "max",
+            "floor-div",
+            "clamp",
+            "channel"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "of": {
+          "oneOf": [
+            {
+              "enum": [
+                "self",
+                "target",
+                "source",
+                "active",
+                "dying",
+                "opponent"
+              ]
+            },
+            {
+              "$ref": "#/$defs/condition"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/condition"
+              }
+            }
+          ]
+        },
+        "op": {
+          "enum": [
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "eq",
+            "neq"
+          ]
+        },
+        "left": {
+          "$ref": "#/$defs/value"
+        },
+        "right": {
+          "$ref": "#/$defs/value"
+        },
+        "zone": {
+          "enum": [
+            "hand",
+            "discard",
+            "processing",
+            "deck"
+          ]
+        },
+        "atLeast": {
+          "$ref": "#/$defs/value"
+        },
+        "cardKind": {
+          "type": "string"
+        },
+        "card": {
+          "enum": [
+            "event-card",
+            "used-card",
+            "cost-card"
+          ]
+        },
+        "skill": {
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "prepare",
+            "judge",
+            "draw",
+            "play",
+            "discard",
+            "end"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "always",
+            "not",
+            "all",
+            "any",
+            "compare",
+            "alive",
+            "has-cards",
+            "card-kind-count",
+            "in-processing",
+            "card-transformed",
+            "picked-count",
+            "skill-unused",
+            "is-active",
+            "phase-is"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "template": {
+          "type": "string"
+        },
+        "vars": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/value"
+          },
+          "propertyNames": {
+            "enum": [
+              "amount",
+              "turn"
+            ]
+          }
+        },
+        "target": {
+          "enum": [
+            "self",
+            "target",
+            "source",
+            "active",
+            "dying",
+            "opponent"
+          ]
+        },
+        "amount": {
+          "$ref": "#/$defs/value"
+        },
+        "count": {
+          "$ref": "#/$defs/value"
+        },
+        "from": {
+          "$ref": "#/$defs/zoneRef"
+        },
+        "to": {
+          "$ref": "#/$defs/zoneRef"
+        },
+        "pick": {
+          "$ref": "#/$defs/pick"
+        },
+        "of": {
+          "enum": [
+            "self",
+            "target",
+            "source",
+            "active",
+            "dying",
+            "opponent"
+          ]
+        },
+        "cardKind": {
+          "type": "string"
+        },
+        "skill": {
+          "type": "string"
+        },
+        "responder": {
+          "enum": [
+            "self",
+            "target",
+            "source",
+            "active",
+            "dying",
+            "opponent"
+          ]
+        },
+        "expectedCard": {
+          "type": "string"
+        },
+        "need": {
+          "$ref": "#/$defs/value"
+        },
+        "onMet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "onUnmet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "then": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "else": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "phase": {
+          "enum": [
+            "prepare",
+            "judge",
+            "draw",
+            "play",
+            "discard",
+            "end"
+          ]
+        },
+        "position": {
+          "enum": [
+            "next",
+            "last"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "log",
+            "damage",
+            "lose-hp",
+            "heal",
+            "draw",
+            "move-cards",
+            "pay-energy",
+            "gain-energy",
+            "record-card-use",
+            "record-skill-use",
+            "contest",
+            "contest-contribute",
+            "resolve-dying",
+            "skip-phase",
+            "extra-phase",
+            "if"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "pick": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "played",
+            "cost",
+            "chosen",
+            "random",
+            "specific",
+            "all"
+          ]
+        },
+        "count": {
+          "type": "integer"
+        },
+        "cardKind": {
+          "type": "string"
+        },
+        "card": {
+          "enum": [
+            "event-card",
+            "used-card",
+            "cost-card"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ]
+    },
+    "zoneRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zone": {
+          "enum": [
+            "hand",
+            "discard",
+            "processing"
+          ]
+        },
+        "of": {
+          "enum": [
+            "self",
+            "target",
+            "source",
+            "active",
+            "dying",
+            "opponent"
+          ]
+        }
+      },
+      "required": [
+        "zone"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "enum": [
+            "self",
+            "any",
+            "opponent",
+            "others",
+            "dying"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {
+          "enum": [
+            "self",
+            "opponent"
+          ]
+        },
+        "alive": {
+          "type": "boolean"
+        },
+        "range": {
+          "type": "boolean"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        }
+      },
+      "required": [
+        "scope",
+        "alive"
+      ]
+    },
+    "modifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "enum": [
+            "energy-max",
+            "defend-need-against",
+            "draw-count",
+            "hand-limit",
+            "card-cost",
+            "attack-range"
+          ]
+        },
+        "op": {
+          "enum": [
+            "add",
+            "set",
+            "min",
+            "max"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "channel",
+        "op",
+        "value"
+      ]
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "use",
+              "play"
+            ]
+          }
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "contexts"
+      ]
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "enum": [
+            "turn-start",
+            "turn-end",
+            "phase-start",
+            "phase-end",
+            "after-damage"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "prepare",
+            "judge",
+            "draw",
+            "play",
+            "discard",
+            "end"
+          ]
+        }
+      },
+      "required": [
+        "at"
+      ]
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "$ref": "#/$defs/timing"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        }
+      },
+      "required": [
+        "on",
+        "effects"
+      ]
+    },
+    "activate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timing": {
+          "enum": [
+            "play"
+          ]
+        },
+        "oncePerTurn": {
+          "type": "boolean"
+        },
+        "costCards": {
+          "$ref": "#/$defs/costCards"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "ui": {
+          "$ref": "#/$defs/ui"
+        }
+      },
+      "required": [
+        "timing",
+        "effects"
+      ]
+    },
+    "costCards": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/value"
+        },
+        "cardKind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "count"
+      ]
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buttonLabel": {
+          "type": "string"
+        }
+      }
+    },
+    "species": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "dslVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "maxHp": {
+          "type": "integer"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deck": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "species"
+          ]
+        }
+      },
+      "required": [
+        "dslVersion",
+        "id",
+        "name",
+        "emoji",
+        "maxHp",
+        "skills",
+        "deck",
+        "kind"
+      ]
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "dslVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/modifier"
+          }
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transform"
+          }
+        },
+        "trigger": {
+          "$ref": "#/$defs/trigger"
+        },
+        "activate": {
+          "$ref": "#/$defs/activate"
+        },
+        "kind": {
+          "enum": [
+            "skill"
+          ]
+        }
+      },
+      "required": [
+        "dslVersion",
+        "id",
+        "name",
+        "text",
+        "kind"
+      ]
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "dslVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "short": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "cost": {
+          "$ref": "#/$defs/value"
+        },
+        "use": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/useVariant"
+          }
+        },
+        "play": {
+          "$ref": "#/$defs/playVariant"
+        },
+        "kind": {
+          "enum": [
+            "card"
+          ]
+        }
+      },
+      "required": [
+        "dslVersion",
+        "id",
+        "name",
+        "short",
+        "text",
+        "cost",
+        "kind"
+      ]
+    },
+    "useVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "enum": [
+            "play",
+            "dying"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        }
+      },
+      "required": [
+        "context",
+        "effects"
+      ]
+    },
+    "playVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "respondsTo": {
+          "type": "string"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        }
+      },
+      "required": [
+        "respondsTo",
+        "effects"
+      ]
+    },
+    "ruleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "dslVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "channels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "energy-max",
+              "defend-need-against",
+              "draw-count",
+              "hand-limit",
+              "card-cost",
+              "attack-range"
+            ]
+          }
+        },
+        "kind": {
+          "enum": [
+            "ruleset"
+          ]
+        }
+      },
+      "required": [
+        "dslVersion",
+        "id",
+        "channels",
+        "kind"
+      ]
+    },
+    "deck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "dslVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/deckEntry"
+          }
+        },
+        "kind": {
+          "enum": [
+            "deck"
+          ]
+        }
+      },
+      "required": [
+        "dslVersion",
+        "id",
+        "cards",
+        "kind"
+      ]
+    },
+    "deckEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "count"
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "dslVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "on": {
+          "$ref": "#/$defs/timing"
+        },
+        "when": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
+        "kind": {
+          "enum": [
+            "rule"
+          ]
+        }
+      },
+      "required": [
+        "dslVersion",
+        "id",
+        "on",
+        "effects",
+        "kind"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/species"
+    },
+    {
+      "$ref": "#/$defs/skill"
+    },
+    {
+      "$ref": "#/$defs/card"
+    },
+    {
+      "$ref": "#/$defs/ruleset"
+    },
+    {
+      "$ref": "#/$defs/deck"
+    },
+    {
+      "$ref": "#/$defs/rule"
+    }
+  ]
+}

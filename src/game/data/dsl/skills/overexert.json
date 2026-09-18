@@ -1,0 +1,17 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "skill",
+  "id": "overexert",
+  "priority": 90,
+  "name": "透支",
+  "text": "出牌阶段，你可以失去 1 点体力，然后摸两张牌。",
+  "activate": {
+    "timing": "play",
+    "effects": [
+      { "kind": "log", "template": "{self} 发动【透支】" },
+      { "kind": "lose-hp", "target": "self", "amount": { "kind": "const", "value": 1 } }
+    ],
+    "after": [{ "kind": "draw", "target": "self", "count": { "kind": "const", "value": 2 } }]
+  }
+}

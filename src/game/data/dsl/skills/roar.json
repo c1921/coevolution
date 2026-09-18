@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "skill",
+  "id": "roar",
+  "priority": 20,
+  "name": "怒吼",
+  "text": "你每回合的能量上限 +2。",
+  "modifiers": [
+    { "channel": "energy-max", "op": "add", "value": { "kind": "const", "value": 2 } }
+  ]
+}

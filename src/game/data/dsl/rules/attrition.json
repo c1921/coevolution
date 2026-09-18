@@ -1,0 +1,77 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "rule",
+  "id": "attrition",
+  "priority": 10,
+  "on": { "at": "turn-start" },
+  "when": [
+    {
+      "kind": "compare",
+      "op": "gte",
+      "left": { "kind": "ref", "ref": "turn" },
+      "right": { "kind": "const", "value": 21 }
+    }
+  ],
+  "effects": [
+    {
+      "kind": "if",
+      "condition": {
+        "kind": "compare",
+        "op": "eq",
+        "left": { "kind": "ref", "ref": "turn" },
+        "right": { "kind": "const", "value": 21 }
+      },
+      "then": [
+        {
+          "kind": "log",
+          "template": "消耗战开始：此后每回合开始时，回合角色失去体力（每 5 回合递增 1 点）"
+        }
+      ]
+    },
+    {
+      "kind": "log",
+      "template": "消耗战：{active} 失去 {amount} 点体力",
+      "vars": {
+        "amount": {
+          "kind": "add",
+          "of": [
+            { "kind": "const", "value": 1 },
+            {
+              "kind": "floor-div",
+              "of": {
+                "kind": "sub",
+                "of": [
+                  { "kind": "ref", "ref": "turn" },
+                  { "kind": "const", "value": 21 }
+                ]
+              },
+              "by": { "kind": "const", "value": 5 }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "lose-hp",
+      "target": "active",
+      "amount": {
+        "kind": "add",
+        "of": [
+          { "kind": "const", "value": 1 },
+          {
+            "kind": "floor-div",
+            "of": {
+              "kind": "sub",
+              "of": [
+                { "kind": "ref", "ref": "turn" },
+                { "kind": "const", "value": 21 }
+              ]
+            },
+            "by": { "kind": "const", "value": 5 }
+          }
+        ]
+      }
+    }
+  ]
+}

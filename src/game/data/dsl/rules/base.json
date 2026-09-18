@@ -1,0 +1,15 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "ruleset",
+  "id": "base",
+  "priority": 0,
+  "channels": {
+    "energy-max": 3,
+    "defend-need-against": 1,
+    "draw-count": 2,
+    "hand-limit": 0,
+    "card-cost": 0,
+    "attack-range": 1
+  }
+}

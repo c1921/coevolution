@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "species",
+  "id": "wolf",
+  "priority": 40,
+  "name": "狼",
+  "emoji": "🐺",
+  "maxHp": 4,
+  "skills": ["snatch"],
+  "deck": "basic"
+}

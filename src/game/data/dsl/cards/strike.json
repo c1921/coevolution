@@ -1,0 +1,48 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "strike",
+  "priority": 10,
+  "name": "打击",
+  "short": "造成 1 点伤害",
+  "text": "消耗 1 点能量：对对方造成 1 点伤害；其可打出【防御】抵消。",
+  "cost": { "kind": "const", "value": 1 },
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "opponent", "required": false, "alive": true, "range": true },
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "processing", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "record-card-use", "of": "self", "cardKind": "strike" },
+        {
+          "kind": "if",
+          "condition": { "kind": "card-transformed" },
+          "then": [
+            {
+              "kind": "log",
+              "template": "{self} 发动【{via}】，将{usedRaw}当{usedAs}对 {target} 使用{self.energyTag}"
+            }
+          ],
+          "else": [
+            { "kind": "log", "template": "{self} 对 {target} 使用{usedAs}{self.energyTag}" }
+          ]
+        },
+        {
+          "kind": "contest",
+          "responder": "target",
+          "expectedCard": "defend",
+          "need": { "kind": "channel", "channel": "defend-need-against", "of": "self" },
+          "onUnmet": [
+            { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+          ]
+        }
+      ]
+    }
+  ]
+}

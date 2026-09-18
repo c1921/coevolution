@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "skill",
+  "id": "menace",
+  "priority": 70,
+  "name": "威压",
+  "text": "你使用【打击】时，目标需依次打出两张【防御】才能抵消。",
+  "modifiers": [
+    { "channel": "defend-need-against", "op": "set", "value": { "kind": "const", "value": 2 } }
+  ]
+}
