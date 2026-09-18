@@ -7,7 +7,15 @@ import { PHASE_NAME } from '../game/rules/phase'
 import { checkPlayCardAsDefend, checkUseCard } from '../game/rules/legality'
 import { energyCost, energyMax } from '../game/rules/energy'
 import { ATTRITION_TURN } from '../game/rules/turn'
-import { activeOptions, optionLabel, playOptions, useOptions, type CardOption } from '../game/skills'
+import { skillDoc } from '../game/dsl/registry'
+import {
+  activationCostCards,
+  activeOptions,
+  optionLabel,
+  playOptions,
+  useOptions,
+  type CardOption,
+} from '../game/skills'
 import type {
   Action,
   Card,
@@ -268,14 +276,34 @@ export function submitOption(card: Card, option: CardOption): void {
   act({ kind: 'use-card', card, as: option.as, via: option.via })
 }
 
+/**
+ * 主动技按钮文案：需要先选牌的技能（由文档的 costCards 决定）在未选牌时给出提示，
+ * 文档可用 ui.buttonLabel 覆盖默认文案。
+ */
+export function skillButtonLabel(skill: SkillId): string {
+  const state = gameState.value
+  const need = state ? activationCostCards(state, HUMAN, skill) : 0
+  if (need > 0 && selectedCards.value.length < need) {
+    return (
+      skillDoc(skill).activate?.ui?.buttonLabel ??
+      `发动【${skillDef(skill).name}】（先点选 ${need} 张手牌）`
+    )
+  }
+  return `发动【${skillDef(skill).name}】`
+}
+
+/** 发动主动技：需要弃牌的技能把已选手牌作为费用传给引擎 */
 export function submitActivate(skill: SkillId): void {
-  if (skill === 'mend') {
-    const card = selectedCards.value[0]
-    if (!card) {
-      errorMessage.value = '疗愈需要先点选一张手牌作为弃置'
+  const state = gameState.value
+  if (!state) return
+  const need = activationCostCards(state, HUMAN, skill)
+  if (need > 0) {
+    const cards = selectedCards.value.slice(0, need)
+    if (cards.length < need) {
+      errorMessage.value = `发动【${skillDef(skill).name}】需要先点选 ${need} 张手牌`
       return
     }
-    act({ kind: 'activate', skill: 'mend', cards: [card] })
+    act({ kind: 'activate', skill, cards })
     return
   }
   act({ kind: 'activate', skill })

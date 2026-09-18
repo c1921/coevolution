@@ -1,10 +1,15 @@
 import { CARD_NAME } from '../data/cardDefs'
-import { hasSkill, skillDef } from '../data/species'
+import { skillDef } from '../data/species'
+import { evalConditions } from '../dsl/condition'
 import { channelValue } from '../dsl/modifier'
-import { baseChannel, cardDoc, skillsOf } from '../dsl/registry'
+import { baseChannel, cardDoc, skillDoc, skillsOf } from '../dsl/registry'
+import { baseContext } from '../dsl/runtime'
+import type { EffectContext } from '../dsl/runtime'
+import { defaultTarget, targetCandidates } from '../dsl/target'
+import type { ActivateSpec } from '../dsl/types'
+import { evalValue } from '../dsl/value'
 import { skillUsed } from '../rules/usage'
 import type { Card, CardKind, GameState, PlayerIndex, SkillId, VirtualCard } from '../types'
-import { otherPlayer } from '../util'
 
 /** 一张手牌在某语境下的一个可选"牌面"：直接用，或经技能转化后用 */
 export interface CardOption {
@@ -74,22 +79,61 @@ export function playOptions(state: GameState, p: PlayerIndex, card: Card): CardO
   return optionsFor(state, p, card, 'play')
 }
 
-/** 当前可发动的主动技 */
+/**
+ * 发动某个主动技需要先选定并弃置的手牌数（0 表示不需要选牌）。
+ * 界面据此提示"先点选 N 张手牌"，校验与结算也用它取同一份数值。
+ */
+export function activationCostCards(
+  state: GameState,
+  p: PlayerIndex,
+  skill: SkillId,
+): number {
+  const activate = skillDoc(skill).activate
+  if (!activate?.costCards) return 0
+  const env = { state, ctx: baseContext(state, p) }
+  return Math.max(0, Math.floor(evalValue(env, activate.costCards.count)))
+}
+
+/** 主动技的发动语境：把缺省目标绑定好，使 requires 里可以引用 target */
+function activationEnv(
+  state: GameState,
+  p: PlayerIndex,
+  skill: SkillId,
+): { env: { state: GameState; ctx: EffectContext }; activate: ActivateSpec } | null {
+  const activate = skillDoc(skill).activate
+  if (!activate) return null
+  const ctx: EffectContext = { self: p, active: state.active, costCards: [] }
+  const env = { state, ctx }
+  if (activate.target) {
+    const candidates = targetCandidates(env, activate.target)
+    if (candidates.length === 0) return null
+    const preferred = defaultTarget(env, activate.target)
+    ctx.target =
+      preferred !== undefined && candidates.includes(preferred) ? preferred : candidates[0]
+  }
+  return { env, activate }
+}
+
+/**
+ * 当前可发动的主动技：完全由 skills/*.json 的 activate 规格决定
+ * （oncePerTurn / costCards / target / requires），引擎与界面不再判断技能 id。
+ */
 export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
   const player = state.players[p]
+  if (state.phase !== 'play' || state.active !== p || !player.alive) return []
+
   const out: SkillId[] = []
-  if (state.phase !== 'play' || state.active !== p || !player.alive) return out
-
-  if (hasSkill(player.species, 'overexert')) out.push('overexert')
-
-  if (hasSkill(player.species, 'mend') && !skillUsed(state, p, 'mend') && player.hand.length >= 1) {
-    // 疗愈必须指定一名"已受伤"的角色
-    const opponent = state.players[otherPlayer(p)]
-    const anyWounded =
-      player.hp < player.maxHp || (opponent.alive && opponent.hp < opponent.maxHp)
-    if (anyWounded) out.push('mend')
+  for (const skill of skillsOf(player.species)) {
+    const resolved = activationEnv(state, p, skill.id)
+    if (!resolved) continue
+    const { env, activate } = resolved
+    if (activate.oncePerTurn && skillUsed(state, p, skill.id)) continue
+    if (activate.costCards && player.hand.length < evalValue(env, activate.costCards.count)) {
+      continue
+    }
+    if (!evalConditions(env, activate.requires)) continue
+    out.push(skill.id)
   }
-
   return out
 }
 

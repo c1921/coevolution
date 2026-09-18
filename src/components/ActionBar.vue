@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { skillDef } from '../game/data/species'
 import type { CardOption } from '../game/skills'
 import type { Card, SkillId } from '../game/types'
 import {
@@ -10,6 +9,7 @@ import {
   legalOptions,
   optionText,
   selectedCards,
+  skillButtonLabel,
   submitActivate,
   submitCancel,
   submitDiscard,
@@ -37,12 +37,9 @@ const actionButtons = computed<ActionButton[]>(() => {
 
 const canDiscard = computed(() => selectedCards.value.length === discardCount.value)
 
+/** 主动技按钮文案由 store 按技能文档生成（需要先选牌时提示） */
 function skillButtonText(skill: SkillId): string {
-  const name = skillDef(skill).name
-  if (skill === 'mend' && selectedCards.value.length === 0) {
-    return `发动【${name}】（先点选一张手牌）`
-  }
-  return `发动【${name}】`
+  return skillButtonLabel(skill)
 }
 </script>
 

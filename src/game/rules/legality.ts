@@ -1,6 +1,8 @@
 import { CARD_NAME } from '../data/cardDefs'
 import { skillDef } from '../data/species'
-import { activeOptions, playOptions, useOptions } from '../skills'
+import { skillDoc } from '../dsl/registry'
+import { resolveTargetChoice } from '../dsl/target'
+import { activationCostCards, activeOptions, playOptions, useOptions } from '../skills'
 import type { SkillId } from '../types'
 import { findInHand } from './cardZones'
 import type { Card, CardKind, GameState, PlayerIndex } from '../types'
@@ -120,7 +122,10 @@ export function checkPlayCardAsDefend(
   return OK
 }
 
-/** 发动主动技：透支 / 疗愈。技能不是「使用一张牌」，不消耗能量。 */
+/**
+ * 发动主动技。技能不是「使用一张牌」，因此不消耗能量；
+ * 需要先弃置手牌的技能（疗愈）走 costCards，目标与前置条件全部来自文档。
+ */
 export function checkActivate(
   state: GameState,
   p: PlayerIndex,
@@ -134,25 +139,31 @@ export function checkActivate(
   }
   if (state.phase !== 'play' || state.active !== p) return fail('现在不是你的出牌阶段')
   if (!state.players[p].alive) return fail('你已阵亡，无法行动')
-  if (!activeOptions(state, p).includes(skill)) {
-    return fail(`当前无法发动【${skillDef(skill).name}】`)
+
+  const name = skillDef(skill).name
+  const activate = skillDoc(skill).activate
+  if (!activate) return fail(`【${name}】无法主动发动`)
+  if (!activeOptions(state, p).includes(skill)) return fail(`当前无法发动【${name}】`)
+
+  const provided = cards ?? []
+  const env = { state, ctx: { self: p, active: state.active, costCards: provided.map((c) => c.uid) } }
+  const need = activationCostCards(state, p, skill)
+  if (provided.length !== need) {
+    return fail(need === 0 ? `【${name}】不需要弃置手牌` : `【${name}】需要弃置 ${need} 张手牌`)
   }
-
-  if (skill === 'overexert') return OK
-
-  if (skill === 'mend') {
-    const discard = cards ?? []
-    const card = discard[0]
-    if (discard.length !== 1 || !card) return fail('疗愈需要弃置一张手牌')
+  if (new Set(provided.map((card) => card.uid)).size !== provided.length) {
+    return fail('费用牌中有重复')
+  }
+  for (const card of provided) {
     if (!findInHand(state, p, card.uid)) return fail('用于弃置的牌不在你的手牌中')
-    const targetIndex = target ?? p
-    const targetPlayer = state.players[targetIndex]
-    if (!targetPlayer.alive) return fail('目标角色已阵亡')
-    if (targetPlayer.hp >= targetPlayer.maxHp) return fail('目标角色体力已满，无法回复')
-    return OK
   }
 
-  return fail(`【${skillDef(skill).name}】无法主动发动`)
+  if (activate.target) {
+    const resolved = resolveTargetChoice(env, activate.target, target)
+    if (!resolved.ok) return fail(resolved.reason)
+  }
+
+  return OK
 }
 
 /** 弃牌阶段弃置手牌 */

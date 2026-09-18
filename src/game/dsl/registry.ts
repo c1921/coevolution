@@ -9,6 +9,7 @@ import type {
   SpeciesDoc,
 } from './types'
 import type { Channel, SkillKind } from './kinds'
+import type { Effect } from './types'
 import { validateDocs } from './validate'
 import type { Issue } from './validate'
 
@@ -213,6 +214,41 @@ export function registryToDocs(): { path: string; value: unknown }[] {
   emit('skills', 'skill', registry.skills)
   emit('species', 'species', registry.species)
   return out
+}
+
+/**
+ * 牌面角色分类（由文档结构派生）：AI 与界面用它理解"这张牌是干什么的"，
+ * 因此新增牌种不需要在 AI/界面里加分支。
+ *  - attack  含 contest 或 damage 效果（打击）
+ *  - defense 有 play 变体（响应别人的对抗）
+ *  - heal    含 heal 效果（回复）
+ *  - utility 其余
+ */
+export type CardRole = 'attack' | 'defense' | 'heal' | 'utility'
+
+/** 递归判断效果列表（含 if 分支）里是否出现某指令 */
+export function effectsInclude(effects: readonly Effect[] | undefined, kind: string): boolean {
+  for (const effect of effects ?? []) {
+    if (effect.kind === kind) return true
+    if (effect.kind === 'if') {
+      if (effectsInclude(effect.then, kind)) return true
+      if (effectsInclude(effect.else, kind)) return true
+    }
+    if (effect.kind === 'contest') {
+      if (effectsInclude(effect.onUnmet, kind)) return true
+      if (effectsInclude(effect.onMet, kind)) return true
+    }
+  }
+  return false
+}
+
+export function cardRole(kind: string): CardRole {
+  const doc = cardDoc(kind)
+  if (doc.play) return 'defense'
+  const effects = (doc.use ?? []).flatMap((variant) => variant.effects)
+  if (effectsInclude(effects, 'contest') || effectsInclude(effects, 'damage')) return 'attack'
+  if (effectsInclude(effects, 'heal')) return 'heal'
+  return 'utility'
 }
 
 /** 供测试读取原始文档（校验前） */

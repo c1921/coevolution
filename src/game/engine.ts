@@ -32,9 +32,11 @@ import { pushStrike } from './rules/respond'
 import { buildTurnPlan, finishPhaseBody } from './rules/phase'
 import { advanceTurn, INITIAL_HAND } from './rules/turn'
 import { newCardUseRecord, recordCardUse } from './rules/usage'
-import { runEffects } from './dsl/effect'
+import { runEffectGroup, runEffects } from './dsl/effect'
 import { runTrigger } from './dsl/event'
-import { applyActiveSkill } from './skills/effects'
+import { skillDoc } from './dsl/registry'
+import { resolveTargetChoice } from './dsl/target'
+import type { EffectContext } from './dsl/runtime'
 import type {
   Action,
   Card,
@@ -440,6 +442,11 @@ function applyPlayCard(
   }
 }
 
+/**
+ * 发动主动技：合法性校验后，按 skills/*.json 的 activate 规格执行效果。
+ * 费用牌 uid 记入上下文（{cost} 占位符与 move-cards 的 cost 取牌都用它），
+ * after 列表由 runEffectGroup 压成延迟帧（透支的"濒死后才摸牌"由此而来）。
+ */
 function applyActivate(
   state: GameState,
   action: Extract<Action, { kind: 'activate' }>,
@@ -448,7 +455,20 @@ function applyActivate(
   if (!pending || pending.kind !== 'play') throw new RuleError('现在不是你的出牌阶段')
   const p = pending.player
   ensure(checkActivate(state, p, action.skill, action.cards, action.target))
-  applyActiveSkill(state, p, action.skill, action.cards?.[0], action.target ?? p)
+
+  const activate = skillDoc(action.skill).activate
+  if (!activate) throw new RuleError('该技能无法主动发动')
+
+  const ctx: EffectContext = {
+    self: p,
+    active: state.active,
+    costCards: (action.cards ?? []).map((card) => card.uid),
+  }
+  if (activate.target) {
+    const resolved = resolveTargetChoice({ state, ctx }, activate.target, action.target)
+    if (resolved.ok) ctx.target = resolved.target
+  }
+  runEffectGroup(state, activate, ctx)
 }
 
 function applyTriggerChoice(
