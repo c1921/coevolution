@@ -32,7 +32,9 @@ export function energyMax(state: GameState, p: PlayerIndex): number {
 
 /** 使用 / 打出某牌面需要支付的能量（按牌种的固定费用） */
 export function energyCost(as: CardKind): number {
-  return CARD_DEFS[as].cost
+  const def = CARD_DEFS[as]
+  if (!def) throw new RuleError(`未知牌种：${as}`)
+  return def.cost
 }
 
 /** 能量是否够付这个牌面 */

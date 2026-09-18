@@ -19,7 +19,7 @@ import type { CardPick, Effect, ZoneRef } from './types'
  */
 
 /** 取牌：按 pick 描述从 from 牌区挑出牌（不移动） */
-export function pickCards(
+function pickCards(
   state: GameState,
   env: EvalEnv,
   from: ZoneRef,

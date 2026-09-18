@@ -1,12 +1,13 @@
-import { registry } from '../dsl/registry'
-import type { CardDoc, Value } from '../dsl/types'
+import { cardDoc, cardIds, getRegistry } from '../dsl/registry'
 import type { CardKind } from '../types'
 
 /**
- * 牌面元数据（由 DSL 文档派生）。
+ * 牌面元数据（由 DSL 文档实时派生）。
  *
  * 这里是"展示与费用"的视图：费用、牌名、卡面文案。
  * 结算所需的完整文档（use / play 变体）请直接读 `dsl/registry` 的 `cardDoc(id)`。
+ *
+ * 与物种视图一样是实时 Proxy：新增牌种只需要加一份 JSON，引擎与界面立刻可见。
  */
 
 export interface CardDef {
@@ -23,35 +24,31 @@ export interface CardDef {
   text: string
 }
 
-/** 费用是常量表达式（当前三张牌都是常量；动态费用由状态化求值负责） */
-function constCost(doc: CardDoc): number {
+export function cardDef(kind: CardKind): CardDef {
+  const doc = cardDoc(kind)
   if (doc.cost.kind !== 'const') {
     throw new Error(`牌种 ${doc.id} 的费用不是常量表达式，需要用状态化的费用求值`)
   }
-  return doc.cost.value
-}
-
-function toCardDef(doc: CardDoc): CardDef {
   return {
     kind: doc.id,
     name: doc.name,
-    cost: constCost(doc),
+    cost: doc.cost.value,
     short: doc.short,
     text: doc.text,
   }
 }
 
-export const CARD_DEFS: Record<CardKind, CardDef> = Object.fromEntries(
-  registry.cards.map((doc) => [doc.id, toCardDef(doc)]),
-)
-
-export const CARD_NAME: Record<CardKind, string> = Object.fromEntries(
-  registry.cards.map((doc) => [doc.id, doc.name]),
-)
-
-/** 牌面的费用表达式（保留原始 IR，供将来接入 card-cost 修正通道） */
-export function cardCostValue(kind: CardKind): Value {
-  const doc = registry.cardById[kind]
-  if (!doc) throw new Error(`未知牌种 id：${kind}`)
-  return doc.cost
+/** 以注册表为准的实时映射：未知键返回 undefined，与普通对象一致 */
+function liveMap<T>(derive: (key: string) => T): Record<string, T> {
+  return new Proxy({} as Record<string, T>, {
+    get: (_target, key) =>
+      typeof key === 'string' && key in getRegistry().cardById ? derive(key) : undefined,
+    has: (_target, key) => typeof key === 'string' && key in getRegistry().cardById,
+    ownKeys: () => cardIds(),
+    getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+  })
 }
+
+export const CARD_DEFS: Record<CardKind, CardDef> = liveMap(cardDef)
+
+export const CARD_NAME: Record<CardKind, string> = liveMap((kind) => cardDoc(kind).name)

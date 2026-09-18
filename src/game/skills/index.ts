@@ -10,18 +10,12 @@ import type { UseContext } from '../dsl/kinds'
 import type { ActivateSpec, UseVariant } from '../dsl/types'
 import { evalValue } from '../dsl/value'
 import { skillUsed } from '../rules/usage'
-import type { Card, CardKind, GameState, PlayerIndex, SkillId, VirtualCard } from '../types'
+import type { Card, CardKind, GameState, PlayerIndex, SkillId } from '../types'
 
 /** 一张手牌在某语境下的一个可选"牌面"：直接用，或经技能转化后用 */
 export interface CardOption {
   as: CardKind
   via?: SkillId
-}
-
-/** 生成虚拟牌 */
-export function toVirtual(card: Card, option: CardOption): VirtualCard {
-  if (option.via) return { as: option.as, source: card, via: option.via }
-  return { as: option.as, source: card }
 }
 
 /** 按钮文案：「使用【打击】（猛扑）」 */

@@ -142,11 +142,6 @@ export function skillsOf(speciesId: string): SkillDoc[] {
     .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100) || a.id.localeCompare(b.id))
 }
 
-/** 某物种是否拥有某技能 */
-export function speciesHasSkill(speciesId: string, skillId: string): boolean {
-  return speciesDoc(speciesId).skills.includes(skillId)
-}
-
 /**
  * 技能分类（由文档结构派生，不再存储）：
  * transforms→transform、modifiers→passive、trigger→trigger、activate→active。
@@ -249,11 +244,6 @@ export function cardRole(kind: string): CardRole {
   if (effectsInclude(effects, 'contest') || effectsInclude(effects, 'damage')) return 'attack'
   if (effectsInclude(effects, 'heal')) return 'recovery'
   return 'utility'
-}
-
-/** 供测试读取原始文档（校验前） */
-export function rawDocPaths(): string[] {
-  return Object.keys(RAW_DOCS)
 }
 
 export type { Doc }

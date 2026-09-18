@@ -1296,11 +1296,3 @@ export const DOC_SCHEMA_KEYS = {
   target: TARGET_KEYS,
   timing: ['at', 'phase'],
 } as const
-
-/** 供文档生成使用：语境与可用角色 */
-export const DOC_CONTEXT_ROLES = CONTEXT_ROLES
-
-/** 便于测试构造：把未知值当作某类节点的角色集合（避免重复字面量） */
-export function rolesForContext(context: EffectContext): readonly RoleRef[] {
-  return CONTEXT_ROLES[context]
-}

@@ -28,15 +28,6 @@ export function speciesDeckSize(species: SpeciesId): number {
   return expandDeck(deckOf(species)).length
 }
 
-/**
- * 每个物种的私有牌组（牌种序列）。
- * 暂时 8 个物种共用 `basic`；将来按物种分化时，在物种文档里指向各自的牌组即可，
- * uid 分配、守恒校验与洗牌逻辑都不需要改。
- */
-export const SPECIES_DECKS: Record<SpeciesId, CardKind[]> = Object.fromEntries(
-  speciesIds().map((id) => [id, speciesDeck(id)]),
-)
-
 /** 基准牌组的张数（首个注册牌组；物种分化后各物种以 speciesDeckSize 为准） */
 export const DECK_SIZE = expandDeck(deckOf(speciesIds()[0] as SpeciesId)).length
 
