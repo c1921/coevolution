@@ -5,7 +5,7 @@
 
 - 技术栈：Vue 3 + TypeScript + Vite 8 + Tailwind CSS v4
 - 规则引擎：纯 TypeScript、零 Vue 依赖、状态可序列化、随机确定性
-- 测试：vitest 单元测试（126 个用例，含 200 局 AI 自对局不变式校验）
+- 测试：vitest 单元测试（246 个用例，含 200 局 AI 自对局不变式校验）
 
 ```bash
 npm install
@@ -113,9 +113,10 @@ npm run build   # 类型检查 + 生产构建
 
 因此从**第 21 回合**起进入消耗战：每个回合的「回合开始时」时机，回合角色失去体力，每 5 回合递增 1 点（`1 + ⌊(回合 − 21) / 5⌋`）。流失量无上限增长，最终必定超过任何回复能力，保证对局必然结束。能量的回满发生在这条效果之前，所以因消耗战进入濒死的角色是带着满能量被询问的。
 
-消耗战不是写在流程里的特例，而是注册在「回合开始时」时机上的规则效果（`TURN_TIMING_EFFECTS`），与将来的判定类效果、时机类技能走同一条通路。
-
-参数在 `src/game/rules/turn.ts`（`ATTRITION_TURN` / `ATTRITION_STEP`）。
+消耗战不是写在流程里的特例，而是**一条 DSL 规则文档**：`src/game/data/dsl/rules/attrition.json`
+挂在「回合开始时」时机上，与技能触发走同一条通路（`dsl/event.ts` 的时机派发）。
+回合数、递增步长、流失量表达式都在文档里；`rules/turn.ts` 只保留 `ATTRITION_TURN` /
+`ATTRITION_STEP` / `attritionLoss()` 供界面提示与测试断言，并由 `turn.test.ts` 断言两者一致。
 
 ## 物种与技能
 
@@ -130,11 +131,31 @@ npm run build   # 类型检查 + 生产构建
 | 🐂 牛 | 4 | **透支** | 主动 | 出牌阶段，你可以失去 1 点体力，然后摸两张牌 |
 | 🦊 狐 | 3 | **狡计** | 触发 | 当你受到伤害后，你可以获得伤害来源的一张手牌 |
 
-原【猛扑】（虎）与【灵草】（鹿）都靠「红色牌」判定，卡牌去掉花色后已无依据，因此**整条移除**
-（`SkillId`、技能表、`useOptions`、AI 决策与相关测试一并删除）；鹿保留【疗愈】，豹的【疾影】按牌种转化，不受影响。
-重新设计出不含花色的效果后再把技能登记回 `IMPLEMENTED_SKILLS` 即可。
+原【猛扑】（虎）与【灵草】（鹿）都靠「红色牌」判定，卡牌去掉花色后已无依据，因此**整条移除**；
+鹿保留【疗愈】，豹的【疾影】按牌种转化，不受影响。
+
+上表的每个技能都是**一份 JSON 文档**（`src/game/data/dsl/skills/*.json`），行为由 DSL 解释器执行；
+引擎、合法性判定、AI、界面里**不存在任何技能 id 分支**（由 `dsl/guards.test.ts` 机械守卫）。
 
 转化型技能产生的牌统一用 `VirtualCard` 表示（`as` = 当作什么牌，`source` = 实际消耗的牌，`via` = 技能），响应、伤害、日志、弃牌全部只认它，避免结算与展示分叉。
+
+## 内容 DSL（技能 / 卡牌 / 时机效果）
+
+内容（技能、卡牌、物种、牌组、时机规则、数值常量）全部是 `src/game/data/dsl/**` 下的 JSON，
+由 `src/game/dsl/**` 的**单一解释器**执行：
+
+- **词表与类型**：`dsl/kinds.ts`（判别式词表，唯一事实来源）+ `dsl/types.ts`（IR 类型）。
+- **加载期校验**：`dsl/validate.ts` 拒绝未知键/未知判别式/悬空引用/死文档/费用 < 1 等，
+  一次报出全部问题（`DslLoadError` 带 JSON 路径）；`dsl/registry.ts` 导入即校验。
+- **求值**：`dsl/value.ts`（数值表达式 + 修正通道聚合）、`dsl/condition.ts`（条件，可带 `reason` 失败说明）、
+  `dsl/target.ts`（目标选取）、`dsl/template.ts`（战报模板）。
+- **执行**：`dsl/effect.ts` 是全部效果指令的唯一入口，`dsl/internal.ts` 提供牌区/体力/能量/帧等引擎原语；
+  `dsl/event.ts` 把"规则文档 + 技能触发"统一到同一套时机派发上。
+- **规范文本**：`docs/dsl.md`（节点全表、语义、扩展指南）；`data/dsl/schema.json` 由
+  `dsl/schema.ts` 从词表与字段表**生成**，`schema.test.ts` 逐字节比对防止漂移。
+
+扩展的验收标准：**新增技能 / 卡牌 / 物种只需要加 JSON**，引擎、legality、AI、界面一行都不用改——
+`dsl/extensibility.test.ts` 用一个全新主动技、一张全新攻击牌（含牌组与守恒）与一次体力上限调整做了端到端验证。
 
 ## 目录结构
 
@@ -146,14 +167,17 @@ src/
     rng.ts                 # mulberry32 + 种子化洗牌（可复现）
     log.ts                 # 中文战报
     testUtils.ts           # 测试用状态构造器
-    data/                  # 私有牌组表（每物种 20 张）、物种表、牌定义
+    data/                  # 内容视图：species / cardDefs / deck（实时由 DSL 注册表派生）
+      dsl/                 # **内容文档**：ruleset、rules、decks、cards、skills、species + schema.json
+    dsl/                   # **DSL 运行时**：kinds/types/validate/registry/value/condition
+                           # target/modifier/template/internal/effect/event/schema
     rules/                 # phase（六阶段、时机、跳过/额外阶段）
-                           # turn（回合推进、摸牌数、手牌上限、消耗战）
+                           # turn（回合推进、摸牌数、手牌上限）
                            # energy（能量消耗、回满、能量不变式）
                            # usage（使用次数统计与「每回合限一次」技能记录）
-                           # legality / damage / dying / death / respond / cardZones / distance
-    skills/                # index（转化与常驻） / effects（主动与触发）
-    ai/                    # 规则式 AI（确定性）
+                           # legality / damage / dying / death / cardZones / distance
+    skills/                # index（牌面生成、主动技枚举、通道读取）
+    ai/                    # 规则式 AI（按文档派生的用途决策，确定性）
   stores/game.ts           # reactive 状态 + AI 驱动循环（pumpToken 防竞态）
   components/              # StartScreen / DraftScreen / GameBoard / PlayerPanel / HandCard
                            # ActionBar / PromptOverlay / LogPanel / HealthBar
@@ -161,7 +185,7 @@ src/
 
 引擎以 **prompt 驱动的状态机**对外：`submit(state, action)` 先校验再应用，然后 `advance()` 自动推进系统步骤，直到停在需要人或 AI 决策的点上。回合推进由 `(阶段, 子步骤)` 游标加剩余阶段队列 `phaseQueue` 表示，规则效果按「时机」注册。界面用 `reactive()` 包裹同一份状态对象，引擎就地修改它即自动刷新，引擎本身永远不 import Vue。
 
-## 测试覆盖（126 个用例）
+## 测试覆盖（246 个用例）
 
 | 文件 | 覆盖内容 |
 |---|---|
@@ -175,29 +199,47 @@ src/
 | `rules/damage.test.ts` | 扣体力、时机顺序（扣血→夺食→濒死）、夺食取回处理区的牌、狡计、无手牌不询问 |
 | `rules/dying.test.ts` | 自救、体力为负需连用多张、双方放弃即死亡、救援不受限制、濒死中禁用打击、能量不足无法自救／救援 |
 | `rules/death.test.ts` | 弃置全部手牌、处理区按归属收尾、终局后拒绝动作 |
-| `skills/transform.test.ts` | 疾影双向、不能转化【回复】、不可冒用、虎/鹿暂时没有转化技 |
+| `skills/transform.test.ts` | 疾影双向、不能转化【回复】、不可冒用、虎/鹿暂时没有转化技、换文档即新增一条转化 |
 | `skills/active.test.ts` | 透支非伤害且不触发夺食、透支濒死后才摸牌、疗愈限一次与目标校验 |
-| `skills/passive.test.ts` | 怒吼能量上限 +2、威压 need=2、物种名与技能名不重复、技能集合与已实现技能完全一致、虎暂时无技能 |
+| `skills/passive.test.ts` | 怒吼能量上限 +2、威压 need=2、物种名与技能名不重复、物种引用与注册表一一对应、换文档即改数值 |
+| `dsl/validate.test.ts` | 31 个校验用例：版本、未知键/判别式/通道/条件/指令、费用下限、牌区与取牌组合、日志占位符与角色、引用完整性与死文档 |
+| `dsl/registry.test.ts` | 内置文档全部通过校验、物种与牌种顺序不变、withRegistry 注入与还原、问题聚合 |
+| `dsl/kinds.test.ts` | 词表与阶段表一致、无重复项、字段表覆盖全部判别式 |
+| `dsl/value.test.ts` | 全部数值节点、角色数值、通道基准与聚合、修正值为表达式、通道自引用报错 |
+| `dsl/condition.test.ts` | 全部条件种类、in-processing/card-transformed/picked-count 等运行时绑定 |
+| `dsl/target.test.ts` | 疗愈候选与缺省目标、打击唯一候选、濒死目标、阵亡者不可选、文档 reason 作为报错 |
+| `dsl/template.test.ts` | 普通/转化使用、濒死救援、技能日志、vars 优先、未知字段报错 |
+| `dsl/effect.test.ts` | 全部效果指令、四种取牌模式、对抗帧与抵消、濒死脱离、after 延迟语义 |
+| `dsl/event.test.ts` | 时机匹配、消耗战规则、触发收集与 when 条件、runTrigger、不可选触发立即执行 |
+| `dsl/schema.test.ts` | 字段覆盖率、生成物逐字节一致、每份内容文档过 schema、schema 能拒绝错误 |
+| `dsl/guards.test.ts` | 应用代码零内容 id、白名单不过期、不 import node 内置模块、扫描非空跑 |
+| `dsl/extensibility.test.ts` | 新主动技 / 新攻击牌（含牌组与守恒）/ 改体力上限都只改文档 |
 | `engine.test.ts` | **200 局 AI 自对局**全终局且牌数守恒、能量不变式、8×8 物种组合、完全确定性复现、回归：曾经的死循环组合；私有牌组：开局各 20 张且构成正确、摸牌不影响对手、夺食转移归属后全局仍守恒 |
 | `stores/game.test.ts` | 抽将→选将→对局→终局全链路、只提供合法操作、出牌扣能量、能量见底只能结束阶段、弃牌校验、再来一局不被旧回调污染（固定种子） |
+
+（用例数由 `npm test` 汇总；上表按文件列出覆盖点。）
 
 ## 已知简化
 
 - **卡牌没有花色与点数**：`Card` 只有 `uid` 与 `kind`，费用与效果都按牌种固定；由此**依赖花色的技能一并移除**（虎的【猛扑】、鹿的【灵草】），虎暂时没有技能。
 - **无随机判定**：没有任何需要翻牌判定的机制，技能只依赖牌种与手牌数（唯一的随机是【狡计】取哪张手牌）。
 - **能量不跨回合累积**：没有「存能量」的概念，回合开始时只是回复至上限，多出来的部分不会保留。
-- **技能不消耗能量**：【疗愈】【透支】以及弃牌都不付能量，能量只约束「使用／打出卡牌」。
+- **技能不消耗能量**：【疗愈】【透支】以及弃牌都不付能量（主动技的代价写在文档的 `costCards` / 效果里，当前都没有能量费用）。
 - **濒死可能因能量不足而救不回来**：濒死【回复】照常收 2 点能量，这是「所有使用与打出都消耗」的直接结果。
 - **判定 / 准备 / 结束阶段为空**：本作没有需要判定的内容，这三个阶段保留为空阶段与时机扩展点。
 - **无额外回合**：阶段层面支持「跳过阶段 / 额外的阶段」，但还没有「额外回合」；将来加入时挂在「回合结束时」的时机上。
-- **牌池只有三张基本牌**：没有装备牌，也没有额外的策略牌，因此不存在多目标牌与对应的响应链。
+- **牌池只有三张基本牌**：没有装备牌，也没有额外的策略牌，因此不存在多目标牌与对应的响应链；不过加牌只需要一份 JSON（见 `dsl/extensibility.test.ts`）。
 - **牌组私有但张数会漂移**：【夺食】把对手的牌拿进自己手里后，那张牌就归获得者所有（弃置 / 洗回都进获得者的牌区），因此双方池子不再各为 20 张，守恒口径是「全局 40 张、uid 唯一」。
-- **所有物种暂时共用同一套牌**：`SPECIES_DECKS` 指向同一个 `BASIC_DECK`，按物种分化牌组只需替换各自序列。
+- **所有物种暂时共用同一套牌**：物种文档的 `deck` 都指向 `basic`；按物种分化牌组只需新增/替换牌组 JSON 并改物种文档的 `deck` 字段。
 - **距离恒为 1**：1v1 双方座位距离固定，`rules/distance.ts` 保留完整接口以便扩展多人。
 - **濒死询问顺序**：从濒死者开始按座次询问（1v1 即濒死者 → 对手），`util.ts` 的 `aliveOrderFrom` 是顺序扩展点。
 - **【疗愈】目标**：可以指定任意已受伤角色（规则上允许治疗对手，AI 永远不会这么做）。
 - **【狡计】**：从伤害来源手牌中随机获得一张。
-- **AI 是规则式的**：付得起就出【防御】、濒死不救对手、弃牌按「打击→防御→回复」优先级；进攻时手上有能打出的【防御】就留 1 点能量防守。它不会做长线规划。
+- **AI 是规则式的**：付得起就出【防御】、濒死不救对手、弃牌按「攻击→防御→回复」优先级；进攻时手上有能打出的【防御】就留 1 点能量防守。它不会做长线规划。
+- **AI 不认技能/牌种 id**：用途（治疗、换牌、攻击、防御、回复）由文档结构派生（`cardRole` / `skillKinds`），策略阈值留在 `ai/index.ts`。
+- **内容随应用打包**：`data/dsl/*.json` 由 `import.meta.glob` 静态打包并在启动时校验，**不支持运行时热加载**；注册表与加载是解耦的（`createRegistry` / `withRegistry`），将来要做内容包只需再加一个加载器。
+- **可选发动的触发技能只支持「受到伤害后」**：`optional: true` 目前仅允许 `after-damage`（引擎会 emit 的事件类时机），其余时机只能是非可选效果。
+- **目标选择器**：`TargetSpec.required` 已预留"必须显式指定目标"的语义，但界面还没有目标选择器，因此现有主动技都使用可由文档给出的缺省目标。
 
 ### 平衡观察
 

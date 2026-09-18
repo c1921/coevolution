@@ -402,6 +402,12 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `is-active` | — | `ctx.self === state.active` |
 | `phase-is` | `phase: TurnPhase` | 当前阶段等于 `phase` |
 
+**每个条件都可以带 `reason: string`**：条件不成立时，合法性判定会把这句话直接回给玩家，
+所以"为什么不能这么做"也是内容，写在文档里而不是散落在引擎分支中。例如
+`cards/heal.json` 的 `requires` 带 `"reason": "你的体力已满，无法使用【回复】"`，
+`skills/mend.json` 的目标条件带 `"reason": "目标角色体力已满，无法回复"`。
+没有 `reason` 的条件失败时返回通用说明（`firstFailed` 只报最外层不成立的节点）。
+
 `ZoneName`（`ZONE_NAMES`）：`hand` / `discard` / `processing` / `deck`。
 `CardRef`（`CARD_REFS`）：`event-card`（造成本次伤害的牌）/ `used-card`（本次使用的牌）/ `cost-card`（第一张费用牌）。
 `Phase`（`PHASES` / `TURN_PHASES`，两者由 `kinds.test.ts` 断言一致）：`prepare` → `judge` → `draw` → `play` → `discard` → `end`。
@@ -445,7 +451,6 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 |---|---|---|---|
 | `played` | — | 必须是 `hand` | 只能出现在卡牌的 `use-play` / `use-dying` / `play` 效果中 |
 | `cost` | — | 必须是 `hand` | 只能出现在主动技的 `activate` 效果中 |
-| `chosen` | `count`（≥1） | 必须是 `hand` | — |
 | `random` | `count`（≥1） | 必须是 `hand` | — |
 | `specific` | `card`（`CardRef`） | 必须是 `processing` | — |
 | `all` | — | 只能是 `hand` 或 `discard` | — |
@@ -483,7 +488,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 这是 DSL 里最需要理解的一条时序约定：
 
 - **`effects` 按声明顺序逐条执行。**
-- **`after` 不立即执行**：它被推迟，作为一份延迟效果压入结算帧栈（`Frame.effects`，见 `runtime.ts` 的说明），等**当前这条结算链全部走完**——包括伤害、「受到伤害后」询问、濒死询问与结算收尾——之后再按 **LIFO（后进先出）** 出栈执行。
+- **`after` 不立即执行**：它被推迟，作为一份延迟效果压入结算帧栈（`Frame.effects`，见 `../src/game/types.ts`），等**当前这条结算链全部走完**——包括伤害、「受到伤害后」询问、濒死询问与结算收尾——之后再按 **LIFO（后进先出）** 出栈执行。
 
 所以 `after` 表达的是「先付出代价，若还能继续，再拿收益」。
 
@@ -612,7 +617,7 @@ export interface EffectContext {
 
 `resolveTargetChoice` 的规则：显式目标必须在候选内；`required: true` 时必须提供；否则用 `default`（再退化为唯一候选 → 自己）。
 
-**已知取舍（重要）**：疗愈缺省目标是 `self`。因此「自己满血、只有对手受伤」时，缺省目标不合法，会返回 `{ ok: false, reason: '缺省目标不符合该效果的条件' }`，必须显式传入目标（`resolveTargetChoice(env, spec, 1)` 才成立）。但当前界面**还没有目标选择器**：`stores/game.ts` 发动主动技时不带 `target`（`act({ kind: 'activate', skill })`），于是只能走缺省值。`TargetSpec.required` 字段是为将来接入目标选择器预留的。
+**已知取舍（重要）**：疗愈缺省目标是 `self`。因此「自己满血、只有对手受伤」时，缺省目标不合法，会返回 `{ ok: false, reason: '目标角色体力已满，无法回复' }`（文案来自该条件的 `reason`），必须显式传入目标（`resolveTargetChoice(env, spec, 1)` 才成立）。但当前界面**还没有目标选择器**：`stores/game.ts` 发动主动技时不带 `target`（`act({ kind: 'activate', skill })`），于是只能走缺省值。`TargetSpec.required` 字段是为将来接入目标选择器预留的。
 
 ---
 
@@ -821,9 +826,15 @@ export interface EffectContext {
 | `src/game/dsl/condition.test.ts` | 每种条件（`always`/`not`/`all`/`any`、`compare`、`alive`/`has-cards`/`card-kind-count`、`in-processing`、`card-transformed`/`picked-count`、`skill-unused`/`is-active`/`phase-is`） |
 | `src/game/dsl/target.test.ts` | 疗愈候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range` |
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
+| `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`lose-hp`/`heal`/`damage`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`after` 的延迟语义 |
+| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（夺食/狡计）、不可选触发立即执行、可选触发只支持 `after-damage` |
 | `src/game/dsl/schema.test.ts` | `uncoveredFields()` 为空；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
+| `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、扫描非空跑 |
+| `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限都只改文档即可端到端生效 |
 
 `src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 物种的最小自洽文档集）与 `mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
+
+`registry.ts` 另提供 `registryToDocs()`：把当前注册表还原成文档列表。做"只替换一份文档"的扩展性测试时需要一份完整自洽的内容集（牌数守恒、引用完整性都还要成立），用它作底最省事。
 
 ### 14.2 `schema.json` 是生成物
 
