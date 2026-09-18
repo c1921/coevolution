@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { hasSkill, SPECIES, SPECIES_IDS } from '../data/species'
+import { registry, skillDoc } from '../dsl/registry'
 import { BASE_ENERGY_MAX, energyMax } from '../rules/energy'
-import { defendNeedAgainst, energyMaxBonus, IMPLEMENTED_SKILLS } from '../skills'
+import { defendNeedAgainst, energyMaxBonus } from '../skills'
 import { makeState } from '../testUtils'
 
 describe('常驻型技能', () => {
@@ -23,9 +24,14 @@ describe('常驻型技能', () => {
     expect(defendNeedAgainst(tiger, 0)).toBe(1)
   })
 
-  it('8 个物种的技能集合与已实现技能完全一致', () => {
+  it('物种引用的技能都能解析，且注册表里没有孤儿技能', () => {
     const fromSpecies = new Set(SPECIES_IDS.flatMap((id) => SPECIES[id].skills.map((s) => s.id)))
-    expect(fromSpecies).toEqual(new Set(IMPLEMENTED_SKILLS))
+    for (const id of fromSpecies) {
+      // 引用完整性在加载期已强制，这里保证展示视图也拿得到名字与文案
+      expect(skillDoc(id).name.length).toBeGreaterThan(0)
+      expect(skillDoc(id).text.length).toBeGreaterThan(0)
+    }
+    expect(new Set(registry.skills.map((doc) => doc.id))).toEqual(fromSpecies)
   })
 
   it('每个物种都有名称、头像与体力上限', () => {

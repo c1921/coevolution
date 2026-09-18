@@ -1,4 +1,13 @@
+import { registry } from '../dsl/registry'
+import type { CardDoc, Value } from '../dsl/types'
 import type { CardKind } from '../types'
+
+/**
+ * 牌面元数据（由 DSL 文档派生）。
+ *
+ * 这里是"展示与费用"的视图：费用、牌名、卡面文案。
+ * 结算所需的完整文档（use / play 变体）请直接读 `dsl/registry` 的 `cardDoc(id)`。
+ */
 
 export interface CardDef {
   kind: CardKind
@@ -14,32 +23,35 @@ export interface CardDef {
   text: string
 }
 
-export const CARD_DEFS: Record<CardKind, CardDef> = {
-  strike: {
-    kind: 'strike',
-    name: '打击',
-    cost: 1,
-    short: '造成 1 点伤害',
-    text: '消耗 1 点能量：对对方造成 1 点伤害；其可打出【防御】抵消。',
-  },
-  defend: {
-    kind: 'defend',
-    name: '防御',
-    cost: 1,
-    short: '抵消一次【打击】',
-    text: '消耗 1 点能量：抵消一次【打击】。只能在响应时打出。',
-  },
-  heal: {
-    kind: 'heal',
-    name: '回复',
-    cost: 2,
-    short: '回复 1 点体力',
-    text: '消耗 2 点能量：回复 1 点体力。出牌阶段只能对自己使用且需已受伤；濒死时可用来自救。',
-  },
+/** 费用是常量表达式（当前三张牌都是常量；动态费用由状态化求值负责） */
+function constCost(doc: CardDoc): number {
+  if (doc.cost.kind !== 'const') {
+    throw new Error(`牌种 ${doc.id} 的费用不是常量表达式，需要用状态化的费用求值`)
+  }
+  return doc.cost.value
 }
 
-export const CARD_NAME: Record<CardKind, string> = {
-  strike: '打击',
-  defend: '防御',
-  heal: '回复',
+function toCardDef(doc: CardDoc): CardDef {
+  return {
+    kind: doc.id,
+    name: doc.name,
+    cost: constCost(doc),
+    short: doc.short,
+    text: doc.text,
+  }
+}
+
+export const CARD_DEFS: Record<CardKind, CardDef> = Object.fromEntries(
+  registry.cards.map((doc) => [doc.id, toCardDef(doc)]),
+)
+
+export const CARD_NAME: Record<CardKind, string> = Object.fromEntries(
+  registry.cards.map((doc) => [doc.id, doc.name]),
+)
+
+/** 牌面的费用表达式（保留原始 IR，供将来接入 card-cost 修正通道） */
+export function cardCostValue(kind: CardKind): Value {
+  const doc = registry.cardById[kind]
+  if (!doc) throw new Error(`未知牌种 id：${kind}`)
+  return doc.cost
 }

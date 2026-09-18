@@ -1,3 +1,4 @@
+import { cardIds } from '../dsl/registry'
 import type { CardKind, GameState, PlayerIndex, SkillId } from '../types'
 
 /**
@@ -13,19 +14,20 @@ import type { CardKind, GameState, PlayerIndex, SkillId } from '../types'
  * 并随该角色下个回合开始时清零——因为当前没有需要区分回合内外次数的牌。
  */
 
-/** 一份空的使用记录（新建玩家状态与回合重置时共用） */
-export function newCardUseRecord(): Record<CardKind, number> {
-  return { strike: 0, defend: 0, heal: 0 }
+/** 一份空的使用记录（新建玩家状态与回合重置时共用）：键来自注册表的全部牌种 */
+export function newCardUseRecord(): Record<string, number> {
+  return Object.fromEntries(cardIds().map((id) => [id, 0]))
 }
 
 /** 本回合某牌名已使用的次数 */
 export function cardUseCount(state: GameState, p: PlayerIndex, kind: CardKind): number {
-  return state.players[p].usedCardsThisTurn[kind]
+  return state.players[p].usedCardsThisTurn[kind] ?? 0
 }
 
 /** 记录一次「使用」（转化牌传入它当作的牌名） */
 export function recordCardUse(state: GameState, p: PlayerIndex, kind: CardKind): void {
-  state.players[p].usedCardsThisTurn[kind] += 1
+  const record = state.players[p].usedCardsThisTurn
+  record[kind] = (record[kind] ?? 0) + 1
 }
 
 /** 本回合该「每回合限一次」技能是否已发动过 */

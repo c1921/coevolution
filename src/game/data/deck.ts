@@ -1,53 +1,44 @@
+import { deckOf, speciesIds } from '../dsl/registry'
+import type { DeckDoc } from '../dsl/types'
 import type { Card, CardKind, SpeciesId } from '../types'
 
 /**
- * 每个物种私有牌组的构成：共 20 张。
+ * 私有牌组（由 DSL 的 deck 文档与物种引用派生）。
+ *
+ * 牌组构成是平衡旋钮：改 `data/dsl/decks/basic.json` 即可，校验器与守恒逻辑都不用动。
  *  - 打击 ×11：主要输出，1 点能量
  *  - 防御 ×6 ：响应【打击】，1 点能量
  *  - 回复 ×3 ：回血与濒死自救，2 点能量
- *
- * 比例沿用此前 53 张公共牌堆的 30 : 15 : 8，因此攻防节奏基本不变。
- * 这是牌组侧唯一的平衡旋钮：改动后同步 deck.test.ts 的期望值。
  */
-const DECK_TABLE: { kind: CardKind; count: number }[] = [
-  { kind: 'strike', count: 11 },
-  { kind: 'defend', count: 6 },
-  { kind: 'heal', count: 3 },
-]
 
-/** 每副私有牌组的张数（测试与守恒校验的基准） */
-export const DECK_SIZE = DECK_TABLE.reduce((sum, row) => sum + row.count, 0)
-
-/** 牌组的牌种序列，按牌表顺序展开 */
-const BASIC_DECK: CardKind[] = DECK_TABLE.flatMap((row) =>
-  Array.from({ length: row.count }, () => row.kind),
-)
-
-/**
- * 每个物种的私有牌组（牌种序列）。
- * 暂时 8 个物种共用同一套 20 张；将来要按物种分化时，把 BASIC_DECK 换成各自的序列即可，
- * uid 分配、守恒校验（speciesDeckSize）与洗牌逻辑都不需要改。
- */
-export const SPECIES_DECKS: Record<SpeciesId, CardKind[]> = {
-  tiger: BASIC_DECK,
-  bear: BASIC_DECK,
-  leopard: BASIC_DECK,
-  wolf: BASIC_DECK,
-  deer: BASIC_DECK,
-  lion: BASIC_DECK,
-  ox: BASIC_DECK,
-  fox: BASIC_DECK,
+/** 把一个牌组文档展开成牌种序列 */
+function expandDeck(doc: DeckDoc): CardKind[] {
+  return doc.cards.flatMap((entry) =>
+    Array.from({ length: entry.count }, () => entry.kind),
+  )
 }
 
 /** 某个物种私有牌组的牌种序列（返回副本，避免调用方改到牌表本身） */
 export function speciesDeck(species: SpeciesId): CardKind[] {
-  return [...SPECIES_DECKS[species]]
+  return expandDeck(deckOf(species))
 }
 
 /** 某个物种私有牌组的张数（「牌数守恒」按它求和） */
 export function speciesDeckSize(species: SpeciesId): number {
-  return SPECIES_DECKS[species].length
+  return expandDeck(deckOf(species)).length
 }
+
+/**
+ * 每个物种的私有牌组（牌种序列）。
+ * 暂时 8 个物种共用 `basic`；将来按物种分化时，在物种文档里指向各自的牌组即可，
+ * uid 分配、守恒校验与洗牌逻辑都不需要改。
+ */
+export const SPECIES_DECKS: Record<SpeciesId, CardKind[]> = Object.fromEntries(
+  speciesIds().map((id) => [id, speciesDeck(id)]),
+)
+
+/** 基准牌组的张数（首个注册牌组；物种分化后各物种以 speciesDeckSize 为准） */
+export const DECK_SIZE = expandDeck(deckOf(speciesIds()[0] as SpeciesId)).length
 
 /**
  * 构建某个物种的私有牌组。

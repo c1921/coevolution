@@ -3,8 +3,13 @@
 // 注意：tsconfig 开启了 erasableSyntaxOnly，因此禁止使用 enum，
 // 所有枚举语义一律用字符串字面量联合类型表达。
 
-/** 基本牌种类：打击 / 防御 / 回复 */
-export type CardKind = 'strike' | 'defend' | 'heal'
+/**
+ * 牌种 id（如 strike / defend / heal）。
+ *
+ * 内容已迁到 JSON（data/dsl/cards/*.json），因此这里不再用字面量联合类型锁死：
+ * 新增牌种只需加 JSON，引用完整性由 DSL 加载期校验器保证。
+ */
+export type CardKind = string
 
 export type PlayerIndex = 0 | 1
 
@@ -31,27 +36,19 @@ export interface VirtualCard {
   via?: SkillId
 }
 
-export type SpeciesId =
-  | 'tiger'
-  | 'bear'
-  | 'leopard'
-  | 'wolf'
-  | 'deer'
-  | 'lion'
-  | 'ox'
-  | 'fox'
+/** 物种 id（如 tiger / bear），内容见 data/dsl/species/*.json */
+export type SpeciesId = string
 
-export type SkillId =
-  | 'roar'
-  | 'flicker'
-  | 'snatch'
-  | 'mend'
-  | 'menace'
-  | 'overexert'
-  | 'guile'
+/** 技能 id（如 roar / mend），内容见 data/dsl/skills/*.json */
+export type SkillId = string
 
-/** transform=转化型 / passive=常驻型 / trigger=受到伤害后可选发动 / active=出牌阶段主动技 */
-export type SkillKind = 'transform' | 'passive' | 'trigger' | 'active'
+/**
+ * 技能分类词汇：transform=转化型 / passive=常驻型 / trigger=触发型 / active=主动型。
+ * 唯一的词表在 dsl/kinds.ts，这里复用以免两处漂移。
+ */
+import type { SkillKind } from './dsl/kinds'
+
+export type { SkillKind }
 
 export interface SkillDef {
   id: SkillId
@@ -89,11 +86,11 @@ export interface PlayerState {
    */
   energy: number
   /**
-   * 本回合各牌名的「使用次数」（使用次数在回合开始时重置）。
+   * 本回合各牌名的「使用次数」（使用回合开始时重置，键为牌种 id）。
    * 转化牌按其当作的牌名计数。出牌的实际约束是**能量**（rules/energy.ts），
    * 这份记录只作统计与战报用，不再构成任何上限。
    */
-  usedCardsThisTurn: Record<CardKind, number>
+  usedCardsThisTurn: Record<string, number>
   /** 本回合已发动过的「出牌阶段限一次」技能（如疗愈） */
   usedSkillsThisTurn: SkillId[]
 }

@@ -19,23 +19,6 @@ export interface CardOption {
   via?: SkillId
 }
 
-/**
- * 已实现的全部技能。新增物种时先在这里登记，
- * passive.test.ts 会校验「8 个物种的技能集合」与它完全一致，防止漏实现。
- *
- * 注：【猛扑】（虎）与【灵草】（鹿）原本以「红色牌」为判定依据，
- * 卡牌移除花色后暂时整条移除；重新设计出不含花色的效果后再登记回这里。
- */
-export const IMPLEMENTED_SKILLS: SkillId[] = [
-  'roar',
-  'flicker',
-  'snatch',
-  'mend',
-  'menace',
-  'overexert',
-  'guile',
-]
-
 /** 生成虚拟牌 */
 export function toVirtual(card: Card, option: CardOption): VirtualCard {
   if (option.via) return { as: option.as, source: card, via: option.via }
