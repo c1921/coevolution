@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
-import { ROAR_ENERGY_BONUS } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 import { assertConservation } from './cardZones'
-import { BASE_ENERGY_MAX } from './energy'
+import { BASE_ENERGY_MAX, energyMax } from './energy'
 import { cardUseCount } from './usage'
 
 describe('【打击】结算', () => {
@@ -118,9 +117,10 @@ describe('【打击】结算', () => {
       submit(state, { kind: 'play-card', card: state.players[1].hand[0]!, as: 'defend' })
     }
 
-    // 熊的上限是 5，打完三张还剩 2 点（虎只能打三张）
+    // 熊的上限是 5（怒吼 +2），打完三张还剩 2 点（虎的上限只有 3）
     expect(cardUseCount(state, 0, 'strike')).toBe(3)
-    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX + ROAR_ENERGY_BONUS - 3)
+    expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX + 2)
+    expect(state.players[0].energy).toBe(energyMax(state, 0) - 3)
     expect(state.players[1].hp).toBe(4)
     assertConservation(state)
   })

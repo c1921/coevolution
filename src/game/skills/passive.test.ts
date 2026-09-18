@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hasSkill, SPECIES, SPECIES_IDS } from '../data/species'
-import { registry, skillDoc } from '../dsl/registry'
+import { baseDocs } from '../dsl/fixtures'
+import { createRegistry, registry, skillDoc, withRegistry } from '../dsl/registry'
 import { BASE_ENERGY_MAX, energyMax } from '../rules/energy'
 import { defendNeedAgainst, energyMaxBonus } from '../skills'
 import { makeState } from '../testUtils'
@@ -22,6 +23,30 @@ describe('常驻型技能', () => {
 
     expect(defendNeedAgainst(lion, 0)).toBe(2)
     expect(defendNeedAgainst(tiger, 0)).toBe(1)
+  })
+
+  it('修正通道：换一份技能文档即可改变能量上限，引擎代码不用动', () => {
+    const synthetic = createRegistry([
+      ...baseDocs().filter((doc) => doc.path !== 'skills/roar.json'),
+      {
+        path: 'skills/roar.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'roar',
+          name: '怒吼',
+          text: '你每回合的能量上限 +1。',
+          modifiers: [
+            { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 1 } },
+          ],
+        },
+      },
+    ])
+    // 虎本来没有技能；同一个 state 换一份技能文档后，上限随之改变
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX)
+    expect(withRegistry(synthetic, () => energyMax(state, 0))).toBe(BASE_ENERGY_MAX + 1)
+    expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX)
   })
 
   it('物种引用的技能都能解析，且注册表里没有孤儿技能', () => {

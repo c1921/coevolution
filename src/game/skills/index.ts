@@ -1,5 +1,7 @@
 import { CARD_NAME } from '../data/cardDefs'
 import { hasSkill, skillDef } from '../data/species'
+import { channelValue } from '../dsl/modifier'
+import { baseChannel } from '../dsl/registry'
 import { skillUsed } from '../rules/usage'
 import type { Card, CardKind, GameState, PlayerIndex, SkillId, VirtualCard } from '../types'
 import { otherPlayer } from '../util'
@@ -90,21 +92,23 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
   return out
 }
 
-/** 【打击】需要目标打出几张【防御】才能抵消 */
+/**
+ * 【打击】需要目标打出几张【防御】才能抵消。
+ * 数值来自 defend-need-against 通道：基准值在 rules/base.json，威压以 set 覆盖为 2。
+ * 参考与 subject 都是"打击的使用者"。
+ */
 export function defendNeedAgainst(state: GameState, source: PlayerIndex): number {
-  return hasSkill(state.players[source].species, 'menace') ? 2 : 1
+  return channelValue(state, 'defend-need-against', source)
 }
-
-/** 【怒吼】的能量上限加成 */
-export const ROAR_ENERGY_BONUS = 2
 
 /**
  * 能量上限的技能修正（基础值见 rules/energy.ts 的 BASE_ENERGY_MAX）。
+ * 数值来自 energy-max 通道：基准值 3，怒吼以 add +2 抬到 5。
  *
  * 【打击】的次数限制已从规则层面整体去除，所以原来的「无次数限制」不再是效果；
  * 【怒吼】改为「更多能量」，让熊依然打得更凶，同时避开另一条死路：
  * 任何把【打击】降成 0 费的效果都会与「无次数限制」组合成无限连击。
  */
 export function energyMaxBonus(state: GameState, p: PlayerIndex): number {
-  return hasSkill(state.players[p].species, 'roar') ? ROAR_ENERGY_BONUS : 0
+  return channelValue(state, 'energy-max', p) - baseChannel('energy-max')
 }

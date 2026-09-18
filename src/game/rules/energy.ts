@@ -1,12 +1,13 @@
 import { CARD_DEFS } from '../data/cardDefs'
-import { energyMaxBonus } from '../skills'
+import { channelValue } from '../dsl/modifier'
+import { baseChannel } from '../dsl/registry'
 import type { CardKind, GameState, PlayerIndex } from '../types'
 import { RuleError } from '../util'
 
 /**
  * 能量系统。
  *
- * 每位角色有一份能量，上限 = BASE_ENERGY_MAX + 技能修正（skills 的 energyMaxBonus），
+ * 每位角色有一份能量，上限 = energy-max 通道（基准值 + 技能修正，见 data/dsl/rules/base.json），
  * 并在**回合开始时**回复至上限——没有花完的能量会留在池中（不超过上限），
  * 因此「这一回合多打几张」与「留能量拦下对手下回合的【打击】」是一对取舍。
  *
@@ -21,12 +22,12 @@ import { RuleError } from '../util'
  * 与「【打击】没有次数限制」组合就是无限连击（energy.test.ts 对此有断言）。
  */
 
-/** 能量上限的基础值（技能修正见 skills/index.ts 的 energyMaxBonus） */
-export const BASE_ENERGY_MAX = 3
+/** 能量上限的基础值：来自 data/dsl/rules/base.json 的 energy-max 通道基准 */
+export const BASE_ENERGY_MAX = baseChannel('energy-max')
 
-/** 某角色当前的回合能量上限 */
+/** 某角色当前的回合能量上限（基准值 + 该角色技能的 energy-max 修正） */
 export function energyMax(state: GameState, p: PlayerIndex): number {
-  return BASE_ENERGY_MAX + energyMaxBonus(state, p)
+  return channelValue(state, 'energy-max', p)
 }
 
 /** 使用 / 打出某牌面需要支付的能量（按牌种的固定费用） */
