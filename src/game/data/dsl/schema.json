@@ -337,7 +337,6 @@
           "enum": [
             "played",
             "cost",
-            "chosen",
             "random",
             "specific",
             "all"

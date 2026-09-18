@@ -88,8 +88,8 @@ export const EFFECT_KINDS = [
 ] as const
 export type EffectKind = (typeof EFFECT_KINDS)[number]
 
-/** 取牌方式 */
-export const PICK_MODES = ['played', 'cost', 'chosen', 'random', 'specific', 'all'] as const
+/** 取牌方式（chosen 需要交互式选牌机制，当前没有该 prompt，故不提供） */
+export const PICK_MODES = ['played', 'cost', 'random', 'specific', 'all'] as const
 export type PickMode = (typeof PICK_MODES)[number]
 
 /** 牌区名 */

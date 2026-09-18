@@ -694,10 +694,10 @@ function checkMoveCards(
   const fromZone = asObj(obj.from)?.zone as ZoneName | undefined
   const toZone = asObj(obj.to)?.zone as ZoneName | undefined
 
-  if (mode === 'chosen' || mode === 'random') {
+  if (mode === 'random') {
     checkCount(pick, 'count', `${path}#/pick`, issues, 1)
     if (fromZone !== 'hand') {
-      push(issues, `${path}#/pick`, 'bad-combination', `${mode} 只能从手牌取牌`)
+      push(issues, `${path}#/pick`, 'bad-combination', 'random 只能从手牌取牌')
     }
   }
   if (mode === 'all') {

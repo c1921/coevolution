@@ -1,3 +1,4 @@
+import type { Timing } from '../dsl/types'
 import { log, playerLabel } from '../log'
 import type { GameState, Phase, TurnPhase } from '../types'
 
@@ -86,12 +87,12 @@ export function finishPhaseBody(state: GameState): void {
   state.phaseStage = 'end'
 }
 
-/** 时机：引擎在这些固定时点依次执行已注册的规则效果 */
-export type Timing =
-  | { at: 'turn-start' }
-  | { at: 'turn-end' }
-  | { at: 'phase-start'; phase: TurnPhase }
-  | { at: 'phase-end'; phase: TurnPhase }
+/**
+ * 时机：引擎在这些固定时点依次执行已注册的规则效果。
+ * 定义在 dsl/types.ts（DSL 的规则与技能都挂在同一套时机上，含 after-damage），
+ * 这里复用以免两处漂移。
+ */
+export type { Timing }
 
 /** 挂在某个时机上的规则效果（消耗战，以及将来的判定类效果与时机类技能） */
 export interface TimingEffect {

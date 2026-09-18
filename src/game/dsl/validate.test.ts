@@ -163,7 +163,7 @@ describe('DSL 校验器 · 效果', () => {
             kind: 'move-cards',
             from: { zone: 'processing', of: 'self' },
             to: { zone: 'hand', of: 'self' },
-            pick: { mode: 'chosen', count: 1 },
+            pick: { mode: 'random', count: 1 },
           },
         ]
       }),

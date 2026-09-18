@@ -3,6 +3,9 @@
 // 注意：tsconfig 开启了 erasableSyntaxOnly，因此禁止使用 enum，
 // 所有枚举语义一律用字符串字面量联合类型表达。
 
+import type { Effect } from './dsl/types'
+import type { EffectContext } from './dsl/runtime'
+
 /**
  * 牌种 id（如 strike / defend / heal）。
  *
@@ -126,16 +129,18 @@ export type Prompt =
       kind: 'respond'
       /** 被询问的人（即打击的目标） */
       player: PlayerIndex
-      /** 需要打出的【防御】张数（威压为 2） */
+      /** 需要打出的牌种（对抗窗口由开启它的卡牌决定） */
+      expected: CardKind
+      /** 需要打出的张数（威压为 2） */
       need: number
       /** 已打出的张数 */
       got: number
-      /** 打击的使用者 */
+      /** 对抗的发起者 */
       source: PlayerIndex
-      card: VirtualCard
+      card: VirtualCard | null
     }
   | { kind: 'dying'; player: PlayerIndex; dying: PlayerIndex }
-  | { kind: 'trigger'; player: PlayerIndex; skill: SkillId; ctx: DamageCtx }
+  | { kind: 'trigger'; player: PlayerIndex; skill: SkillId }
   | { kind: 'discard'; player: PlayerIndex; count: number }
 
 export type Action =
@@ -174,26 +179,44 @@ export interface ProcessingCard {
  * 打击的响应 → 伤害 → 濒死 → 收尾 这条链就是靠帧的压栈/退栈来保证顺序的。
  */
 export type Frame =
-  /** 一次【打击】的结算：等待目标打出【防御】 */
+  /**
+   * 对抗结算：等待响应者打出 `expected` 牌抵消。
+   * 开启对抗的牌由 `card` 记录（夺食据此取回造成伤害的牌），
+   * 未抵消时执行 `onUnmet`（通常造成伤害），由 DSL 的 contest 指令提供。
+   */
   | {
-      kind: 'strike'
+      kind: 'contest'
       source: PlayerIndex
       target: PlayerIndex
-      card: VirtualCard
-      /** 需要打出的【防御】张数（威压为 2） */
+      card: VirtualCard | null
+      /** 开启对抗时当作的牌种（响应方据此判断能否响应） */
+      openedBy: CardKind
+      /** 需要打出的牌种 */
+      expected: CardKind
+      /** 需要打出的张数（威压为 2） */
       need: number
       got: number
-      /** 本次结算消耗的牌（打击牌 + 已打出的防御牌），收尾时各自进自己的弃牌堆 */
+      /** 本次结算消耗的牌（攻击牌 + 已打出的响应牌），收尾时各自进自己的弃牌堆 */
       spent: ProcessingCard[]
+      /** 未抵消时的后续效果 */
+      onUnmet: Effect[]
+      ctx: EffectContext
     }
   /** 伤害已扣减体力：先依次询问「受到伤害后」技能，再做濒死检查 */
-  | { kind: 'damage'; ctx: DamageCtx; triggers: SkillId[] }
+  | { kind: 'damage'; ctx: DamageCtx; triggers: TriggerRef[] }
   /** 濒死询问队列：按顺序逐个询问是否使用【回复】 */
   | { kind: 'dying'; dying: PlayerIndex; ask: PlayerIndex[] }
   /** 结算收尾：把仍在处理区的牌按归属移入各自的弃牌堆（已被夺食取走的牌自动跳过） */
   | { kind: 'flush'; cards: ProcessingCard[] }
-  /** 延迟摸牌（透支在濒死结算存活后再摸两张） */
-  | { kind: 'draw'; player: PlayerIndex; count: number }
+  /** 延迟效果帧（DSL 效果的 after 列表）：当前结算链走完后按 LIFO 执行 */
+  | { kind: 'effects'; effects: Effect[]; ctx: EffectContext }
+
+/** 待处理的技能触发：谁拥有哪个技能，是否可选发动 */
+export interface TriggerRef {
+  owner: PlayerIndex
+  skill: SkillId
+  optional: boolean
+}
 
 export interface GameState {
   seed: number

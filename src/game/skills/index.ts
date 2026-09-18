@@ -9,6 +9,7 @@ import type {
   GameState,
   PlayerIndex,
   SkillId,
+  TriggerRef,
   VirtualCard,
 } from '../types'
 import { otherPlayer } from '../util'
@@ -99,12 +100,17 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
   return out
 }
 
-/** 受到伤害后可以发动的技能（按物种技能表顺序） */
-export function triggerSkillsFor(state: GameState, ctx: DamageCtx): SkillId[] {
+/**
+ * 受到伤害后可以发动的技能（按物种技能表顺序）。
+ *
+ * S4 会把这里换成 dsl/event.ts 的 collectTriggers（按触发文档的 when 条件收集），
+ * 现在先把返回值改成统一的 TriggerRef，让伤害帧与结算栈保持一致。
+ */
+export function triggerSkillsFor(state: GameState, ctx: DamageCtx): TriggerRef[] {
   const target = state.players[ctx.target]
   if (!target.alive) return []
 
-  const out: SkillId[] = []
+  const out: TriggerRef[] = []
   for (const skill of speciesDef(target.species).skills) {
     if (skill.kind !== 'trigger') continue
 
@@ -112,13 +118,15 @@ export function triggerSkillsFor(state: GameState, ctx: DamageCtx): SkillId[] {
       const card = ctx.card
       // 造成伤害的牌必须还在处理区才能被取回
       if (card && isInProcessing(state, card.source.uid)) {
-        out.push('snatch')
+        out.push({ owner: ctx.target, skill: 'snatch', optional: true })
       }
     }
 
     if (skill.id === 'guile') {
       const source = state.players[ctx.source]
-      if (source.alive && source.hand.length > 0) out.push('guile')
+      if (source.alive && source.hand.length > 0) {
+        out.push({ owner: ctx.target, skill: 'guile', optional: true })
+      }
     }
   }
   return out

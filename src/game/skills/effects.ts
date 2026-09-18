@@ -20,8 +20,13 @@ export function applyActiveSkill(
 ): void {
   if (skill === 'overexert') {
     log(state, `${playerLabel(state, p)} 发动【透支】`)
-    // 失去体力会立即做濒死检查，存活之后才摸两张牌
-    state.stack.push({ kind: 'draw', player: p, count: 2 })
+    // 失去体力会立即做濒死检查，存活之后才摸两张牌。
+    // S7：这段流程改由 skills/overexert.json 的 activate.effects / after 提供。
+    state.stack.push({
+      kind: 'effects',
+      effects: [{ kind: 'draw', target: 'self', count: { kind: 'const', value: 2 } }],
+      ctx: { self: p, active: state.active, costCards: [] },
+    })
     loseHp(state, p, 1)
     return
   }

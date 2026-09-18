@@ -11,7 +11,6 @@ import {
   moveHandToDiscard,
   moveHandToProcessing,
 } from './rules/cardZones'
-import { dealDamage } from './rules/damage'
 import { killPlayer } from './rules/death'
 import { pushDying } from './rules/dying'
 import {
@@ -33,6 +32,7 @@ import { pushStrike } from './rules/respond'
 import { buildTurnPlan, finishPhaseBody } from './rules/phase'
 import { advanceTurn, INITIAL_HAND } from './rules/turn'
 import { newCardUseRecord, recordCardUse } from './rules/usage'
+import { runEffects } from './dsl/effect'
 import { applyActiveSkill, applyTriggerSkill } from './skills/effects'
 import type {
   Action,
@@ -221,9 +221,9 @@ export function advance(state: GameState): void {
 /** 推进栈顶帧；返回 true 表示已经生成待输入项（应立即返回给调用方） */
 function stepFrame(state: GameState, top: Frame): boolean {
   switch (top.kind) {
-    case 'strike': {
-      if (top.got >= top.need) {
-        // 已被抵消：结算收尾后结束
+    case 'contest': {
+      // need 为 0 或已凑够响应牌，都视为对抗结束：结算收尾后返回
+      if (top.need <= 0 || top.got >= top.need) {
         state.stack.pop()
         state.stack.push({ kind: 'flush', cards: top.spent })
         return false
@@ -231,6 +231,7 @@ function stepFrame(state: GameState, top: Frame): boolean {
       state.pending = {
         kind: 'respond',
         player: top.target,
+        expected: top.expected,
         need: top.need,
         got: top.got,
         source: top.source,
@@ -240,9 +241,9 @@ function stepFrame(state: GameState, top: Frame): boolean {
     }
 
     case 'damage': {
-      const skill = top.triggers[0]
-      if (skill) {
-        state.pending = { kind: 'trigger', player: top.ctx.target, skill, ctx: top.ctx }
+      const trigger = top.triggers[0]
+      if (trigger) {
+        state.pending = { kind: 'trigger', player: trigger.owner, skill: trigger.skill }
         return true
       }
       state.stack.pop()
@@ -269,10 +270,10 @@ function stepFrame(state: GameState, top: Frame): boolean {
       return false
     }
 
-    case 'draw': {
+    case 'effects': {
+      // 延迟效果帧：当前结算链走完后执行（after 列表）
       state.stack.pop()
-      const drawn = drawCards(state, top.player, top.count)
-      log(state, `${playerLabel(state, top.player)} 摸了 ${drawn.length} 张牌`)
+      runEffects(state, top.effects, top.ctx)
       return false
     }
   }
@@ -358,11 +359,13 @@ function applyUseCard(
     // 记录「使用次数」（只作统计，【打击】已无次数限制）；转化牌按当作的牌名计数
     recordCardUse(state, p, 'strike')
     log(state, `${describeUse(state, p, target, card, 'strike', action.via)}${energyTag(state, p)}`)
+    // S8：这段「未抵消即造成 1 点伤害」改由 cards/strike.json 的 contest.onUnmet 提供
     pushStrike(
       state,
       p,
       target,
       action.via ? { as: 'strike', source: card, via: action.via } : { as: 'strike', source: card },
+      [{ kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } }],
     )
     return
   }
@@ -403,8 +406,8 @@ function applyPlayCard(
   payEnergy(state, p, as)
 
   const top = state.stack[state.stack.length - 1]
-  if (!top || top.kind !== 'strike') {
-    throw new RuleError('结算栈异常：缺少【打击】结算帧')
+  if (!top || top.kind !== 'contest') {
+    throw new RuleError('结算栈异常：缺少对抗结算帧')
   }
 
   moveHandToProcessing(state, p, card)
@@ -421,11 +424,11 @@ function applyPlayCard(
   }
 
   if (top.got >= top.need) {
-    log(state, `【打击】被抵消`)
+    log(state, `【${CARD_NAME[top.expected]}】被抵消`)
   } else {
     log(
       state,
-      `${playerLabel(state, p)} 还需再打出 ${top.need - top.got} 张【防御】才能抵消（威压）`,
+      `${playerLabel(state, p)} 还需再打出 ${top.need - top.got} 张【${CARD_NAME[top.expected]}】才能抵消`,
     )
   }
 }
@@ -454,17 +457,17 @@ function applyTriggerChoice(
   if (!top || top.kind !== 'damage') {
     throw new RuleError('结算栈异常：缺少伤害结算帧')
   }
-  const skill = top.triggers.shift()
-  if (skill === undefined || skill !== pending.skill) {
+  const trigger = top.triggers.shift()
+  if (trigger === undefined || trigger.skill !== pending.skill) {
     throw new RuleError('结算栈异常：待应答技能不匹配')
   }
 
   if (!action.accept) {
-    log(state, `${playerLabel(state, p)} 放弃发动【${skillDef(skill).name}】`)
+    log(state, `${playerLabel(state, p)} 放弃发动【${skillDef(trigger.skill).name}】`)
     return
   }
 
-  applyTriggerSkill(state, p, skill, top.ctx)
+  applyTriggerSkill(state, p, trigger.skill, top.ctx)
 }
 
 function applyDiscard(
@@ -505,19 +508,14 @@ function applyCancel(state: GameState): void {
 
   if (pending.kind === 'respond') {
     const top = state.stack[state.stack.length - 1]
-    if (!top || top.kind !== 'strike') {
-      throw new RuleError('结算栈异常：缺少【打击】结算帧')
+    if (!top || top.kind !== 'contest') {
+      throw new RuleError('结算栈异常：缺少对抗结算帧')
     }
-    log(state, `${playerLabel(state, pending.player)} 放弃打出【防御】`)
+    log(state, `${playerLabel(state, pending.player)} 放弃打出【${CARD_NAME[top.expected]}】`)
     state.stack.pop()
-    // 先安排收尾（在处理区之下），再压入伤害帧，保证伤害结算完才清牌
+    // 先安排收尾（在处理区之下），再执行未抵消效果，保证伤害结算完才清牌
     state.stack.push({ kind: 'flush', cards: top.spent })
-    dealDamage(state, {
-      source: top.source,
-      target: top.target,
-      amount: 1,
-      card: top.card,
-    })
+    runEffects(state, top.onUnmet, top.ctx)
     return
   }
 
