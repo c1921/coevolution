@@ -803,7 +803,17 @@ export interface EffectContext {
 2. `on` 只声明引擎会执行/emit 的时机：`turn-start` / `turn-end` / `phase-start` / `phase-end`（需要 `phase`）。事件类时机目前只有 `after-damage`，且只用于 `trigger`。
 3. 规则按注册顺序执行；`when` 全部成立才执行 `effects`。
 
-### 13.5 什么时候必须动引擎
+### 13.5 怎么验证新增内容
+
+- **视图是实时的**：`data/species.ts` 的 `SPECIES` 与 `data/cardDefs.ts` 的 `CARD_DEFS` / `CARD_NAME`
+  都是按注册表派生的 Proxy，所以"改一份 JSON"会立刻反映到体力上限、技能表、牌名与费用上。
+- **测试里替换一份文档**：用 `registryToDocs()` 拿完整内容集 → 按 id 过滤掉要改的那份 → 追加新文档 →
+  `createRegistry(...)`；再用 `withRegistry(synthetic, () => { ... })` 包住要跑的流程（结束时自动还原）。
+  必须用完整内容集，否则牌数守恒与引用完整性会失败。
+- **手写最小夹具**：只想测校验/求值时用 `fixtures.ts` 的 `baseDocs()` + `mutateDoc()` 更快。
+- 端到端范例见 `src/game/dsl/extensibility.test.ts`（新主动技、新攻击牌 + 牌组、改体力上限）。
+
+### 13.6 什么时候必须动引擎
 
 只有下列情况需要改代码，且改动是「扩展指令集」而不是「加内容」：
 
