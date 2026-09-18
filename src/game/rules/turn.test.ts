@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { applyTimingRules } from '../dsl/event'
 import { assertConservation } from './cardZones'
 import { energyMax } from './energy'
 import { advance, submit } from '../engine'
@@ -9,6 +10,7 @@ import {
   FIRST_TURN_DRAW,
   attritionLoss,
   ATTRITION_TURN,
+  ATTRITION_STEP,
   discardCount,
   drawCount,
   handLimit,
@@ -288,5 +290,22 @@ describe('规范额度', () => {
     expect(drawAt).toBeGreaterThan(attritionAt)
     expect(state.players[0].hp).toBe(3)
     assertConservation(state)
+  })
+
+  it('消耗战的行为数值与 rules/attrition.json 一致', () => {
+    // 常量只用于界面提示与断言，真正的行为在 DSL 规则文档里；这里把两者钉在一起
+    for (const turn of [ATTRITION_TURN, ATTRITION_TURN + ATTRITION_STEP, ATTRITION_TURN + 11]) {
+      const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'turn-start' })
+      state.turn = turn
+      state.active = 0
+      applyTimingRules(state, { at: 'turn-start' })
+      expect(state.players[0].maxHp - state.players[0].hp).toBe(attritionLoss(turn))
+    }
+
+    // 消耗战之前不扣体力
+    const early = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'turn-start' })
+    early.turn = ATTRITION_TURN - 1
+    applyTimingRules(early, { at: 'turn-start' })
+    expect(early.players[early.active].hp).toBe(early.players[early.active].maxHp)
   })
 })

@@ -1,5 +1,5 @@
 import { log, playerLabel } from '../log'
-import { triggerSkillsFor } from '../skills'
+import { collectTriggers } from '../dsl/event'
 import type { DamageCtx, GameState, PlayerIndex } from '../types'
 import { pushDying } from './dying'
 
@@ -9,7 +9,8 @@ function hpText(hp: number, maxHp: number): string {
 
 /**
  * 造成伤害：先扣减体力，再压入伤害帧。
- * 伤害帧负责依次询问「受到伤害后」技能，然后做濒死检查。
+ * 伤害帧负责依次处理「受到伤害后」触发（可选发动逐个询问），然后做濒死检查。
+ * 触发集合来自 DSL：技能文档里的 trigger.on = after-damage + when 条件。
  */
 export function dealDamage(state: GameState, ctx: DamageCtx): void {
   const target = state.players[ctx.target]
@@ -22,7 +23,11 @@ export function dealDamage(state: GameState, ctx: DamageCtx): void {
     `${playerLabel(state, ctx.target)} 受到 ${ctx.amount} 点伤害（体力 ${hpText(before, target.maxHp)} → ${hpText(target.hp, target.maxHp)}）`,
   )
 
-  state.stack.push({ kind: 'damage', ctx, triggers: triggerSkillsFor(state, ctx) })
+  state.stack.push({
+    kind: 'damage',
+    ctx,
+    triggers: collectTriggers(state, { at: 'after-damage' }, ctx.target, { damage: ctx }),
+  })
 }
 
 /**

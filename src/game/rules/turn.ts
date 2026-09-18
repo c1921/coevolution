@@ -1,11 +1,11 @@
+import { emitTiming } from '../dsl/event'
+import type { Timing } from '../dsl/types'
 import { log, playerLabel } from '../log'
 import type { GameState, PlayerIndex, TurnPhase } from '../types'
 import { otherPlayer } from '../util'
 import { drawCards } from './cardZones'
-import { loseHp } from './damage'
 import { energyTag, refillEnergy } from './energy'
-import { buildTurnPlan, finishPhaseBody, runTiming, takeNextPhase } from './phase'
-import type { TimingEffect } from './phase'
+import { buildTurnPlan, finishPhaseBody, takeNextPhase } from './phase'
 import { resetTurnUsage } from './usage'
 
 /** 摸牌数：摸牌阶段默认摸两张牌 */
@@ -16,10 +16,13 @@ export const FIRST_TURN_DRAW = 1
 export const INITIAL_HAND = 4
 
 /**
- * 消耗战（加时规则）：从这一回合开始，每回合开始时回合角色失去体力。
- * 三张基本牌的 1v1 里双方可以互相抵消到天荒地老（例如鹿每回合回 1 点、
- * 疾影把每次【打击】都挡掉），牌堆又会无限洗回，因此必须有一条终止压力。
- * 体力流失每 ATTRITION_STEP 回合 +1，最终必定超过任何回复能力，保证对局必然结束。
+ * 消耗战（加时规则）：从第 ATTRITION_TURN 回合起，每回合开始时回合角色失去体力，
+ * 每 ATTRITION_STEP 回合递增 1 点。三张基本牌的 1v1 里双方可以互相抵消到天荒地老
+ * （鹿每回合回 1 点、疾影把每次【打击】都挡掉，牌堆还会无限洗回），因此必须有一条
+ * 终止压力；流失量最终必定超过任何回复能力，保证对局必然结束。
+ *
+ * **行为数值在 data/dsl/rules/attrition.json**（由 DSL 的 rule 文档描述并执行）；
+ * 这两个常量只用于界面提示（消耗战的角标）与测试断言，turn.test.ts 会断言两者一致。
  */
 export const ATTRITION_TURN = 21
 export const ATTRITION_STEP = 5
@@ -30,27 +33,16 @@ export function attritionLoss(turn: number): number {
   return 1 + Math.floor((turn - ATTRITION_TURN) / ATTRITION_STEP)
 }
 
-/** 「回合开始时」时机上的消耗战效果（本作自有的终止规则） */
-function applyAttrition(state: GameState): void {
-  const loss = attritionLoss(state.turn)
-  if (loss <= 0) return
-  if (state.turn === ATTRITION_TURN) {
-    log(
-      state,
-      `消耗战开始：此后每回合开始时，回合角色失去体力（每 ${ATTRITION_STEP} 回合递增 1 点）`,
-    )
-  }
-  log(state, `消耗战：${playerLabel(state, state.active)} 失去 ${loss} 点体力`)
-  loseHp(state, state.active, loss)
-}
-
 /**
- * 已注册的规则效果表。回合开始时目前只有消耗战；
- * 将来的判定类效果、「阶段开始时」类技能都挂在这张表上。
+ * 时机执行器：默认执行 DSL 注册表里挂在该时机上的规则文档与技能触发，
+ * 测试可以注入探针来验证阶段顺序（见 phase.test.ts）。
  */
-export const TURN_TIMING_EFFECTS: readonly TimingEffect[] = [
-  { id: 'attrition', at: { at: 'turn-start' }, run: applyAttrition },
-]
+export type TimingRunner = (state: GameState, timing: Timing) => void
+
+const runRegisteredTiming: TimingRunner = (state, timing) => {
+  // 主体是当前回合角色：非可选的时机技能立即执行，可选的返回给调用方询问
+  emitTiming(state, timing, state.active)
+}
 
 /**
  * 摸牌数：默认 DRAW_PER_TURN；先手角色的第一个回合为 FIRST_TURN_DRAW（先手补偿）。
@@ -97,7 +89,7 @@ const MAX_TURN_STEPS = 256
  */
 export function advanceTurn(
   state: GameState,
-  effects: readonly TimingEffect[] = TURN_TIMING_EFFECTS,
+  run: TimingRunner = runRegisteredTiming,
 ): TurnProgress {
   let guard = 0
   while (true) {
@@ -110,11 +102,11 @@ export function advanceTurn(
     switch (state.phase) {
       case 'turn-start':
       case 'turn-end':
-        stepTurnTiming(state, state.phase, effects)
+        stepTurnTiming(state, state.phase, run)
         break
 
       default: {
-        const progress = stepPhase(state, state.phase, effects)
+        const progress = stepPhase(state, state.phase, run)
         if (progress === 'pending') return 'pending'
         break
       }
@@ -126,7 +118,7 @@ export function advanceTurn(
 function stepTurnTiming(
   state: GameState,
   timing: 'turn-start' | 'turn-end',
-  effects: readonly TimingEffect[],
+  run: TimingRunner,
 ): void {
   switch (state.phaseStage) {
     case 'start': {
@@ -158,8 +150,8 @@ function stepTurnTiming(
 
     case 'body': {
       state.phaseStage = 'end'
-      // 回合开始时：消耗战等规则效果；回合结束时：本作暂无（将来的时机类技能挂这里）
-      runTiming(state, { at: timing }, effects)
+      // 回合开始时：消耗战等规则效果与时机类技能；回合结束时：本作暂无
+      run(state, { at: timing })
       break
     }
 
@@ -182,12 +174,12 @@ function stepTurnTiming(
 function stepPhase(
   state: GameState,
   phase: TurnPhase,
-  effects: readonly TimingEffect[],
+  run: TimingRunner,
 ): 'pending' | 'done' {
   switch (state.phaseStage) {
     case 'start': {
       state.phaseStage = 'body'
-      runTiming(state, { at: 'phase-start', phase }, effects)
+      run(state, { at: 'phase-start', phase })
       return 'done'
     }
 
@@ -198,7 +190,7 @@ function stepPhase(
       // 游标先移出本阶段，再执行「阶段结束时」的规则效果
       state.phaseStage = 'start'
       state.phase = takeNextPhase(state)
-      runTiming(state, { at: 'phase-end', phase }, effects)
+      run(state, { at: 'phase-end', phase })
       return 'done'
     }
   }

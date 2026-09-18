@@ -94,14 +94,6 @@ export function finishPhaseBody(state: GameState): void {
  */
 export type { Timing }
 
-/** 挂在某个时机上的规则效果（消耗战，以及将来的判定类效果与时机类技能） */
-export interface TimingEffect {
-  id: string
-  at: Timing
-  /** 效果可压入结算帧（例如导致濒死）；调用方据 state.stack 判断是否需要继续结算 */
-  run(state: GameState): void
-}
-
 export function sameTiming(a: Timing, b: Timing): boolean {
   if (a.at !== b.at) return false
   if (a.at === 'phase-start' && b.at === 'phase-start') return a.phase === b.phase
@@ -109,13 +101,3 @@ export function sameTiming(a: Timing, b: Timing): boolean {
   return true
 }
 
-/** 按注册顺序执行匹配该时机的全部效果 */
-export function runTiming(
-  state: GameState,
-  timing: Timing,
-  effects: readonly TimingEffect[],
-): void {
-  for (const effect of effects) {
-    if (sameTiming(effect.at, timing)) effect.run(state)
-  }
-}

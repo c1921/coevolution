@@ -33,7 +33,8 @@ import { buildTurnPlan, finishPhaseBody } from './rules/phase'
 import { advanceTurn, INITIAL_HAND } from './rules/turn'
 import { newCardUseRecord, recordCardUse } from './rules/usage'
 import { runEffects } from './dsl/effect'
-import { applyActiveSkill, applyTriggerSkill } from './skills/effects'
+import { runTrigger } from './dsl/event'
+import { applyActiveSkill } from './skills/effects'
 import type {
   Action,
   Card,
@@ -243,6 +244,12 @@ function stepFrame(state: GameState, top: Frame): boolean {
     case 'damage': {
       const trigger = top.triggers[0]
       if (trigger) {
+        if (!trigger.optional) {
+          // 不可选的触发立即执行（仍在濒死检查之前）
+          top.triggers.shift()
+          runTrigger(state, trigger, { damage: top.ctx })
+          return false
+        }
         state.pending = { kind: 'trigger', player: trigger.owner, skill: trigger.skill }
         return true
       }
@@ -467,7 +474,7 @@ function applyTriggerChoice(
     return
   }
 
-  applyTriggerSkill(state, p, trigger.skill, top.ctx)
+  runTrigger(state, trigger, { damage: top.ctx })
 }
 
 function applyDiscard(

@@ -1,17 +1,7 @@
 import { CARD_NAME } from '../data/cardDefs'
-import { hasSkill, speciesDef, skillDef } from '../data/species'
-import { isInProcessing } from '../rules/cardZones'
+import { hasSkill, skillDef } from '../data/species'
 import { skillUsed } from '../rules/usage'
-import type {
-  Card,
-  CardKind,
-  DamageCtx,
-  GameState,
-  PlayerIndex,
-  SkillId,
-  TriggerRef,
-  VirtualCard,
-} from '../types'
+import type { Card, CardKind, GameState, PlayerIndex, SkillId, VirtualCard } from '../types'
 import { otherPlayer } from '../util'
 
 /** 一张手牌在某语境下的一个可选"牌面"：直接用，或经技能转化后用 */
@@ -97,38 +87,6 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
     if (anyWounded) out.push('mend')
   }
 
-  return out
-}
-
-/**
- * 受到伤害后可以发动的技能（按物种技能表顺序）。
- *
- * S4 会把这里换成 dsl/event.ts 的 collectTriggers（按触发文档的 when 条件收集），
- * 现在先把返回值改成统一的 TriggerRef，让伤害帧与结算栈保持一致。
- */
-export function triggerSkillsFor(state: GameState, ctx: DamageCtx): TriggerRef[] {
-  const target = state.players[ctx.target]
-  if (!target.alive) return []
-
-  const out: TriggerRef[] = []
-  for (const skill of speciesDef(target.species).skills) {
-    if (skill.kind !== 'trigger') continue
-
-    if (skill.id === 'snatch') {
-      const card = ctx.card
-      // 造成伤害的牌必须还在处理区才能被取回
-      if (card && isInProcessing(state, card.source.uid)) {
-        out.push({ owner: ctx.target, skill: 'snatch', optional: true })
-      }
-    }
-
-    if (skill.id === 'guile') {
-      const source = state.players[ctx.source]
-      if (source.alive && source.hand.length > 0) {
-        out.push({ owner: ctx.target, skill: 'guile', optional: true })
-      }
-    }
-  }
   return out
 }
 
