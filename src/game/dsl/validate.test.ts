@@ -377,6 +377,17 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
     )
   })
 
+  it('转化的 to 端必须在该语境真的有用法', () => {
+    // strike 没有 play 变体（只能被使用，不能被"打出"），把它当作打出目标毫无意义
+    expectSingle(
+      mutateDoc('skills/roar.json', (doc) => {
+        delete doc.modifiers
+        doc.transforms = [{ from: 'strike', to: 'strike', contexts: ['play'] }]
+      }),
+      'bad-combination',
+    )
+  })
+
   it('主动技的 timing 目前只支持 play', () => {
     expectSingle(
       mutateDoc('skills/roar.json', (doc) => {

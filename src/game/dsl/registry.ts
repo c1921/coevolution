@@ -190,6 +190,31 @@ export function baseChannel(channel: Channel): number {
   return value
 }
 
+/**
+ * 把当前注册表还原成原始文档列表（等价于 data/dsl/** 的 JSON 内容）。
+ *
+ * 用途：测试与调试。"替换其中一份文档"的扩展性测试需要一份完整、自洽的内容集，
+ * 这样牌数守恒、引用完整性与 schema 校验都仍然成立。
+ */
+export function registryToDocs(): { path: string; value: unknown }[] {
+  const out: { path: string; value: unknown }[] = []
+  const emit = (dir: string, kind: string, docs: { id: string }[]): void => {
+    for (const doc of docs) {
+      out.push({
+        path: `${dir}/${doc.id}.json`,
+        value: { $schema: '../schema.json', dslVersion: registry.dslVersion, kind, ...doc },
+      })
+    }
+  }
+  emit('rules', 'ruleset', [registry.ruleset])
+  emit('rules', 'rule', registry.rules)
+  emit('decks', 'deck', registry.decks)
+  emit('cards', 'card', registry.cards)
+  emit('skills', 'skill', registry.skills)
+  emit('species', 'species', registry.species)
+  return out
+}
+
 /** 供测试读取原始文档（校验前） */
 export function rawDocPaths(): string[] {
   return Object.keys(RAW_DOCS)

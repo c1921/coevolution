@@ -106,6 +106,8 @@ interface Ref {
   path: string
   type: 'skill' | 'card' | 'deck'
   id: string
+  /** 额外要求：牌种必须在该语境有用法（转化指令的 to 端） */
+  expect?: 'use' | 'play'
 }
 
 const BASE_KEYS = ['$schema', 'dslVersion', 'kind', 'id', 'priority']
@@ -806,6 +808,7 @@ function checkTransform(node: unknown, path: string, issues: Issue[], refs: Ref[
     push(issues, `${path}#/contexts`, 'bad-combination', 'contexts 至少要有一个语境')
     return
   }
+  const to = asString(obj.to)
   contexts.forEach((item, i) => {
     if (
       typeof item !== 'string' ||
@@ -817,6 +820,16 @@ function checkTransform(node: unknown, path: string, issues: Issue[], refs: Ref[
         'bad-type',
         `转化语境必须是 ${TRANSFORM_CONTEXTS.join(' / ')}`,
       )
+      return
+    }
+    // 转化后的牌面必须在该语境真的有用法，否则这条转化永远不会生效
+    if (to) {
+      refs.push({
+        path: `${path}#/to`,
+        type: 'card',
+        id: to,
+        expect: item as 'use' | 'play',
+      })
     }
   })
 }
@@ -1214,9 +1227,27 @@ function resolveRefs(docs: Doc[], refs: Ref[], issues: Issue[]): void {
     if (doc.kind === 'card') ids.card.add(doc.id)
     if (doc.kind === 'deck') ids.deck.add(doc.id)
   }
+  const cardDocs = new Map(
+    docs.filter((doc) => doc.kind === 'card').map((doc) => [doc.id, doc]),
+  )
   for (const ref of refs) {
     if (!ids[ref.type].has(ref.id)) {
       push(issues, ref.path, 'unknown-ref', `引用了不存在的${refLabel(ref.type)} ${ref.id}`)
+      continue
+    }
+    if (ref.type === 'card' && ref.expect) {
+      const doc = cardDocs.get(ref.id)
+      const usable =
+        doc !== undefined &&
+        (ref.expect === 'play' ? doc.play !== undefined : (doc.use ?? []).length > 0)
+      if (!usable) {
+        push(
+          issues,
+          ref.path,
+          'bad-combination',
+          `牌种 ${ref.id} 不能在「${ref.expect}」语境使用，这条转化永远不会生效`,
+        )
+      }
     }
   }
 

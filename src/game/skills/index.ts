@@ -1,7 +1,7 @@
 import { CARD_NAME } from '../data/cardDefs'
 import { hasSkill, skillDef } from '../data/species'
 import { channelValue } from '../dsl/modifier'
-import { baseChannel } from '../dsl/registry'
+import { baseChannel, cardDoc, skillsOf } from '../dsl/registry'
 import { skillUsed } from '../rules/usage'
 import type { Card, CardKind, GameState, PlayerIndex, SkillId, VirtualCard } from '../types'
 import { otherPlayer } from '../util'
@@ -29,48 +29,49 @@ export function optionLabel(
   return `${verb}【${CARD_NAME[option.as]}】`
 }
 
+/** 卡牌自身在该语境是否有用法（defend 没有 use 变体，所以不能主动使用） */
+function hasOwnVariant(kind: CardKind, context: 'use' | 'play'): boolean {
+  const doc = cardDoc(kind)
+  if (context === 'play') return doc.play !== undefined
+  return (doc.use ?? []).some((variant) => variant.context === 'play' || variant.context === 'dying')
+}
+
+/**
+ * 某语境下的全部牌面：卡牌自身的用法 + 该物种技能的转化。
+ *
+ * 转化完全由文档描述（skills/*.json 的 transforms），因此新增"把 A 当 B"的技能
+ * 不需要改这里，也不需要碰 legality 或引擎。
+ */
+function optionsFor(
+  state: GameState,
+  p: PlayerIndex,
+  card: Card,
+  context: 'use' | 'play',
+): CardOption[] {
+  const options: CardOption[] = []
+  if (hasOwnVariant(card.kind, context)) options.push({ as: card.kind })
+
+  for (const skill of skillsOf(state.players[p].species)) {
+    for (const transform of skill.transforms ?? []) {
+      if (transform.from !== card.kind) continue
+      if (!transform.contexts.includes(context)) continue
+      options.push({ as: transform.to, via: skill.id })
+    }
+  }
+  return options
+}
+
 /**
  * 「使用」语境（出牌阶段主动使用 / 濒死求【回复】）下的全部牌面。
  * 注意：只列出机制上说得通的牌面，具体合法性（次数、体力是否已满）由 legality 判定。
  */
-export function useOptions(
-  state: GameState,
-  p: PlayerIndex,
-  card: Card,
-): CardOption[] {
-  const player = state.players[p]
-  const options: CardOption[] = []
-
-  // 直接使用：【防御】永远不会被主动使用
-  if (card.kind === 'strike' || card.kind === 'heal') {
-    options.push({ as: card.kind })
-  }
-
-  // 疾影：【防御】当【打击】
-  if (card.kind === 'defend' && hasSkill(player.species, 'flicker')) {
-    options.push({ as: 'strike', via: 'flicker' })
-  }
-
-  return options
+export function useOptions(state: GameState, p: PlayerIndex, card: Card): CardOption[] {
+  return optionsFor(state, p, card, 'use')
 }
 
 /** 「打出」语境（响应【打击】）下的全部牌面：本作中只有【防御】有意义 */
-export function playOptions(
-  state: GameState,
-  p: PlayerIndex,
-  card: Card,
-): CardOption[] {
-  const player = state.players[p]
-  const options: CardOption[] = []
-
-  if (card.kind === 'defend') options.push({ as: 'defend' })
-
-  // 疾影：【打击】当【防御】打出
-  if (card.kind === 'strike' && hasSkill(player.species, 'flicker')) {
-    options.push({ as: 'defend', via: 'flicker' })
-  }
-
-  return options
+export function playOptions(state: GameState, p: PlayerIndex, card: Card): CardOption[] {
+  return optionsFor(state, p, card, 'play')
 }
 
 /** 当前可发动的主动技 */

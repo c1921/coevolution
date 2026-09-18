@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SPECIES } from '../data/species'
+import { createRegistry, registryToDocs, withRegistry } from '../dsl/registry'
 import { submit } from '../engine'
 import { assertConservation } from '../rules/cardZones'
 import { cardUseCount } from '../rules/usage'
@@ -97,5 +98,50 @@ describe('转化型技能', () => {
       playerHand: [{ kind: 'defend' }],
     })
     expect(useOptions(tiger, 0, tiger.players[0].hand[0]!)).toHaveLength(0)
+  })
+})
+
+describe('转化由文档描述', () => {
+  it('换一份技能文档即可新增一条转化，引擎与 legality 都不用改', () => {
+    // 以完整内容集为底，只替换 roar 这一份文档
+    const synthetic = createRegistry([
+      ...registryToDocs().filter((doc) => (doc.value as { id?: string }).id !== 'roar'),
+      {
+        path: 'skills/roar.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'roar',
+          name: '怒吼',
+          text: '你每回合的能量上限 +2；你可以将【回复】当【打击】使用。',
+          // 保留原有的能量修正，否则换掉文档后 bear 的能量上限会从 5 变回 3
+          modifiers: [
+            { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } },
+          ],
+          transforms: [{ from: 'heal', to: 'strike', contexts: ['use'] }],
+        },
+      },
+    ])
+
+    // 熊拥有 roar；虎没有技能，作为对手
+    const state = makeState({
+      playerSpecies: 'bear',
+      aiSpecies: 'tiger',
+      playerHand: [{ kind: 'heal' }],
+    })
+    const heal = state.players[0].hand[0]!
+
+    // 熊的怒吼本来只是常驻修正：只有"使用【回复】"这一种牌面
+    expect(useOptions(state, 0, heal).map((o) => o.as)).toEqual(['heal'])
+
+    withRegistry(synthetic, () => {
+      expect(useOptions(state, 0, heal)).toEqual([{ as: 'heal' }, { as: 'strike', via: 'roar' }])
+      // 端到端：把【回复】当【打击】使用，对手放弃响应后受到 1 点伤害
+      submit(state, { kind: 'use-card', card: heal, as: 'strike', via: 'roar' })
+      expect(state.pending).toMatchObject({ kind: 'respond', player: 1 })
+      submit(state, { kind: 'cancel' })
+    })
+    expect(state.players[1].hp).toBe(3)
+    assertConservation(state)
   })
 })
