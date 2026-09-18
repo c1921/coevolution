@@ -1,7 +1,7 @@
 import type { PlayerIndex } from '../types'
 import { otherPlayer } from '../util'
 import { isInRange } from '../rules/distance'
-import { evalCondition } from './condition'
+import { evalCondition, firstFailed } from './condition'
 import type { EvalEnv } from './runtime'
 import type { TargetSpec } from './types'
 
@@ -63,6 +63,17 @@ export function defaultTarget(env: EvalEnv, spec: TargetSpec): PlayerIndex | und
 
 export type TargetResolution = { ok: true; target?: PlayerIndex } | { ok: false; reason: string }
 
+/** 某个具体目标为什么不合格：优先用条件自带的 reason */
+function targetFailureReason(
+  env: EvalEnv,
+  spec: TargetSpec,
+  target: PlayerIndex,
+): string | undefined {
+  const scoped: EvalEnv = { state: env.state, ctx: { ...env.ctx, target } }
+  const failed = firstFailed(scoped, spec.conditions)
+  return failed?.reason
+}
+
 /** 解析最终目标：显式目标必须在候选内；可省略时必须能得到合法缺省 */
 export function resolveTargetChoice(
   env: EvalEnv,
@@ -71,7 +82,12 @@ export function resolveTargetChoice(
 ): TargetResolution {
   const candidates = targetCandidates(env, spec)
   if (chosen !== undefined) {
-    if (!candidates.includes(chosen)) return { ok: false, reason: '指定的目标不符合该效果的条件' }
+    if (!candidates.includes(chosen)) {
+      return {
+        ok: false,
+        reason: targetFailureReason(env, spec, chosen) ?? '指定的目标不符合该效果的条件',
+      }
+    }
     return { ok: true, target: chosen }
   }
   if (spec.required) {
@@ -81,7 +97,10 @@ export function resolveTargetChoice(
   const target = defaultTarget(env, spec)
   if (target === undefined) return { ok: true }
   if (!candidates.includes(target)) {
-    return { ok: false, reason: '缺省目标不符合该效果的条件' }
+    return {
+      ok: false,
+      reason: targetFailureReason(env, spec, target) ?? '缺省目标不符合该效果的条件',
+    }
   }
   return { ok: true, target }
 }

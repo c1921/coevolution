@@ -7,10 +7,13 @@ import { PHASE_NAME } from '../game/rules/phase'
 import { checkPlayCardAsDefend, checkUseCard } from '../game/rules/legality'
 import { energyCost, energyMax } from '../game/rules/energy'
 import { ATTRITION_TURN } from '../game/rules/turn'
+import { CARD_NAME } from '../game/data/cardDefs'
 import { skillDoc } from '../game/dsl/registry'
 import {
   activationCostCards,
   activeOptions,
+  dyingRescueOptions,
+  dyingUsableLabel,
   optionLabel,
   playOptions,
   useOptions,
@@ -250,14 +253,19 @@ export const pendingHint = computed(() => {
       return `你的出牌阶段（能量 ${humanEnergy.value}/${humanEnergyMax.value}）：点选一张手牌再选择用法，或直接结束出牌阶段`
     case 'respond': {
       const need = pending.need - pending.got
-      return `对手对你使用【打击】，还需打出 ${need} 张【防御】才能抵消（威压需两张）· 每张 ${energyCost('defend')} 点能量（当前 ${state.players[HUMAN].energy}）`
+      const opener = CARD_NAME[pending.card?.as ?? pending.expected]
+      const expected = CARD_NAME[pending.expected]
+      const cost = energyCost(pending.expected)
+      return `对手对你使用【${opener}】，还需打出 ${need} 张【${expected}】才能抵消 · 每张 ${cost} 点能量（当前 ${state.players[HUMAN].energy}）`
     }
     case 'dying': {
-      const cost = energyCost('heal')
+      const rescue = dyingRescueOptions()[0]
+      const label = dyingUsableLabel()
+      const cost = rescue ? energyCost(rescue.kind) : 0
       const energy = `需 ${cost} 点能量（当前 ${state.players[HUMAN].energy}）`
       return pending.dying === HUMAN
-        ? `你已濒死，使用【回复】自救（${energy}）；放弃则阵亡`
-        : `${playerLabel(state, pending.dying)} 濒死，你可以用【回复】救援（${energy}；对手救你通常是亏的）`
+        ? `你已濒死，使用${label}自救（${energy}）；放弃则阵亡`
+        : `${playerLabel(state, pending.dying)} 濒死，你可以用${label}救援（${energy}；对手救你通常是亏的）`
     }
     case 'discard':
       return `弃牌阶段（手牌上限 = 当前体力）：请选择 ${pending.count} 张手牌弃置`

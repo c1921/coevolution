@@ -416,7 +416,10 @@ function checkCondition(
   }
   const kind = checkEnum(obj, 'kind', CONDITION_KINDS, path, issues, 'unknown-condition')
   if (!kind) return
-  checkKeys(obj, path, CONDITION_KEYS[kind] ?? ['kind'], [], issues)
+  const keys = CONDITION_KEYS[kind] ?? ['kind']
+  // 任何条件都可以带失败说明
+  checkKeys(obj, path, [...keys, 'reason'], [], issues)
+  if (obj.reason !== undefined) checkText(obj, 'reason', path, issues)
 
   switch (kind) {
     case 'not':

@@ -112,6 +112,7 @@ const NODE_SPECS: Record<DefName, { kind?: readonly string[]; fields: Record<str
       card: { t: 'enum', values: CARD_REFS },
       skill: STRING,
       phase: { t: 'enum', values: PHASES },
+      reason: STRING,
     },
   },
   effect: {

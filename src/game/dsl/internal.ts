@@ -179,14 +179,26 @@ export function pushContestFrame(
 
 /**
  * 给当前对抗累加抵消进度（contest-contribute 指令）。
+ *
+ * 同时把本次打出的牌记入对抗的 spent 列表——它已经由 move-cards 进入处理区，
+ * 收尾时必须按归属进弃牌堆，否则会永远留在处理区（牌数守恒会立刻发现）。
  * 保持静默：抵消进度与「被抵消」属于机制战报，由引擎在贡献后统一输出。
  */
-export function contributeToContest(state: GameState, amount: number): void {
+export function contributeToContest(
+  state: GameState,
+  env: EvalEnv,
+  amount: number,
+): void {
   const top = state.stack[state.stack.length - 1]
   if (!top || top.kind !== 'contest') {
     throw new RuleError('contest-contribute 需要位于对抗结算中')
   }
   top.got += Math.max(0, Math.floor(amount))
+
+  const used = env.ctx.usedCard
+  if (used && !top.spent.some((entry) => entry.card.uid === used.source.uid)) {
+    top.spent.push({ card: used.source, owner: env.ctx.self })
+  }
 }
 
 /** 回复体力（不超过上限） */

@@ -1,12 +1,13 @@
-import { CARD_NAME } from '../data/cardDefs'
+import { CARD_DEFS, CARD_NAME } from '../data/cardDefs'
 import { skillDef } from '../data/species'
 import { evalConditions } from '../dsl/condition'
 import { channelValue } from '../dsl/modifier'
-import { baseChannel, cardDoc, skillDoc, skillsOf } from '../dsl/registry'
+import { baseChannel, cardDoc, registry, skillDoc, skillsOf } from '../dsl/registry'
 import { baseContext } from '../dsl/runtime'
 import type { EffectContext } from '../dsl/runtime'
 import { defaultTarget, targetCandidates } from '../dsl/target'
-import type { ActivateSpec } from '../dsl/types'
+import type { UseContext } from '../dsl/kinds'
+import type { ActivateSpec, UseVariant } from '../dsl/types'
 import { evalValue } from '../dsl/value'
 import { skillUsed } from '../rules/usage'
 import type { Card, CardKind, GameState, PlayerIndex, SkillId, VirtualCard } from '../types'
@@ -77,6 +78,41 @@ export function useOptions(state: GameState, p: PlayerIndex, card: Card): CardOp
 /** 「打出」语境（响应【打击】）下的全部牌面：本作中只有【防御】有意义 */
 export function playOptions(state: GameState, p: PlayerIndex, card: Card): CardOption[] {
   return optionsFor(state, p, card, 'play')
+}
+
+/** 卡牌在某语境的用法变体（出牌阶段使用 / 濒死使用） */
+export function useVariantOf(kind: CardKind, context: UseContext): UseVariant | undefined {
+  return (cardDoc(kind).use ?? []).find((variant) => variant.context === context)
+}
+
+/**
+ * 主动使用被拒时的说明：尽量告诉玩家"什么时候能用"。
+ * 文案由文档结构派生（play.respondsTo、是否只有 dying 变体），因此换内容不用改引擎。
+ */
+export function useDeniedReason(as: CardKind, context: UseContext): string {
+  const doc = cardDoc(as)
+  const variants = doc.use ?? []
+  if (variants.length === 0) {
+    if (doc.play) return `【${doc.name}】只能在响应【${CARD_NAME[doc.play.respondsTo]}】时打出`
+    return `【${doc.name}】不能使用`
+  }
+  if (context === 'play' && !variants.some((variant) => variant.context === 'play')) {
+    return `【${doc.name}】只能在濒死时使用`
+  }
+  return `【${doc.name}】不能在这个时机使用`
+}
+
+/** 濒死时可用来自救的牌面（名字与费用），界面提示与报错说明共用 */
+export function dyingRescueOptions(): { kind: CardKind; name: string; cost: number }[] {
+  return registry.cards
+    .filter((doc) => (doc.use ?? []).some((variant) => variant.context === 'dying'))
+    .map((doc) => ({ kind: doc.id, name: doc.name, cost: CARD_DEFS[doc.id].cost }))
+}
+
+/** 濒死时可用的牌面名（如「【回复】」），用于濒死语境的报错说明 */
+export function dyingUsableLabel(): string {
+  const names = dyingRescueOptions().map((option) => `【${option.name}】`)
+  return names.length > 0 ? names.join('、') : '【回复】'
 }
 
 /**

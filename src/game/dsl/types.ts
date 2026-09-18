@@ -40,8 +40,12 @@ export type Value =
   | { kind: 'clamp'; of: Value; min: number; max: number }
   | { kind: 'channel'; channel: Channel; of: RoleRef }
 
-/** 条件 */
-export type Condition =
+/**
+ * 条件。
+ * `reason` 是可选的失败说明：条件不成立时，合法性判定会把这句话回给玩家，
+ * 因此"为什么不能这么做"也是内容，写在文档里而不是散落在引擎分支中。
+ */
+export type Condition = { reason?: string } & (
   | { kind: 'always' }
   | { kind: 'not'; of: Condition }
   | { kind: 'all'; of: Condition[] }
@@ -62,6 +66,7 @@ export type Condition =
   | { kind: 'skill-unused'; skill: string }
   | { kind: 'is-active' }
   | { kind: 'phase-is'; phase: TurnPhase }
+)
 
 /** 取牌描述 */
 export interface CardPick {

@@ -1,13 +1,23 @@
 import { CARD_NAME } from '../data/cardDefs'
 import { skillDef } from '../data/species'
-import { skillDoc } from '../dsl/registry'
+import { firstFailed } from '../dsl/condition'
+import type { UseContext } from '../dsl/kinds'
+import { cardDoc, skillDoc } from '../dsl/registry'
+import type { EffectContext, EvalEnv } from '../dsl/runtime'
 import { resolveTargetChoice } from '../dsl/target'
-import { activationCostCards, activeOptions, playOptions, useOptions } from '../skills'
+import {
+  activationCostCards,
+  activeOptions,
+  dyingUsableLabel,
+  playOptions,
+  useDeniedReason,
+  useOptions,
+  useVariantOf,
+} from '../skills'
 import type { SkillId } from '../types'
 import { findInHand } from './cardZones'
 import type { Card, CardKind, GameState, PlayerIndex } from '../types'
-import { otherPlayer, RuleError } from '../util'
-import { isInRange } from './distance'
+import { RuleError } from '../util'
 import { canPayEnergy, shortfallReason } from './energy'
 
 export type Legality = { ok: true } | { ok: false; reason: string }
@@ -43,7 +53,14 @@ function describeBadOption(card: Card, as: CardKind, via?: SkillId): string {
   return `无法将【${CARD_NAME[card.kind]}】当【${CARD_NAME[as]}】使用`
 }
 
-/** 使用一张牌：出牌阶段主动使用，或濒死结算中使用【回复】 */
+/**
+ * 使用一张牌：出牌阶段主动使用，或濒死结算中使用【回复】。
+ *
+ * 语境、目标、前置条件、费用全部来自卡牌文档的 use 变体：
+ *  - 该语境没有对应变体（例如出牌阶段用【防御】、濒死时用【打击】）直接拒绝，
+ *    并用文档结构派生的说明告诉玩家什么时候能用；
+ *  - target 决定目标（打击=对手、回复=自己或濒死者），requires 里的 reason 直接作为报错。
+ */
 export function checkUseCard(
   state: GameState,
   p: PlayerIndex,
@@ -59,46 +76,50 @@ export function checkUseCard(
   if (pending.kind === 'play') {
     if (pending.player !== p) return fail('现在不是你的出牌阶段')
     if (state.phase !== 'play' || state.active !== p) return fail('现在不是你的出牌阶段')
-    if (as === 'defend') return fail('【防御】只能在响应【打击】时打出')
-    if (!findInHand(state, p, card.uid)) return fail('这张牌不在你的手牌中')
-    if (!matchesOption(useOptions(state, p, card), as, via)) {
-      return fail(describeBadOption(card, as, via))
-    }
-
-    // 能量：所有「使用」都要按「当作的牌面」付费，付不起就不能用
-    if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
-
-    if (as === 'strike') {
-      // 【打击】没有次数限制，出牌的实际约束就是能量
-      const target = otherPlayer(p)
-      if (!state.players[target].alive) return fail('对方已阵亡')
-      if (!isInRange(p, target)) return fail('对方不在你的攻击范围内')
-    }
-
-    if (as === 'heal' && player.hp >= player.maxHp) {
-      return fail('你的体力已满，无法使用【回复】')
-    }
-
-    return OK
-  }
-
-  if (pending.kind === 'dying') {
+  } else if (pending.kind === 'dying') {
     if (pending.player !== p) return fail('现在不是你的响应时机')
-    if (as !== 'heal') return fail('濒死结算中只能使用【回复】')
     if (state.players[pending.dying].hp > 0) return fail('濒死结算已经结束')
-    if (!findInHand(state, p, card.uid)) return fail('这张牌不在你的手牌中')
-    if (!matchesOption(useOptions(state, p, card), as, via)) {
-      return fail(describeBadOption(card, as, via))
-    }
-    // 濒死自救 / 救援同样要付能量：能量不足就只能放弃
-    if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
-    return OK
+  } else {
+    return fail('当前不是使用牌的时机')
   }
 
-  return fail('当前不是使用牌的时机')
+  if (!findInHand(state, p, card.uid)) return fail('这张牌不在你的手牌中')
+
+  // 先看该语境有没有这个牌面的用法（报错更贴近玩家意图：什么时候能用），再看是否可以转化
+  const context: UseContext = pending.kind === 'dying' ? 'dying' : 'play'
+  const variant = useVariantOf(as, context)
+  if (!variant) {
+    return fail(
+      context === 'dying' ? `濒死结算中只能使用${dyingUsableLabel()}` : useDeniedReason(as, 'play'),
+    )
+  }
+  if (!matchesOption(useOptions(state, p, card), as, via)) {
+    return fail(describeBadOption(card, as, via))
+  }
+
+  // 所有「使用」都要按「当作的牌面」付费，付不起就不能用
+  if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
+
+  const ctx: EffectContext = { self: p, active: state.active, usedUid: card.uid, costCards: [] }
+  if (pending.kind === 'dying') {
+    ctx.dying = pending.dying
+    ctx.target = pending.dying
+  }
+  const env: EvalEnv = { state, ctx }
+
+  if (variant.target) {
+    const chosen = pending.kind === 'dying' ? pending.dying : undefined
+    const resolved = resolveTargetChoice(env, variant.target, chosen)
+    if (!resolved.ok) return fail(resolved.reason)
+    ctx.target = resolved.target
+  }
+  const failed = firstFailed(env, variant.requires)
+  if (failed) return fail(failed.reason ?? `【${CARD_NAME[as]}】当前无法使用`)
+
+  return OK
 }
 
-/** 打出【防御】以响应【打击】 */
+/** 打出响应牌（默认是【防御】）以抵消对抗 */
 export function checkPlayCardAsDefend(
   state: GameState,
   p: PlayerIndex,
@@ -108,17 +129,33 @@ export function checkPlayCardAsDefend(
 ): Legality {
   const pending = state.pending
   if (!pending || pending.kind !== 'respond') {
-    return fail('当前不是打出【防御】的时机')
+    return fail('当前不是打出响应牌的时机')
   }
   if (pending.player !== p) return fail('现在不是你的响应时机')
-  if (as !== 'defend') return fail('响应【打击】时只能打出【防御】')
   if (!state.players[p].alive) return fail('你已阵亡，无法行动')
+
+  if (as !== pending.expected) {
+    const opener = pending.card?.as ?? pending.expected
+    return fail(`响应【${CARD_NAME[opener]}】时只能打出【${CARD_NAME[pending.expected]}】`)
+  }
   if (!findInHand(state, p, card.uid)) return fail('这张牌不在你的手牌中')
   if (!matchesOption(playOptions(state, p, card), as, via)) {
     return fail(describeBadOption(card, as, via))
   }
+
+  const variant = cardDoc(as).play
+  if (!variant) return fail(`【${CARD_NAME[as]}】不能作为响应打出`)
+
   // 响应也要付能量：能量不足时只能放弃响应
   if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
+
+  const env: EvalEnv = {
+    state,
+    ctx: { self: p, active: state.active, source: pending.source, costCards: [] },
+  }
+  const failed = firstFailed(env, variant.requires)
+  if (failed) return fail(failed.reason ?? `【${CARD_NAME[as]}】当前无法打出`)
+
   return OK
 }
 

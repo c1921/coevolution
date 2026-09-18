@@ -65,9 +65,10 @@ describe('目标选取', () => {
     // 自己满血、只有对手受伤时，缺省目标不合法——必须显式指定
     const onlyOpponent = envOf('deer', 'bear', { aiHp: 2 })
     expect(defaultTarget(onlyOpponent, mendTarget())).toBe(0)
+    // 说明文案来自文档里条件的 reason
     expect(resolveTargetChoice(onlyOpponent, mendTarget())).toEqual({
       ok: false,
-      reason: '缺省目标不符合该效果的条件',
+      reason: '目标角色体力已满，无法回复',
     })
     expect(resolveTargetChoice(onlyOpponent, mendTarget(), 1)).toEqual({ ok: true, target: 1 })
   })
@@ -77,7 +78,7 @@ describe('目标选取', () => {
     // 对手满血，不能作为目标
     expect(resolveTargetChoice(env, mendTarget(), 1)).toEqual({
       ok: false,
-      reason: '指定的目标不符合该效果的条件',
+      reason: '目标角色体力已满，无法回复',
     })
   })
 

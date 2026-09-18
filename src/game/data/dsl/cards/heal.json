@@ -17,7 +17,8 @@
           "kind": "compare",
           "op": "lt",
           "left": { "kind": "ref", "ref": "hp", "of": "self" },
-          "right": { "kind": "ref", "ref": "maxHp", "of": "self" }
+          "right": { "kind": "ref", "ref": "maxHp", "of": "self" },
+          "reason": "你的体力已满，无法使用【回复】"
         }
       ],
       "effects": [

@@ -9,13 +9,11 @@ import {
   findInHand,
   flushProcessing,
   moveHandToDiscard,
-  moveHandToProcessing,
 } from './rules/cardZones'
 import { killPlayer } from './rules/death'
 import { pushDying } from './rules/dying'
 import {
   assertEnergyBounds,
-  energyTag,
   payEnergy,
   refillEnergy,
 } from './rules/energy'
@@ -28,15 +26,16 @@ import {
   checkUseCard,
   ensure,
 } from './rules/legality'
-import { pushStrike } from './rules/respond'
 import { buildTurnPlan, finishPhaseBody } from './rules/phase'
 import { advanceTurn, INITIAL_HAND } from './rules/turn'
-import { newCardUseRecord, recordCardUse } from './rules/usage'
+import { useVariantOf } from './skills'
+import { newCardUseRecord } from './rules/usage'
 import { runEffectGroup, runEffects } from './dsl/effect'
 import { runTrigger } from './dsl/event'
-import { skillDoc } from './dsl/registry'
-import { resolveTargetChoice } from './dsl/target'
+import type { UseContext } from './dsl/kinds'
+import { cardDoc, skillDoc } from './dsl/registry'
 import type { EffectContext } from './dsl/runtime'
+import { resolveTargetChoice } from './dsl/target'
 import type {
   Action,
   Card,
@@ -47,9 +46,9 @@ import type {
   PlayerIndex,
   PlayerState,
   Prompt,
-  SkillId,
+  VirtualCard,
 } from './types'
-import { otherPlayer, RuleError } from './util'
+import { RuleError } from './util'
 
 const DRAFT_SIZE = 3
 /** 玩家固定使用下标 0，AI 使用下标 1 */
@@ -294,22 +293,6 @@ function requireInHand(state: GameState, p: PlayerIndex, card: Card): Card {
   return real
 }
 
-function describeUse(
-  state: GameState,
-  p: PlayerIndex,
-  target: PlayerIndex,
-  card: Card,
-  as: CardKind,
-  via?: SkillId,
-): string {
-  const who = playerLabel(state, p)
-  const whom = playerLabel(state, target)
-  if (via) {
-    return `${who} 发动【${skillDef(via).name}】，将 ${plainLabel(card)} 当【${CARD_NAME[as]}】对 ${whom} 使用`
-  }
-  return `${who} 对 ${whom} 使用${plainLabel(card)}`
-}
-
 function applyAction(state: GameState, action: Action): void {
   switch (action.kind) {
     case 'use-card':
@@ -329,6 +312,13 @@ function applyAction(state: GameState, action: Action): void {
   }
 }
 
+/**
+ * 使用一张牌：校验 → 付费 → 按卡牌文档的 use 变体执行效果。
+ *
+ * 变体的语境（出牌阶段 / 濒死）决定目标与效果；打击会由文档里的 contest 指令
+ * 开启对抗帧，回复在濒死语境里带 resolve-dying 指令弹出濒死帧。
+ * 引擎这里只负责"谁的牌、当作什么、上下文是谁"，不再判断具体牌种。
+ */
 function applyUseCard(
   state: GameState,
   action: Extract<Action, { kind: 'use-card' }>,
@@ -344,94 +334,66 @@ function applyUseCard(
   // 付费按「当作的牌面」：转化牌付转化后那张牌的费用
   payEnergy(state, p, as)
 
+  const context: UseContext = pending.kind === 'dying' ? 'dying' : 'play'
+  const variant = useVariantOf(as, context)
+  if (!variant) throw new RuleError(`【${CARD_NAME[as]}】没有「${context}」语境的用法`)
+
+  const virtual: VirtualCard = action.via
+    ? { as, source: card, via: action.via }
+    : { as, source: card }
+  const ctx: EffectContext = {
+    self: p,
+    active: state.active,
+    usedUid: card.uid,
+    usedCard: virtual,
+    costCards: [],
+  }
   if (pending.kind === 'dying') {
-    moveHandToDiscard(state, p, card)
-    const dying = state.players[pending.dying]
-    dying.hp = Math.min(dying.hp + 1, dying.maxHp)
-    log(
-      state,
-      `${playerLabel(state, p)} 使用${plainLabel(card)}救援 ${playerLabel(state, pending.dying)}（体力 ${dying.hp}/${dying.maxHp}）${energyTag(state, p)}`,
-    )
-    if (dying.hp > 0) {
-      const top = state.stack[state.stack.length - 1]
-      if (top && top.kind === 'dying') state.stack.pop()
-      log(state, `${playerLabel(state, pending.dying)} 脱离濒死状态`)
-    }
-    return
+    ctx.dying = pending.dying
+    ctx.target = pending.dying
+    ctx.source = p
   }
-
-  const player = state.players[p]
-
-  if (as === 'strike') {
-    const target = otherPlayer(p)
-    moveHandToProcessing(state, p, card)
-    // 记录「使用次数」（只作统计，【打击】已无次数限制）；转化牌按当作的牌名计数
-    recordCardUse(state, p, 'strike')
-    log(state, `${describeUse(state, p, target, card, 'strike', action.via)}${energyTag(state, p)}`)
-    // S8：这段「未抵消即造成 1 点伤害」改由 cards/strike.json 的 contest.onUnmet 提供
-    pushStrike(
-      state,
-      p,
-      target,
-      action.via ? { as: 'strike', source: card, via: action.via } : { as: 'strike', source: card },
-      [{ kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } }],
-    )
-    return
+  if (variant.target) {
+    const chosen = pending.kind === 'dying' ? pending.dying : undefined
+    const resolved = resolveTargetChoice({ state, ctx }, variant.target, chosen)
+    if (resolved.ok) ctx.target = resolved.target
   }
-
-  if (as === 'heal') {
-    moveHandToDiscard(state, p, card)
-    player.hp = Math.min(player.hp + 1, player.maxHp)
-    if (action.via) {
-      log(
-        state,
-        `${playerLabel(state, p)} 发动【${skillDef(action.via).name}】，将 ${plainLabel(card)} 当【回复】使用，体力回复至 ${player.hp}/${player.maxHp}${energyTag(state, p)}`,
-      )
-    } else {
-      log(
-        state,
-        `${playerLabel(state, p)} 使用${plainLabel(card)}，体力回复至 ${player.hp}/${player.maxHp}${energyTag(state, p)}`,
-      )
-    }
-    return
-  }
-
-  throw new RuleError(`无法在出牌阶段使用【${CARD_NAME[as]}】`)
+  runEffectGroup(state, variant, ctx)
 }
 
+/** 打出响应牌抵消对抗：校验 → 付费 → 按文档的 play 变体执行效果，最后记录抵消进度 */
 function applyPlayCard(
   state: GameState,
   action: Extract<Action, { kind: 'play-card' }>,
 ): void {
   const pending = state.pending
   if (!pending || pending.kind !== 'respond') {
-    throw new RuleError('当前不是打出【防御】的时机')
+    throw new RuleError('当前不是打出响应牌的时机')
   }
   const p = pending.player
   const as: CardKind = action.as ?? action.card.kind
   ensure(checkPlayCardAsDefend(state, p, action.card, as, action.via))
   const card = requireInHand(state, p, action.card)
-  // 响应【打击】也要付费：能量不足就只能放弃响应
   payEnergy(state, p, as)
 
   const top = state.stack[state.stack.length - 1]
   if (!top || top.kind !== 'contest') {
     throw new RuleError('结算栈异常：缺少对抗结算帧')
   }
+  const variant = cardDoc(as).play
+  if (!variant) throw new RuleError(`【${CARD_NAME[as]}】不能作为响应打出`)
 
-  moveHandToProcessing(state, p, card)
-  top.spent.push({ card, owner: p })
-  top.got += 1
-
-  if (action.via) {
-    log(
-      state,
-      `${playerLabel(state, p)} 发动【${skillDef(action.via).name}】，将 ${plainLabel(card)} 当【防御】打出${energyTag(state, p)}`,
-    )
-  } else {
-    log(state, `${playerLabel(state, p)} 打出${plainLabel(card)}${energyTag(state, p)}`)
+  const ctx: EffectContext = {
+    self: p,
+    active: state.active,
+    source: top.source,
+    usedUid: card.uid,
+    usedCard: action.via ? { as, source: card, via: action.via } : { as, source: card },
+    costCards: [],
   }
+  runEffects(state, variant.effects, ctx)
 
+  // 机制战报：抵消进度（属于引擎，不属于内容）
   if (top.got >= top.need) {
     log(state, `【${CARD_NAME[top.expected]}】被抵消`)
   } else {
@@ -442,11 +404,6 @@ function applyPlayCard(
   }
 }
 
-/**
- * 发动主动技：合法性校验后，按 skills/*.json 的 activate 规格执行效果。
- * 费用牌 uid 记入上下文（{cost} 占位符与 move-cards 的 cost 取牌都用它），
- * after 列表由 runEffectGroup 压成延迟帧（透支的"濒死后才摸牌"由此而来）。
- */
 function applyActivate(
   state: GameState,
   action: Extract<Action, { kind: 'activate' }>,

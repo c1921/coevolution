@@ -69,8 +69,21 @@ export function evalCondition(env: EvalEnv, condition: Condition): boolean {
   }
 }
 
+/**
+ * 条件列表里第一个不成立的条件（都成立则返回 undefined）。
+ * 合法性判定用它把文档里的 reason 回给玩家；嵌套条件只报最外层节点。
+ */
+export function firstFailed(
+  env: EvalEnv,
+  conditions: readonly Condition[] | undefined,
+): Condition | undefined {
+  for (const condition of conditions ?? []) {
+    if (!evalCondition(env, condition)) return condition
+  }
+  return undefined
+}
+
 /** 条件列表全部成立（空列表视为成立） */
 export function evalConditions(env: EvalEnv, conditions: Condition[] | undefined): boolean {
-  if (!conditions || conditions.length === 0) return true
-  return conditions.every((item) => evalCondition(env, item))
+  return firstFailed(env, conditions) === undefined
 }

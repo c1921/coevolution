@@ -152,7 +152,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
 
   // 2. 体力告急就用【回复】（要付得起能量）
   if (player.hp <= HEAL_MAX_HP && player.hp < player.maxHp) {
-    const heal = findDirect(state, p, 'heal', 'use')
+    const heal = findDirect(state, p, 'recovery', 'use')
     if (heal) return asAction('use', heal)
   }
 
@@ -218,7 +218,7 @@ function decideDying(state: GameState, p: PlayerIndex, dying: PlayerIndex): Acti
   if (p !== dying) return { kind: 'cancel' }
   if (state.players[p].hp > 0) return { kind: 'cancel' }
 
-  const heal = findDirect(state, p, 'heal', 'use')
+  const heal = findDirect(state, p, 'recovery', 'use')
   return heal ? asAction('use', heal) : { kind: 'cancel' }
 }
 
@@ -229,7 +229,7 @@ function decideDying(state: GameState, p: PlayerIndex, dying: PlayerIndex): Acti
 const DISCARD_PRIORITY: Record<CardRole, number> = {
   attack: 0,
   defense: 1,
-  heal: 2,
+  recovery: 2,
   utility: 1,
 }
 

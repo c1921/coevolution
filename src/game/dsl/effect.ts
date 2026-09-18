@@ -116,7 +116,7 @@ export function runEffect(env: EvalEnv, effect: Effect): void {
       return
 
     case 'contest-contribute':
-      contributeToContest(state, evalValue(env, effect.amount))
+      contributeToContest(state, env, evalValue(env, effect.amount))
       return
 
     case 'resolve-dying':

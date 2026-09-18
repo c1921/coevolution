@@ -20,7 +20,8 @@
           "kind": "compare",
           "op": "lt",
           "left": { "kind": "ref", "ref": "hp", "of": "target" },
-          "right": { "kind": "ref", "ref": "maxHp", "of": "target" }
+          "right": { "kind": "ref", "ref": "maxHp", "of": "target" },
+          "reason": "目标角色体力已满，无法回复"
         }
       ]
     },

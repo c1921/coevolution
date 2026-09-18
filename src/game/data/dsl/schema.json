@@ -162,6 +162,9 @@
             "end"
           ]
         },
+        "reason": {
+          "type": "string"
+        },
         "kind": {
           "enum": [
             "always",

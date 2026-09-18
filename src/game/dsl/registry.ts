@@ -221,10 +221,10 @@ export function registryToDocs(): { path: string; value: unknown }[] {
  * 因此新增牌种不需要在 AI/界面里加分支。
  *  - attack  含 contest 或 damage 效果（打击）
  *  - defense 有 play 变体（响应别人的对抗）
- *  - heal    含 heal 效果（回复）
+ *  - recovery 含 heal 效果（回复）
  *  - utility 其余
  */
-export type CardRole = 'attack' | 'defense' | 'heal' | 'utility'
+export type CardRole = 'attack' | 'defense' | 'recovery' | 'utility'
 
 /** 递归判断效果列表（含 if 分支）里是否出现某指令 */
 export function effectsInclude(effects: readonly Effect[] | undefined, kind: string): boolean {
@@ -247,7 +247,7 @@ export function cardRole(kind: string): CardRole {
   if (doc.play) return 'defense'
   const effects = (doc.use ?? []).flatMap((variant) => variant.effects)
   if (effectsInclude(effects, 'contest') || effectsInclude(effects, 'damage')) return 'attack'
-  if (effectsInclude(effects, 'heal')) return 'heal'
+  if (effectsInclude(effects, 'heal')) return 'recovery'
   return 'utility'
 }
 
