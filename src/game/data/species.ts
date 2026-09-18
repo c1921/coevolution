@@ -43,7 +43,10 @@ export function speciesDef(species: SpeciesId): SpeciesDef {
 export const SPECIES: Record<SpeciesId, SpeciesDef> = new Proxy(
   {} as Record<SpeciesId, SpeciesDef>,
   {
-    get: (_target, key) => (typeof key === 'string' ? speciesDef(key) : undefined),
+    // 未知 id 返回 undefined（与普通对象一致）：Vue 会探测 __v_isRef 等内部键，
+    // 若对任意 string 都派生物种，读取就会抛错并炸掉整棵渲染树。
+    get: (_target, key) =>
+      typeof key === 'string' && key in getRegistry().speciesById ? speciesDef(key) : undefined,
     has: (_target, key) => typeof key === 'string' && key in getRegistry().speciesById,
     ownKeys: () => speciesIds(),
     getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
