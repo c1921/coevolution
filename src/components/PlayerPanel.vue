@@ -64,6 +64,20 @@ const species = () => SPECIES[props.player.species]
           <span class="ml-1 text-xs text-ink-500">{{ player.energy }}/{{ energyMax }}</span>
         </div>
 
+        <!-- 威胁：攻击不再直接扣血，而是叠加威胁；回合结束时剩余威胁结算为等量伤害 -->
+        <div
+          class="mt-1 flex items-center gap-1"
+          title="受到的攻击会叠加威胁；你在自己的出牌阶段可打出【防御】抵消，回合结束时剩余威胁结算为等量伤害"
+        >
+          <span class="mr-0.5 text-xs text-ink-500">威胁</span>
+          <span
+            v-for="i in Math.max(player.threat, 0)"
+            :key="i"
+            class="h-3 w-3 rounded-sm border border-ember-600 bg-ember-400"
+          />
+          <span class="ml-1 text-xs text-ink-500">{{ player.threat }}</span>
+        </div>
+
         <div class="mt-2 flex flex-wrap items-center gap-1">
           <span
             v-for="skill in species().skills"

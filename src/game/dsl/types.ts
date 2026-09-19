@@ -88,7 +88,10 @@ export interface ZoneRef {
 /** 效果指令 */
 export type Effect =
   | { kind: 'log'; template: string; vars?: Record<string, Value> }
-  | { kind: 'damage'; target: RoleRef; amount: Value }
+  /** 给目标叠加威胁（唯一的攻击途径，见 rules/threat.ts） */
+  | { kind: 'threat'; target: RoleRef; amount: Value }
+  /** 抵消目标的威胁（【防御】） */
+  | { kind: 'offset-threat'; target: RoleRef; amount: Value }
   | { kind: 'lose-hp'; target: RoleRef; amount: Value }
   | { kind: 'heal'; target: RoleRef; amount: Value }
   | { kind: 'draw'; target: RoleRef; count: Value }
@@ -102,17 +105,23 @@ export type Effect =
   | { kind: 'gain-energy'; target: RoleRef; amount: Value }
   | { kind: 'record-card-use'; of: RoleRef; cardKind: string }
   | { kind: 'record-skill-use'; skill: string }
+  /**
+   * 对抗：开启响应窗口，让 responder 打出 expectedCard 抵消。
+   *
+   * 占位机制：当前的防御改为「自己回合抵消威胁」，因此内置内容没有任何卡牌声明
+   * `play` 变体，这条指令与响应链暂时不可达，保留给后续的反制机制。
+   */
   | {
       kind: 'contest'
       /** 被询问响应的人 */
       responder: RoleRef
       /** 需要打出的牌种 */
       expectedCard: string
-      /** 需要几张才能抵消（威压由 defend-need-against 通道给出） */
+      /** 需要几张才能抵消 */
       need: Value
       /** 抵消成功的后续效果（收尾由引擎负责） */
       onMet?: Effect[]
-      /** 未抵消的后续效果（通常是造成伤害） */
+      /** 未抵消的后续效果 */
       onUnmet?: Effect[]
     }
   | { kind: 'contest-contribute'; amount: Value }

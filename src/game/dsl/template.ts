@@ -66,6 +66,8 @@ export function renderLog(
         return String(player.energy)
       case 'energyMax':
         return String(channelValue(env.state, 'energy-max', p))
+      case 'threat':
+        return String(player.threat)
       case 'handCount':
         return String(player.hand.length)
       case 'energyTag':

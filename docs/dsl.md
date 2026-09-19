@@ -28,7 +28,7 @@ DSL 只承载**内容**，不承载**结算机器**。判断一段逻辑该不�
 | 卡牌：费用、`use` / `play` 变体与效果 | `card` | `cards/strike.json` |
 | 注册在时点上的非技能效果 | `rule` | `rules/attrition.json`（消耗战） |
 | 牌组：牌种与张数 | `deck` | `decks/basic.json` |
-| 六个修正通道的基准值 | `ruleset` | `rules/base.json` |
+| 七个修正通道的基准值 | `ruleset` | `rules/base.json` |
 
 ### 仍属于引擎机械（不进 DSL）
 
@@ -154,7 +154,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `name` / `text` | 是 | 非空字符串 | 技能名与描述 |
 | `modifiers` | 否 | `Modifier[]` | 常驻通道修正（如怒吼、威压） |
 | `transforms` | 否 | `Transform[]` | 牌面转化（如疾影） |
-| `trigger` | 否 | `TriggerSpec` | 触发型（如夺食、狡计） |
+| `trigger` | 否 | `TriggerSpec` | 触发型（如反扑、狡黠） |
 | `activate` | 否 | `ActivateSpec` | 主动技（如疗愈、透支） |
 
 技能必须至少声明 `modifiers` / `transforms` / `trigger` / `activate` 之一（`bad-combination`）。技能分类（`SKILL_KINDS` 的 `transform` / `modifier` / `trigger` / `active`）由文档结构派生，不单独存储。
@@ -181,9 +181,11 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 ```json
 "transforms": [
   { "from": "defend", "to": "strike", "contexts": ["use"] },
-  { "from": "strike", "to": "defend", "contexts": ["play"] }
+  { "from": "strike", "to": "defend", "contexts": ["use"] }
 ]
 ```
+
+`TRANSFORM_CONTEXTS` 仍含 `play`，但内置内容没有任何卡牌声明 `play` 变体，因此当前只有 `use` 语境的转化是活的（见 8.1）。
 
 `skills/mend.json`（主动技，字段见 `ActivateSpec`）：
 
@@ -216,7 +218,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `name` / `short` / `text` | 是 | 非空字符串 | 牌名、短描述、卡面文案 |
 | `cost` | 是 | `Value` | 费用；当它是 `const` 时必须 ≥ 1 |
 | `use` | 否 | `UseVariant[]` | 使用变体（`play` / `dying`，同语境不可重复） |
-| `play` | 否 | `PlayVariant` | 响应变体（`respondsTo`） |
+| `play` | 否 | `PlayVariant` | 响应变体（`respondsTo`）；**占位，当前无内容使用** |
 
 卡牌至少需要 `use` 或 `play` 之一。费用下限由 `cost-below-minimum` 强制：0 费 + 无次数限制的【打击】会形成无限连击。
 
@@ -234,44 +236,54 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 ```
 
 `UseVariant`：`context`（`play` / `dying`）、`target?`、`requires?`、`effects`、`after?`。
-`PlayVariant`：`respondsTo`（它响应哪种牌开启的对抗）、`requires?`、`effects`。
+`PlayVariant`：`respondsTo`（它响应哪种牌开启的对抗）、`requires?`、`effects`。**这是对抗机制的占位**：内置内容里没有任何卡牌声明 `play` 变体，`respondsTo` 字段当前无内容使用，因此不要把它当成活的防御机制。
 
 **卡牌的目标是「使用时选择」的**：`use.target` 与主动技的 `target` 规格完全同源（第 9 节），
 候选不唯一或声明了 `required` 时界面会弹目标选择器，提交走 `Action.use-card.targets`。
 `count`（多目标）只允许出现在卡牌的 `use` 变体上——主动技的 `target` 带 `count` 会被 `bad-combination` 拒绝。
 
-`cards/defend.json`（节选，响应变体）：
+`cards/defend.json`（节选，**自己回合抵消威胁**的 `use` 变体）：
 
 ```json
-"play": {
-  "respondsTo": "strike",
-  "effects": [
-    {
-      "kind": "move-cards",
-      "from": { "zone": "hand", "of": "self" },
-      "to": { "zone": "processing", "of": "self" },
-      "pick": { "mode": "played" }
-    },
-    { "kind": "contest-contribute", "amount": { "kind": "const", "value": 1 } },
-    ...
-  ]
-}
+"use": [
+  {
+    "context": "play",
+    "target": { "scope": "self", "required": false, "alive": true },
+    "requires": [
+      {
+        "kind": "compare",
+        "op": "gte",
+        "left": { "kind": "ref", "ref": "threat", "of": "self" },
+        "right": { "kind": "const", "value": 1 },
+        "reason": "你没有需要抵消的威胁"
+      }
+    ],
+    "effects": [
+      { "kind": "move-cards", "from": { "zone": "hand", "of": "self" }, "to": { "zone": "discard", "of": "self" }, "pick": { "mode": "played" } },
+      { "kind": "offset-threat", "target": "self", "amount": { "kind": "const", "value": 1 } },
+      { "kind": "log", "template": "{self} 使用{usedAs}，抵消 1 点威胁{self.energyTag}" }
+    ]
+  }
+]
 ```
+
+`play` 变体（旧的响应式防御）在仓库里已无内容声明，取而代之的是上面这种「出牌阶段用【防御】抵消自己威胁」的写法（威胁机制见 3.5、第 6、10 节）。
 
 ### 3.5 `ruleset` — 规则常量
 
 | 字段 | 必填 | 类型 | 说明 |
 |---|---|---|---|
-| `channels` | 是 | `Record<Channel, number>` | 必须为**全部**六个通道给出非负整数基准值 |
+| `channels` | 是 | `Record<Channel, number>` | 必须为**全部**七个通道给出非负整数基准值 |
 
 缺少任一通道报 `missing-field`；未知键报 `unknown-channel`。`baseChannel(channel)` 读取基准值。
 
-**每条通道的基准值都是"默认值"，且都被引擎真实消费**（`dsl/channels.test.ts` 逐条以行为断言守卫）：
+**每条通道的基准值都是"默认值"**；除 `defend-need-against` 只服务占位对抗外，其余通道都被引擎真实消费（`dsl/channels.test.ts` 逐条以行为断言守卫，占位通道用合成 `contest` 内容驱动）：
 
 | 通道 | 基准含义 | 引擎消费点 | 修正语义 |
 |---|---|---|---|
 | `energy-max` | 每回合能量上限（3） | `rules/energy.ts` `energyMax` | 绝对值，`set` 即覆盖上限 |
-| `defend-need-against` | 抵消一次【打击】需要的【防御】张数（1） | `skills/index.ts` `defendNeedAgainst` | 绝对值，威压 `set` 为 2 |
+| `defend-need-against` | **占位**：对抗机制里抵消一次攻击需要的响应牌张数（1） | 仅 `contest` 帧（`dsl/internal.ts` `pushContest`）；内置内容没有 `play` 变体，实战不可达 | 绝对值，当前无内置内容使用 |
+| `threat-per-attack` | 每次攻击叠加的威胁点数（1） | `skills/index.ts` `threatPerAttack`（【打击】的 `threat` 效果） | 绝对值，威压 `set` 为 2 |
 | `draw-count` | 摸牌阶段摸几张（2） | `rules/turn.ts` `drawCount` | 偏移量：先手首回合再 −1 |
 | `hand-limit` | 手牌上限相对体力的偏移（0） | `rules/turn.ts` `handLimit` | 偏移量：上限 = 体力 + 修正 |
 | `card-cost` | 牌面费用的偏移（0） | `rules/energy.ts` `energyCost` | 偏移量：费用 = 牌种费用 + 修正，**最终不低于 1** |
@@ -291,6 +303,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
   "channels": {
     "energy-max": 3,
     "defend-need-against": 1,
+    "threat-per-attack": 1,
     "draw-count": 2,
     "hand-limit": 0,
     "card-cost": 0,
@@ -371,6 +384,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `handCount` / `deckCount` / `discardCount` | 手牌 / 牌组 / 弃牌堆张数 | 是 |
 | `energy` | 当前能量 | 是 |
 | `energyMax` | 能量上限；走 `energy-max` 通道（含技能修正） | 是 |
+| `threat` | 当前威胁点数（攻击叠加、回合结束结算为伤害；见 3.5 与第 10 节） | 是 |
 | `turn` | 当前回合数 | 否 |
 | `damageAmount` | 触发事件里的伤害量（`ctx.damage?.amount ?? 0`） | 否 |
 
@@ -385,7 +399,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 `subject` 是「该数值属于谁」：怒吼看自己，威压看【打击】的使用者，由调用方给出。修正值本身可以是任意 `Value`，因此修正与求值互相递归。
 
-六条通道**全部**被引擎消费（摸牌数、手牌上限、费用、攻击范围也走通道，见 3.5 的表），因此内容侧的修正不会"校验通过但不生效"。引擎读通道时统一遵守两条夹取规则：摸牌数、手牌上限、攻击范围夹到非负，牌面费用夹到 ≥ 1（0 费 + 无次数限制 = 无限连击）。
+七条通道里，`defend-need-against` 只由占位对抗机制消费（内置内容没有 `play` 变体，因此实战不可达）；其余六条**全部**被引擎消费（摸牌数、手牌上限、费用、攻击范围也走通道，见 3.5 的表），因此内容侧的修正不会"校验通过但不生效"。引擎读通道时统一遵守两条夹取规则：摸牌数、手牌上限、攻击范围夹到非负，牌面费用夹到 ≥ 1（0 费 + 无次数限制 = 无限连击）。
 
 ### 4.4 递归深度保护
 
@@ -396,7 +410,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 因此「通道读取自身的修正值」这类自引用会变成显式报错，而不是栈溢出（`value.test.ts` 有断言）。
 
-`Channel` 词表（`CHANNELS`）：`energy-max`、`defend-need-against`、`draw-count`、`hand-limit`、`card-cost`、`attack-range`。
+`Channel` 词表（`CHANNELS`）：`energy-max`、`defend-need-against`（占位）、`threat-per-attack`、`draw-count`、`hand-limit`、`card-cost`、`attack-range`。
 
 ---
 
@@ -428,7 +442,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 没有 `reason` 的条件失败时返回通用说明（`firstFailed` 只报最外层不成立的节点）。
 
 `ZoneName`（`ZONE_NAMES`）：`hand` / `discard` / `processing` / `deck`。
-`CardRef`（`CARD_REFS`）：`event-card`（造成本次伤害的牌）/ `used-card`（本次使用的牌）/ `cost-card`（第一张费用牌）。
+`CardRef`（`CARD_REFS`）：`event-card`（触发事件里被绑定的牌；回合结束的威胁结算不携带牌，为「无牌」）/ `used-card`（本次使用的牌）/ `cost-card`（第一张费用牌）。
 `Phase`（`PHASES` / `TURN_PHASES`，两者由 `kinds.test.ts` 断言一致）：`prepare` → `judge` → `draw` → `play` → `discard` → `end`。
 
 `has-cards` / `card-kind-count` 用 `requireRole`（缺角色即抛错）；`alive` 用 `resolveRole`（缺角色视为不成立）。`card-kind-count` 的 `cardKind` 与 `skill-unused` 的 `skill` 都参与交叉引用校验。
@@ -444,7 +458,8 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `kind` | 允许字段 | 作用 |
 |---|---|---|
 | `log` | `template: string`、`vars?: Record<string, Value>` | 渲染一条内容侧战报（见第 11 节） |
-| `damage` | `target: RoleRef`、`amount: Value` | 造成伤害；会触发「受到伤害后」技能并做濒死检查 |
+| `threat` | `target: RoleRef`、`amount: Value` | 给目标叠加威胁（**攻击的唯一途径**）；施加者恒为效果归属者 `ctx.self` |
+| `offset-threat` | `target: RoleRef`、`amount: Value` | 抵消目标的威胁，结果夹到 0（【防御】） |
 | `lose-hp` | `target`、`amount` | 失去体力；**不**触发「受到伤害后」技能，但仍会进入濒死 |
 | `heal` | `target`、`amount` | 回复体力（不超过上限） |
 | `draw` | `target: RoleRef`、`count: Value` | 从目标自己的牌组摸牌（牌组耗尽时洗回自己的弃牌堆） |
@@ -453,13 +468,27 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `gain-energy` | `target`、`amount` | 获得能量（受 `0..上限` 不变式约束） |
 | `record-card-use` | `of: RoleRef`、`cardKind: string` | 记录牌种使用次数（统计用） |
 | `record-skill-use` | `skill: string` | 记录技能已发动（配合 `oncePerTurn` / `skill-unused`） |
-| `contest` | `responder: RoleRef`、`expectedCard: string`、`need: Value`、`onMet?: Effect[]`、`onUnmet?: Effect[]` | 开启一次对抗：询问 `responder` 打出 `expectedCard`，收尾由引擎负责 |
-| `contest-contribute` | `amount: Value` | 向当前对抗贡献张数；**只能出现在卡牌的 `play` 变体** |
+| `contest` | `responder: RoleRef`、`expectedCard: string`、`need: Value`、`onMet?: Effect[]`、`onUnmet?: Effect[]` | **占位**：开启一次对抗（询问 `responder` 打出 `expectedCard`，收尾由引擎负责）；内置内容无人声明 `play` 变体，因此不可达 |
+| `contest-contribute` | `amount: Value` | **占位**：向当前对抗贡献张数；**只能出现在卡牌的 `play` 变体** |
 | `resolve-dying` | `of: RoleRef` | 结束濒死结算；**只能出现在卡牌的 `dying` 变体** |
 | `skip-phase` | `phase: TurnPhase` | 从本回合剩余阶段计划中删除该阶段 |
 | `extra-phase` | `phase: TurnPhase`、`position: 'next' \| 'last'` | 插入一个额外阶段 |
 | `for-each-target` | `effects: Effect[]` | 对每个选定目标各执行一次子效果：迭代时把 `target` 临时绑定为当前目标（多目标牌的唯一正确写法） |
 | `if` | `condition: Condition`、`then: Effect[]`、`else?: Effect[]` | 条件分支；`then` / `else` 都是非空效果列表 |
+
+**威胁是基础伤害机制**：攻击不再直接扣体力，而是用 `threat` 给目标叠加威胁；承受者在自己的出牌阶段打出【防御】，用 `offset-threat` 抵消；其**回合结束时**剩余威胁结算为等量伤害（走伤害帧：先 emit `after-damage` 触发，再做濒死检查），随后威胁归零、不跨回合累积。`damage` 指令已从 `EFFECT_KINDS` 删除。
+
+【打击】按 `threat-per-attack` 通道叠加威胁（基准值见 `rules/base.json`，威压覆盖为 2）：
+
+```json
+{ "kind": "threat", "target": "target", "amount": { "kind": "channel", "channel": "threat-per-attack", "of": "self" } }
+```
+
+【防御】抵消自己 1 点威胁（`requires` 要求自己至少有 1 点威胁）：
+
+```json
+{ "kind": "offset-threat", "target": "self", "amount": { "kind": "const", "value": 1 } }
+```
 
 `for-each-target` 的语义细节：
 
@@ -470,14 +499,13 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
   （含日志占位符与条件）都会被加载期校验器以 `bad-combination` 拒绝——多目标下 `ctx.target` 不绑定，
   这样能避免「以为打了全体、实际只打了一个」。
 
-示例——`cards/storm.json`（对每名角色造成 1 点伤害）：
+示例——`cards/storm.json`（`{ "mode": "all" }`，对每名角色（含自己）叠加 2 点威胁）：
 
 ```json
 {
   "kind": "for-each-target",
   "effects": [
-    { "kind": "log", "template": "{target} 受到 1 点伤害" },
-    { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+    { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 2 } }
   ]
 }
 ```
@@ -498,27 +526,29 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 另外一条组合约束：`to.zone === 'processing'` 时，必须 `from.zone === 'hand'` 或 `mode === 'specific'`（只有手牌可以进入处理区，处理区内部取牌除外）。
 
-示例——`skills/snatch.json`（从处理区取回造成伤害的牌）：
+示例——【打击】/【防御】的 `played`（把自己用的那张牌从手牌送进弃牌堆）：
 
 ```json
 {
   "kind": "move-cards",
-  "from": { "zone": "processing", "of": "self" },
-  "to": { "zone": "hand", "of": "self" },
-  "pick": { "mode": "specific", "card": "event-card" }
+  "from": { "zone": "hand", "of": "self" },
+  "to": { "zone": "discard", "of": "self" },
+  "pick": { "mode": "played" }
 }
 ```
 
-示例——`skills/guile.json`（从伤害来源手牌随机取一张）：
+示例——【猛扑】的 `cost`（弃置一张费用牌）：
 
 ```json
 {
   "kind": "move-cards",
-  "from": { "zone": "hand", "of": "source" },
-  "to": { "zone": "hand", "of": "self" },
-  "pick": { "mode": "random", "count": 1 }
+  "from": { "zone": "hand", "of": "self" },
+  "to": { "zone": "discard", "of": "self" },
+  "pick": { "mode": "cost" }
 }
 ```
+
+**处理区与 `specific` / `event-card` 当前只服务占位对抗**：它们原本用于「把造成伤害/被响应的牌压入处理区、事后再取回」的响应链，而内置内容没有任何卡牌声明 `play` 变体，`contest` 不可达，因此实战中不会有牌进入处理区。新增反制内容前不要照抄旧的响应式写法。
 
 效果列表与条件列表都**不能为空数组**（`bad-combination`）。
 
@@ -555,7 +585,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 3. 濒死链（是否被【回复】救回、或阵亡）先走完；
 4. 只有**存活**下来，才轮到延迟的 `draw 2` 摸两张牌。
 
-这正是原引擎 `applyActiveSkill` 里「先安排摸牌帧，再 `loseHp`」的同一语义：摸牌被压在濒死结算之下，濒死被打断/阵亡时不会先摸牌。`skills/active.test.ts` 与「透支非伤害且不触发夺食」守住了这条行为。
+这正是原引擎 `applyActiveSkill` 里「先安排摸牌帧，再 `loseHp`」的同一语义：摸牌被压在濒死结算之下，濒死被打断/阵亡时不会先摸牌。`skills/active.test.ts` 与「透支是失去体力而非伤害，不触发『受到伤害后』技能」守住了这条行为。
 
 同一条约定也适用于 `TriggerSpec.after` 与 `UseVariant.after`：它们都在当前结算链结束后才执行。
 
@@ -572,11 +602,13 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `activate` | `skill.activate.effects` / `after` / `requires` | `self` `target` `active` `opponent` |
 | `use-play` | `card.use[context="play"]` 的效果与 `requires` | `self` `target` `active` `opponent` |
 | `use-dying` | `card.use[context="dying"]` 的效果与 `requires` | `self` `target` `dying` `active` `opponent` |
-| `play` | `card.play.effects` / `requires` | `self` `source` `active` `opponent` |
+| `play` | **占位**：`card.play.effects` / `requires`（内置内容没有任何卡牌声明 `play` 变体） | `self` `source` `active` `opponent` |
 | `trigger` | `skill.trigger.effects` / `after` / `when` | `self` `target` `source` `active` `opponent` |
-| `contest` | `contest.onMet` / `contest.onUnmet` 内部 | `self` `target` `active` `opponent` |
+| `contest` | **占位**：`contest.onMet` / `contest.onUnmet` 内部（内置内容无人声明 `play`，`contest` 不可达） | `self` `target` `active` `opponent` |
 | `rule` | `rule.effects` / `when` | `self` `active` |
 | `modifier` | `modifier.value` | `self` |
+
+表里真正承载攻击/防御内容的是 `use-play`：【打击】与【防御】都是 `card.use[context="play"]` 的变体，【防御】在这里读 `threat(self)` 并 `offset-threat` 自己。`play` 与 `contest` 两行只是保留的占位语境，当前没有内容使用。
 
 在 `effects` 之外的字段还有各自的角色集合：`card.cost` 与 `activate.costCards.count` 只允许 `self`；`TargetSpec.conditions` 只允许 `self` / `target`。
 
@@ -589,14 +621,14 @@ export interface EffectContext {
   self: PlayerIndex        // 技能/卡牌的归属者；规则的 self = 当前回合角色
   active: PlayerIndex      // 事件发生时的回合角色
   target?: PlayerIndex     // 主动技的选择结果 / 卡牌的使用目标
-  source?: PlayerIndex     // 伤害来源 / 卡牌使用者
+  source?: PlayerIndex     // 伤害/威胁来源 / 卡牌使用者
   dying?: PlayerIndex      // 濒死者
   usedUid?: number         // 本次使用/打出的牌在手牌中的 uid
   usedCard?: VirtualCard   // 本次使用/打出的虚拟牌（含 via 转化信息）
   costCards: number[]      // 已支付的费用牌 uid
   picked?: number[]        // 最近一次 move-cards 实际取到的牌 uid
   lastAmount?: number      // 最近一次数值效果的结果（日志 {amount}）
-  damage?: DamageCtx       // 触发事件里的伤害上下文
+  damage?: DamageCtx       // 触发事件里的伤害上下文（当前只在回合结束的威胁结算时产生）
 }
 ```
 
@@ -606,13 +638,13 @@ export interface EffectContext {
 |---|---|
 | `self` / `active` | 调用点建立上下文（`baseContext`；规则的 `self` 为回合角色） |
 | `target` | 技能/卡牌的 `TargetSpec` 解析结果 |
-| `source` | 伤害/响应链里的来源或卡牌使用者 |
+| `source` | 伤害来源 / 卡牌使用者（触发语境里指「谁造成了这次伤害」） |
 | `dying` | 濒死询问 |
 | `usedUid` / `usedCard` | 本次使用或打出的牌（含 `via` 转化） |
 | `costCards` | `move-cards` 的 `pick.mode = "cost"` 支付的牌 |
 | `picked` | 最近一次 `move-cards` 实际取到的牌 |
 | `lastAmount` | 最近一次数值类指令的结果 |
-| `damage` | 伤害事件 |
+| `damage` | 伤害事件（当前唯一来源是回合结束的威胁结算，携带 1v1 唯一对手作为来源） |
 
 角色解析：`resolveRole` 缺失时返回 `undefined`；`requireRole` 缺失时抛 `` RuleError(`当前结算语境没有角色 ${role}，DSL 文档与调用点不匹配`) ``。`opponent` 定义为「`self` 之外的另一个玩家」。
 
@@ -708,32 +740,37 @@ export interface EffectContext {
 
 | 时机 | 谁来执行 | 说明 |
 |---|---|---|
-| `turn-start` / `turn-end` | `rule` | 回合边界；消耗战挂在 `turn-start` |
+| `turn-start` / `turn-end` | `rule` | 回合边界；消耗战挂在 `turn-start`，威胁结算在 `turn-end` 的最后一步 |
 | `phase-start` / `phase-end` | `rule` | 阶段边界，需要 `phase` 字段；非这两个时机的 `at` 不允许带 `phase` |
-| `after-damage` | `trigger` | 事件类时机：引擎在伤害结算里 emit，用于「受到伤害后」的可选技能 |
+| `after-damage` | `trigger` | 事件类时机：引擎**只在回合结束的威胁结算**（走伤害帧）里 emit，用于「受到伤害后」的可选技能 |
 
 要点：
 
 - **`after-damage` 是目前引擎唯一 emit 的事件类时机**，也是唯一允许 `optional: true` 的时机（`validate.ts` 明确拒绝其它时机 + `optional: true`，报 `bad-combination`）。
+- **触发点已从「直接造成伤害」改到「回合结束时威胁结算」**：攻击只叠威胁（`threat` 指令），承受到伤害的方式是自己在回合结束时让剩余威胁结算为等量伤害，`dealDamage` 在这一刻 emit `after-damage`，随后做濒死检查。因此同一回合里先叠的威胁不会立刻触发「受到伤害后」技能。
 - 触发型的其它字段：`on`（必填）、`optional?`（当前只有 `after-damage` 可为 `true`）、`when?`（非空条件数组）、`effects`（必填）、`after?`。
 - 非可选的时机技能与 `rule` 按注册顺序（`priority`, `id`）依次执行；`trigger` 里可选的技能由引擎询问玩家，玩家应答后再结算其 `effects`。
-- `optional: true` 的技能示例——`skills/snatch.json`：
+- 挂在 `after-damage` 上的两个内置技能：狼【反扑】（`optional: true`，令伤害来源获得 1 点威胁）与狐【狡黠】（`optional: true`，摸一张牌）。`optional: true` 的技能示例——`skills/retaliate.json`：
 
 ```json
 "trigger": {
   "on": { "at": "after-damage" },
   "optional": true,
-  "when": [{ "kind": "in-processing", "card": "event-card" }],
-  "effects": [ ... ]
+  "when": [{ "kind": "alive", "of": "source" }],
+  "effects": [
+    { "kind": "threat", "target": "source", "amount": { "kind": "const", "value": 1 } }
+  ]
 }
 ```
 
-`when` 只是**发动前**的可用性条件；真正「是否发动」由玩家应答决定。`skills/guile.json` 用 `has-cards` 检查来源有手牌：
+`when` 只是**发动前**的可用性条件；真正「是否发动」由玩家应答决定。`skills/cunning.json` 没有 `when`，只要受到伤害就能选择摸一张：
 
 ```json
-"when": [
-  { "kind": "has-cards", "of": "source", "zone": "hand", "atLeast": { "kind": "const", "value": 1 } }
-]
+"trigger": {
+  "on": { "at": "after-damage" },
+  "optional": true,
+  "effects": [ { "kind": "draw", "target": "self", "count": { "kind": "const", "value": 1 } } ]
+}
 ```
 
 > 注意：校验器接受 `TIMING_KINDS` 里的任意 `at`，但引擎今天只执行 `turn-start` / `turn-end` / `phase-start` / `phase-end` 四类 `rule` 时机，并且只 emit `after-damage` 这一个事件。**只声明引擎会 emit 的时机**，否则文档合法但永远不会执行。
@@ -764,7 +801,7 @@ export interface EffectContext {
 | `amount` | 最近一次数值结果 |
 | `turn` | 当前回合数 |
 
-玩家占位符允许的字段（`LOG_PLAYER_FIELDS`）：`hp` / `maxHp` / `energy` / `energyMax` / `handCount` / `energyTag`。其中 `energyTag` 渲染为 `（能量 2/3）`，`energyMax` 会实时读取 `energy-max` 通道（含怒吼修正）。
+玩家占位符允许的字段（`LOG_PLAYER_FIELDS`）：`hp` / `maxHp` / `energy` / `energyMax` / `threat` / `handCount` / `energyTag`。其中 `energyTag` 渲染为 `（能量 2/3）`，`energyMax` 会实时读取 `energy-max` 通道（含怒吼修正），`threat` 读取该玩家当前的威胁点数（威胁机制见第 6、10 节）。
 
 ### 11.2 显式绑定 `log.vars`
 
@@ -812,6 +849,10 @@ export interface EffectContext {
 { "kind": "log", "template": "{self} 使用{usedAs}救援 {target}（体力 {target.hp}/{target.maxHp}）{self.energyTag}" }
 ```
 
+```json
+{ "kind": "log", "template": "{self} 使用{usedAs}，抵消 1 点威胁（剩余威胁 {self.threat}）{self.energyTag}" }
+```
+
 ---
 
 ## 12. 校验错误码 `IssueCode`
@@ -857,26 +898,32 @@ export interface EffectContext {
 
 选择机制：
 
-- 常驻数值 → `modifiers`（通道 + `add`/`set`/`min`/`max` + `Value`）。例：怒吼 `energy-max` +2；威压把 `defend-need-against` 覆盖为 2。
-- 牌面转化 → `transforms`（`from`、`to`、`contexts: ["use"] / ["play"]`）。例：疾影把【防御】当【打击】使用。
-- 「受到伤害后」可选发动 → `trigger`（`on: { "at": "after-damage" }`、`optional: true`、`when`、`effects`）。例：夺食、狡计。
-- 出牌阶段主动技 → `activate`（`timing: "play"`、`oncePerTurn`、`costCards`、`target`、`effects`、`after`）。例：疗愈、透支。
+- 常驻数值 → `modifiers`（通道 + `add`/`set`/`min`/`max` + `Value`）。例：怒吼 `energy-max` +2；威压把 `threat-per-attack` 覆盖为 2（【打击】每次叠 2 点威胁）。
+- 牌面转化 → `transforms`（`from`、`to`、`contexts: ["use"] / ["play"]`；`play` 语境当前没有内容使用）。例：疾影把【防御】当【打击】、把【打击】当【防御】使用。
+- 「受到伤害后」可选发动 → `trigger`（`on: { "at": "after-damage" }`、`optional: true`、`when`、`effects`）。例：反扑（令伤害来源获得 1 点威胁）、狡黠（摸一张牌）。**伤害只来自回合结束的威胁结算**，写触发技时要按威胁语义来，不要假设攻击会立即造成伤害。
+- 出牌阶段主动技 → `activate`（`timing: "play"`、`oncePerTurn`、`costCards`、`target`、`effects`、`after`）。例：疗愈、猛扑（弃一张手牌令对方获得 2 点威胁）、透支。
 
 ### 13.2 新增一张卡牌
 
 1. 新建 `src/game/data/dsl/cards/<id>.json`，写上信封与 `name` / `short` / `text` / `cost`。
 2. `cost` 若是 `const`，必须 ≥ 1（`cost-below-minimum`）。
-3. 声明 `use`（`context: "play"` 和/或 `"dying"`，同一语境不可重复）或 `play`（`respondsTo`），至少一个。
+3. 声明 `use`（`context: "play"` 和/或 `"dying"`，同一语境不可重复）；`play`（`respondsTo`）是**占位对抗机制**的字段，内置内容无人使用，新增反制内容前不要照抄旧的响应式写法。
 4. 把 `{ kind: <id>, count: n }` 加进某个牌组的 `cards`（`decks/<id>.json`），否则牌种是 `dead-doc`。
-5. 变体里的效果用第 6 节的指令集表达；引用牌种时（`pick.cardKind`、`expectedCard`、`respondsTo`、`contest`）必须指向存在的牌。
+5. 变体里的效果用第 6 节的指令集表达；引用牌种时（`pick.cardKind`，以及占位对抗才用到的 `expectedCard`、`respondsTo`、`contest`）必须指向存在的牌。
 
-注意 `move-cards` 的约束：`played` 从手牌取（使用/打出的那张），`specific` 只能从处理区取；`to.zone = "processing"` 只允许从手牌进入。
+注意 `move-cards` 的约束：`played` 从手牌取（使用/打出的那张），`cost` 从手牌取费用牌，`specific` 只能从处理区取；`to.zone = "processing"` 只允许从手牌进入。处理区与 `specific` 目前只服务占位对抗，实战中不会有牌进入。
+
+**要写攻击牌**：用 `threat` 叠加威胁，一般读 `threat-per-attack` 通道（【打击】）。例：【风暴】用 `count: all` + `for-each-target` 内 `threat` 2；【猛扑】直接对对方 `threat` 2。**不要再写 `damage` 指令**（已从 `EFFECT_KINDS` 删除）。
+
+**要写防御牌**：用 `use`（`context: "play"`）变体，`scope: self`，`requires` 读 `threat(self) >= 1`，效果是 `offset-threat` 自己 1 点（【防御】）。响应窗口式的 `play` 变体不再需要。
+
+**要写触发技**：挂 `after-damage`，按「回合结束的威胁结算」这一触发点写效果（如反扑给来源叠威胁、狡黠摸牌）。
 
 **要写「使用时选目标」的牌**：在 `use.target` 上给目标规格（第 9 节）。候选不唯一或缺省目标不合格时界面会自动弹选择器，
 提交带上 `Action.use-card.targets`；引擎与合法性判定都不需要改。
 
-**要写多目标牌**：给 `use.target` 加 `count`，效果里用 `for-each-target` 包住所有引用 `target` 的指令。
-范例见 `cards/storm.json`（`{ "mode": "all" }` 对每名角色造成 1 点伤害）与 `dsl/extensibility.test.ts` 的 `exactly` 用例。
+**要写多目标牌**：给 `use.target` 加 `count`，效果里用 `for-each-target` 包住所有引用 `target` 的指令（含 `threat`）。
+范例见 `cards/storm.json`（`{ "mode": "all" }` + `for-each-target` 内 `threat` 2）与 `dsl/extensibility.test.ts` 的 `exactly` 用例。
 
 ### 13.3 新增一个物种
 
@@ -923,11 +970,11 @@ export interface EffectContext {
 | `src/game/dsl/condition.test.ts` | 每种条件（`always`/`not`/`all`/`any`、`compare`、`alive`/`has-cards`/`card-kind-count`、`in-processing`、`card-transformed`/`picked-count`、`skill-unused`/`is-active`/`phase-is`） |
 | `src/game/dsl/target.test.ts` | 疗愈候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
-| `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`lose-hp`/`heal`/`damage`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
-| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（夺食/狡计）、不可选触发立即执行、可选触发只支持 `after-damage` |
+| `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`threat`/`offset-threat`/`lose-hp`/`heal`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
+| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（反扑/狡黠）、不可选触发立即执行、可选触发只支持 `after-damage` |
 | `src/game/dsl/schema.test.ts` | `uncoveredFields()` 为空；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
 | `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、扫描非空跑 |
-| `src/game/dsl/channels.test.ts` | 通道接线验收：六条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
+| `src/game/dsl/channels.test.ts` | 通道接线验收：七条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、每次攻击叠加的威胁、占位对抗的抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
 | `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限、使用时选目标的牌、多目标牌都只改文档即可端到端生效 |
 
 `src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 物种的最小自洽文档集）、`mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）与 `contentWith(docs)`（以完整内容集为底按 id 替换/新增文档）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
@@ -958,9 +1005,12 @@ export interface EffectContext {
 | `optional: true` 只支持 `after-damage` | 其它时机 + `optional: true` 会被校验器以 `bad-combination` 拒绝 |
 | 目标选择同时覆盖主动技与卡牌 | `activationTargetChoice` / `cardTargetChoice` 共用 `targetChoice`，服务可用性、校验、结算、界面与 AI；`Action.use-card.targets` 承载卡牌的目标选择结果 |
 | 多目标只支持卡牌的使用变体 | `UseVariant.target.count` 已接通（`all` / `exactly` + `for-each-target`）；主动技的 `target` 带 `count` 会被 `bad-combination` 拒绝，仍是单选 |
-| 多目标下 `ctx.target` 不绑定 | 声明了 `count` 的变体必须在 `for-each-target` 内引用 `target`（加载期守卫）；迭代内的上下文写入不冒泡到外层 |
-| 对称伤害同时归零时按座次结算 | 伤害帧按目标顺序压栈、结算栈后进先出，因此 1v1 里【风暴】把双方同时打到 0 时，下标 0 的角色获胜 |
-| 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage` 这一个事件；声明其它事件时机不会报错，但永远不会触发 |
+| 多目标下 `ctx.target` 不绑定 | 声明了 `count` 的变体必须在 `for-each-target` 内引用 `target`（加载期守卫，`threat` 同样受约束）；迭代内的上下文写入不冒泡到外层 |
+| 威胁来源不逐笔追踪 | 回合结束结算时，伤害来源按 1v1 的**唯一对手**记录（`otherPlayer`），不记录是哪张牌/哪个技能叠的；追责类效果只能拿到这个粗粒度来源 |
+| 威胁不跨回合累积 | 威胁只在「施加者回合 → 承受者回合结束」之间存活一轮：回合结束时剩余威胁结算为等量伤害并立即归零，不做历史累计 |
+| 手牌上限按伤害前体力 | 威胁结算在回合的**最后一步**（弃牌阶段之后），因此本回合结算出的伤害不会回头改变本回合的弃牌上限 |
+| `contest` / `play` 变体是占位 | 内置内容没有任何卡牌声明 `play` 变体，`contest` / `contest-contribute` 与 `defend-need-against` 通道当前不可达，只保留给后续反制机制 |
+| 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage` 这一个事件（发生在回合结束的威胁结算里）；声明其它事件时机不会报错，但永远不会触发 |
 | `move-cards` 不能访问 `deck` | 牌组只能通过 `draw` 访问，以免绕过洗回逻辑 |
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
 | 数值递归上限 16 | 表达式/通道递归超过 16 层抛 `RuleError`；这是防自引用与防栈溢出的硬保护 |

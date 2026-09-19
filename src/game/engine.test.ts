@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { aiDecide } from './ai'
 import { buildDeck, DECK_SIZE } from './data/deck'
 import { SPECIES_IDS } from './data/species'
-import { createGame, isOver, rollDraft, submit } from './engine'
+import { createGame, isOver, rollDraft, submit, advance } from './engine'
+import { contentWith } from './dsl/fixtures'
+import { withRegistry } from './dsl/registry'
 import { assertConservation, drawCards } from './rules/cardZones'
+import { dealDamage } from './rules/damage'
 import { assertEnergyBounds } from './rules/energy'
 import { FIRST_TURN_DRAW, INITIAL_HAND } from './rules/turn'
 import { makeState } from './testUtils'
@@ -218,23 +221,62 @@ describe('私有牌组', () => {
     assertConservation(state)
   })
 
-  it('【夺食】拿走的牌归获得者所有，双方池子此消彼长但全局仍守恒', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'wolf',
-      playerHand: [{ kind: 'strike' }],
+  it('跨池取牌后归属获得者，双方池子此消彼长但全局仍守恒（合成技能）', () => {
+    // 【夺食】已随机制改动退役；这里把狼的技能换成一份等价的合成技能，
+    // 守住「牌易主后仍全局守恒」这条口径（换文档即换行为，不需要改引擎）。
+    const synthetic = contentWith([
+      {
+        path: 'skills/retaliate.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'retaliate',
+          priority: 40,
+          name: '掠夺',
+          text: '当你受到伤害后，你可以获得伤害来源的一张手牌。',
+          trigger: {
+            on: { at: 'after-damage' },
+            optional: true,
+            when: [
+              {
+                kind: 'has-cards',
+                of: 'source',
+                zone: 'hand',
+                atLeast: { kind: 'const', value: 1 },
+              },
+            ],
+            effects: [
+              {
+                kind: 'move-cards',
+                from: { zone: 'hand', of: 'source' },
+                to: { zone: 'hand', of: 'self' },
+                pick: { mode: 'random', count: 1 },
+              },
+              { kind: 'log', template: '{self} 发动【掠夺】' },
+            ],
+          },
+        },
+      },
+    ])
+
+    withRegistry(synthetic, () => {
+      const state = makeState({
+        playerSpecies: 'tiger',
+        aiSpecies: 'wolf',
+        playerHand: [{ kind: 'strike' }],
+      })
+
+      dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+      advance(state)
+      submit(state, { kind: 'trigger-choice', accept: true })
+
+      const poolOf = (p: 0 | 1) =>
+        state.players[p].deck.length + state.players[p].discard.length + state.players[p].hand.length
+      // 狼拿走了虎的一张牌：自己 21 张，虎只剩下 19 张
+      expect(poolOf(1)).toBe(DECK_SIZE + 1)
+      expect(poolOf(0)).toBe(DECK_SIZE - 1)
+      // 全局依旧一张不多不少
+      assertConservation(state)
     })
-
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
-    submit(state, { kind: 'trigger-choice', accept: true })
-
-    const poolOf = (p: 0 | 1) =>
-      state.players[p].deck.length + state.players[p].discard.length + state.players[p].hand.length
-    // 狼夺回了那张【打击】：自己 21 张，虎只剩下 19 张
-    expect(poolOf(1)).toBe(DECK_SIZE + 1)
-    expect(poolOf(0)).toBe(DECK_SIZE - 1)
-    // 全局依旧一张不多不少
-    assertConservation(state)
   })
 })

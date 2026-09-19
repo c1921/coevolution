@@ -41,11 +41,11 @@ describe('使用次数记录', () => {
       as: 'strike',
       via: 'flicker',
     })
-    submit(state, { kind: 'cancel' })
 
     // 记在【打击】名下，而【防御】的次数不变
     expect(cardUseCount(state, 0, 'strike')).toBe(1)
     expect(cardUseCount(state, 0, 'defend')).toBe(0)
+    expect(state.players[1].threat).toBe(1)
   })
 
   it('「每回合限一次」的技能有独立记录，重复记录不产生重复项', () => {

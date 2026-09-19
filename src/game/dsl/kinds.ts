@@ -39,6 +39,7 @@ export const VALUE_REF_NAMES = [
   'discardCount',
   'energy',
   'energyMax',
+  'threat',
   'turn',
   'damageAmount',
 ] as const
@@ -70,7 +71,8 @@ export type CompareOp = (typeof COMPARE_OPS)[number]
 /** 效果指令种类（即"标准指令集"，无 native 逃生舱） */
 export const EFFECT_KINDS = [
   'log',
-  'damage',
+  'threat',
+  'offset-threat',
   'lose-hp',
   'heal',
   'draw',
@@ -112,6 +114,7 @@ export type CardRef = (typeof CARD_REFS)[number]
 export const CHANNELS = [
   'energy-max',
   'defend-need-against',
+  'threat-per-attack',
   'draw-count',
   'hand-limit',
   'card-cost',
@@ -195,6 +198,7 @@ export const LOG_PLAYER_FIELDS = [
   'maxHp',
   'energy',
   'energyMax',
+  'threat',
   'handCount',
   'energyTag',
 ] as const

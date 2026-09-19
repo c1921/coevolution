@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { submit } from '../engine'
+import { advance, submit } from '../engine'
 import { makeState } from '../testUtils'
-import { assertConservation } from './cardZones'
+import { assertConservation, moveHandToProcessing } from './cardZones'
+import { dealDamage } from './damage'
 
-/** 打一场必死对局：玩家用【打击】击杀 1 点体力的 AI，双方都不响应、不救援 */
+/** 打一场必死对局：对 1 点体力的 AI 造成 1 点伤害，双方都不救援 */
 function killAi(aiHand: { kind: 'defend' | 'heal' | 'strike' }[] = []) {
   const state = makeState({
     playerSpecies: 'tiger',
     aiSpecies: 'bear',
-    playerHand: [{ kind: 'strike' }],
     aiHand,
     aiHp: 1,
   })
-  submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-  submit(state, { kind: 'cancel' })
+  dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+  advance(state)
   submit(state, { kind: 'cancel' })
   submit(state, { kind: 'cancel' })
   return state
@@ -25,6 +25,7 @@ describe('死亡与胜负结算', () => {
 
     expect(state.players[1].alive).toBe(false)
     expect(state.players[1].hand).toHaveLength(0)
+    expect(state.players[1].threat).toBe(0)
     expect(state.result).toEqual({ winner: 0 })
     expect(state.phase).toBe('game-over')
     expect(state.pending).toBeNull()
@@ -33,11 +34,22 @@ describe('死亡与胜负结算', () => {
   })
 
   it('阵亡时处理区残留的牌会进入弃牌堆', () => {
-    const state = killAi([{ kind: 'defend' }, { kind: 'heal' }])
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      aiHand: [{ kind: 'defend' }],
+      aiHp: 1,
+    })
+    const inFlight = state.players[1].hand[0]!
+    moveHandToProcessing(state, 1, inFlight)
+
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
+    submit(state, { kind: 'cancel' })
+    submit(state, { kind: 'cancel' })
+
     expect(state.processing).toHaveLength(0)
-    // 打击牌进攻击方（玩家 0）的弃牌堆，阵亡者的 2 张手牌进他自己的弃牌堆
-    expect(state.players[0].discard.length).toBeGreaterThanOrEqual(1)
-    expect(state.players[1].discard.length).toBeGreaterThanOrEqual(2)
+    expect(state.players[1].discard.map((c) => c.uid)).toContain(inFlight.uid)
     assertConservation(state)
   })
 

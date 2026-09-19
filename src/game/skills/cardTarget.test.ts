@@ -78,10 +78,17 @@ describe('卡牌目标选择入口', () => {
     })
   })
 
-  it('没有 use 变体的牌面返回 null（例如【防御】不能在出牌阶段使用）', () => {
+  it('【防御】有出牌阶段的 use 变体（作用于自己），没有濒死变体', () => {
     const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
-    expect(useVariantOf('defend', 'play')).toBeUndefined()
-    expect(cardTargetChoice(state, 0, 'defend', 'play')).toBeNull()
+    expect(cardTargetChoice(state, 0, 'defend', 'play')).toMatchObject({
+      candidates: [0],
+      fallback: 0,
+      mustChoose: false,
+    })
+
+    // 同一种牌在不同语境下可以完全没有用法
+    expect(useVariantOf('defend', 'dying')).toBeUndefined()
+    expect(cardTargetChoice(state, 0, 'defend', 'dying', 0)).toBeNull()
   })
 
   it('濒死语境用 dying 变体的目标规格，并绑定濒死者', () => {

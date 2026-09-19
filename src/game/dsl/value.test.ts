@@ -82,6 +82,7 @@ describe('修正通道', () => {
   it('通道基准值来自 ruleset', () => {
     expect(baseChannel('energy-max')).toBe(3)
     expect(baseChannel('defend-need-against')).toBe(1)
+    expect(baseChannel('threat-per-attack')).toBe(1)
     expect(baseChannel('attack-range')).toBe(1)
   })
 
@@ -96,16 +97,16 @@ describe('修正通道', () => {
       .toBe(5)
   })
 
-  it('威压：defend-need-against 被 set 覆盖为 2', () => {
+  it('威压：threat-per-attack 被 set 覆盖为 2', () => {
     const lion = envOf('lion', 'tiger').state
     const tiger = envOf('tiger', 'lion').state
-    expect(channelValue(lion, 'defend-need-against', 0)).toBe(2)
-    expect(channelValue(tiger, 'defend-need-against', 0)).toBe(1)
+    expect(channelValue(lion, 'threat-per-attack', 0)).toBe(2)
+    expect(channelValue(tiger, 'threat-per-attack', 0)).toBe(1)
     // 通道读取走 subject 的技能，与谁是回合角色无关
     expect(
       evalValue(
         { state: lion, ctx: baseContext(lion, 0) },
-        { kind: 'channel', channel: 'defend-need-against', of: 'self' },
+        { kind: 'channel', channel: 'threat-per-attack', of: 'self' },
       ),
     ).toBe(2)
   })

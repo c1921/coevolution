@@ -367,7 +367,7 @@ describe('主动技的目标选择', () => {
 })
 
 describe('虎的【猛扑】', () => {
-  it('弃一张手牌，对对手造成不可被【防御】抵消的伤害，且每回合限一次', () => {
+  it('弃一张手牌，令对手获得 2 点威胁，且每回合限一次', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
@@ -378,8 +378,9 @@ describe('虎的【猛扑】', () => {
 
     submit(state, { kind: 'activate', skill: 'pounce', cards: [fodder] })
 
-    // 直接造成伤害：没有对抗窗口，对手无法用【防御】抵消
-    expect(state.players[1].hp).toBe(3)
+    // 走同一条威胁机制：不直接扣血，只叠 2 点威胁
+    expect(state.players[1].threat).toBe(2)
+    expect(state.players[1].hp).toBe(4)
     expect(state.players[0].discard.map((card) => card.uid)).toContain(fodder.uid)
     expect(state.players[0].usedSkillsThisTurn).toContain('pounce')
     expect(state.pending).toMatchObject({ kind: 'play', player: 0 })

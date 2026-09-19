@@ -63,7 +63,7 @@ describe('使用卡牌时的目标', () => {
     expect(state).toEqual(before)
   })
 
-  it('风暴：count=all 不需要指定目标，双方各受 1 点伤害', () => {
+  it('风暴：count=all 不需要指定目标，双方各获得 2 点威胁', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
@@ -79,8 +79,10 @@ describe('使用卡牌时的目标', () => {
     })
 
     submit(state, { kind: 'use-card', card })
-    expect(state.players[0].hp).toBe(3)
-    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].threat).toBe(2)
+    expect(state.players[1].threat).toBe(2)
+    expect(state.players[0].hp).toBe(4)
+    expect(state.players[1].hp).toBe(4)
     expect(state.players[0].energy).toBe(1)
   })
 
@@ -172,7 +174,7 @@ describe('使用卡牌时的目标', () => {
     expect(checkUseCard(state, 0, firstAid, 'first-aid')).toMatchObject({ ok: false })
   })
 
-  it('对称伤害同时归零：按座次推入、按后进先出结算，座位靠后者先阵亡', () => {
+  it('对称威胁由各自在回合结束时结算：先结算的一方先阵亡', () => {
     for (const active of [0, 1] as const) {
       const state = makeState({
         playerSpecies: 'tiger',
@@ -185,12 +187,18 @@ describe('使用卡牌时的目标', () => {
       })
       submit(state, { kind: 'use-card', card: state.players[active].hand[0]! })
 
-      // 双方都没人使用【回复】自救：先完成死亡结算的一方判负
+      // 双方各拿 2 点威胁，但只有回合角色会在本回合结束时兑现
+      expect(state.players[0].threat, `active=${active}`).toBe(2)
+      expect(state.players[1].threat, `active=${active}`).toBe(2)
+
+      submit(state, { kind: 'end-phase' })
+
+      // 双方都没人使用【回复】自救：回合角色先结算，1 点体力扛不住 2 点威胁
       let guard = 0
       while (state.pending && guard++ < 10) submit(state, { kind: 'cancel' })
 
-      expect(state.result, `active=${active}`).toEqual({ winner: 0 })
-      expect(state.players[1].alive, `active=${active}`).toBe(false)
+      expect(state.result, `active=${active}`).toEqual({ winner: active === 0 ? 1 : 0 })
+      expect(state.players[active].alive, `active=${active}`).toBe(false)
       expect(state.phase).toBe('game-over')
     }
   })

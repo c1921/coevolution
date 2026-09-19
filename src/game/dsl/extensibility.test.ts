@@ -91,7 +91,7 @@ describe('扩展性：新增内容不需要改代码', () => {
     })
   })
 
-  it('新增一张攻击牌（自带 2 点伤害）即可端到端生效', () => {
+  it('新增一张攻击牌（自带 3 点威胁）即可端到端生效', () => {
     const synthetic = contentWith([
       {
         path: 'cards/smite.json',
@@ -100,8 +100,8 @@ describe('扩展性：新增内容不需要改代码', () => {
             kind: 'card',
             id: 'smite',
             name: '重击',
-            short: '造成 2 点伤害',
-            text: '消耗 1 点能量：对对方造成 2 点伤害。',
+            short: '令对方获得 3 点威胁',
+            text: '消耗 1 点能量：令对方获得 3 点威胁。',
             cost: { kind: 'const', value: 1 },
             use: [
               {
@@ -111,19 +111,15 @@ describe('扩展性：新增内容不需要改代码', () => {
                   {
                     kind: 'move-cards',
                     from: { zone: 'hand', of: 'self' },
-                    to: { zone: 'processing', of: 'self' },
+                    to: { zone: 'discard', of: 'self' },
                     pick: { mode: 'played' },
                   },
                   { kind: 'record-card-use', of: 'self', cardKind: 'smite' },
                   { kind: 'log', template: '{self} 对 {target} 使用{usedAs}' },
                   {
-                    kind: 'contest',
-                    responder: 'target',
-                    expectedCard: 'defend',
-                    need: { kind: 'const', value: 1 },
-                    onUnmet: [
-                      { kind: 'damage', target: 'target', amount: { kind: 'const', value: 2 } },
-                    ],
+                    kind: 'threat',
+                    target: 'target',
+                    amount: { kind: 'const', value: 3 },
                   },
                 ],
               },
@@ -161,9 +157,10 @@ describe('扩展性：新增内容不需要改代码', () => {
       })
       const smite = state.players[0].hand[0]!
       submit(state, { kind: 'use-card', card: smite })
-      expect(state.pending).toMatchObject({ kind: 'respond', player: 1, expected: 'defend' })
-      submit(state, { kind: 'cancel' })
-      expect(state.players[1].hp).toBe(2)
+      // 新攻击牌走同一条威胁机制：不扣血，只叠威胁
+      expect(state.players[1].threat).toBe(3)
+      expect(state.players[1].hp).toBe(4)
+      expect(state.pending).toEqual({ kind: 'play', player: 0 })
       assertConservation(state)
     })
   })
@@ -253,8 +250,8 @@ describe('扩展性：新增内容不需要改代码', () => {
           kind: 'card',
           id: 'quake',
           name: '震地',
-          short: '对每名角色造成 1 点伤害',
-          text: '消耗 1 点能量：对每名角色造成 1 点伤害。',
+          short: '令每名角色获得 1 点威胁',
+          text: '消耗 1 点能量：令每名角色获得 1 点威胁。',
           cost: { kind: 'const', value: 1 },
           use: [
             {
@@ -271,7 +268,7 @@ describe('扩展性：新增内容不需要改代码', () => {
                 {
                   kind: 'for-each-target',
                   effects: [
-                    { kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } },
+                    { kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } },
                   ],
                 },
               ],
@@ -306,10 +303,10 @@ describe('扩展性：新增内容不需要改代码', () => {
       })
       const card = state.players[0].hand[0]!
 
-      // all 模式不需要指定目标：引擎作用于全部合法候选（双方各 1 点伤害）
+      // all 模式不需要指定目标：引擎作用于全部合法候选（双方各 1 点威胁）
       submit(state, { kind: 'use-card', card })
-      expect(state.players[0].hp).toBe(3)
-      expect(state.players[1].hp).toBe(3)
+      expect(state.players[0].threat).toBe(1)
+      expect(state.players[1].threat).toBe(1)
       assertConservation(state)
     })
   })

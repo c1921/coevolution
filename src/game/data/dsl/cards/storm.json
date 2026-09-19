@@ -5,8 +5,8 @@
   "id": "storm",
   "priority": 50,
   "name": "风暴",
-  "short": "对每名角色造成 1 点伤害",
-  "text": "消耗 2 点能量：对每名角色（包括你自己）造成 1 点伤害，不能被【防御】抵消。",
+  "short": "令每名角色获得 2 点威胁",
+  "text": "消耗 2 点能量：令每名角色（包括你自己）获得 2 点威胁；各人可在自己的回合打出【防御】抵消，并在自己的回合结束时结算剩余威胁。",
   "cost": { "kind": "const", "value": 2 },
   "use": [
     {
@@ -27,8 +27,7 @@
         {
           "kind": "for-each-target",
           "effects": [
-            { "kind": "log", "template": "{target} 受到 1 点伤害" },
-            { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+            { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 2 } }
           ]
         }
       ]

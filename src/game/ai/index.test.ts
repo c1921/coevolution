@@ -107,11 +107,11 @@ describe('AI 选目标', () => {
       kind: 'skill',
       id: 'venom',
       name: '毒牙',
-      text: '出牌阶段：对任意一名角色造成 1 点伤害。',
+      text: '出牌阶段：令任意一名角色获得 1 点威胁。',
       activate: {
         timing: 'play',
         target: { scope: 'any', required: true, alive: true },
-        effects: [{ kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } }],
+        effects: [{ kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } }],
       },
     }
 
@@ -190,6 +190,16 @@ describe('AI 使用卡牌时的目标', () => {
     const action = activationOf(aiDecide(state))
     expect(action).toMatchObject({ skill: 'pounce', target: 1 })
     expect(action.cards).toHaveLength(1)
+  })
+
+  it('身上有威胁时先打出【防御】抵消（威胁会在回合结束时变成伤害）', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerThreat: 2,
+      playerHand: [{ kind: 'strike' }, { kind: 'defend' }, { kind: 'defend' }],
+    })
+    expect(aiDecide(state)).toMatchObject({ kind: 'use-card', as: 'defend' })
   })
 
   it('会伤到自己的牌只在能直接终结对手时使用', () => {

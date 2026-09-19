@@ -2,7 +2,7 @@ import { log, playerLabel } from '../log'
 import { nextInt } from '../rng'
 import { addExtraPhase, skipPhase } from '../rules/phase'
 import { removeFromHand, drawCards, takeFromProcessing } from '../rules/cardZones'
-import { dealDamage } from '../rules/damage'
+import { addThreat, offsetThreat } from '../rules/threat'
 import type { Card, GameState, PlayerIndex, ProcessingCard, TurnPhase } from '../types'
 import { RuleError } from '../util'
 import { evalValue } from './value'
@@ -207,20 +207,26 @@ export function healHp(state: GameState, p: PlayerIndex, amount: number): void {
   player.hp = Math.min(player.hp + amount, player.maxHp)
 }
 
-/** 造成伤害（触发「受到伤害后」技能） */
-export function damageFor(
+/** 造成威胁：叠加到目标身上，由其在自己的回合抵消、在自己的回合结束时兑现为伤害 */
+export function threatFor(
   state: GameState,
   env: EvalEnv,
   target: RoleRef,
   amount: number,
 ): void {
   const victim = requireRole(env, target)
-  dealDamage(state, {
-    source: env.ctx.source ?? env.ctx.self,
-    target: victim,
-    amount,
-    card: env.ctx.usedCard ?? env.ctx.damage?.card ?? null,
-  })
+  // 施加者恒为效果归属者：技能触发里的 source 是"伤害来源"（受害者视角），不是施加者
+  addThreat(state, victim, env.ctx.self, amount)
+}
+
+/** 抵消威胁（【防御】） */
+export function offsetThreatFor(
+  state: GameState,
+  env: EvalEnv,
+  target: RoleRef,
+  amount: number,
+): void {
+  offsetThreat(state, requireRole(env, target), amount)
 }
 
 /** 摸牌（含牌组耗尽洗回） */

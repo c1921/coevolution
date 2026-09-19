@@ -27,6 +27,7 @@ import {
   ensure,
 } from './rules/legality'
 import { buildTurnPlan, finishPhaseBody } from './rules/phase'
+import { assertThreatBounds } from './rules/threat'
 import { advanceTurn, INITIAL_HAND } from './rules/turn'
 import { useVariantOf } from './skills'
 import { newCardUseRecord } from './rules/usage'
@@ -133,6 +134,7 @@ export function createGame(options: CreateGameOptions): GameState {
     discard: [],
     // 能量上限由技能决定（见 rules/energy.ts），因此先置 0 再统一回满
     energy: 0,
+    threat: 0,
     usedCardsThisTurn: newCardUseRecord(),
     usedSkillsThisTurn: [],
   })
@@ -169,6 +171,7 @@ export function createGame(options: CreateGameOptions): GameState {
   advance(state)
   assertConservation(state)
   assertEnergyBounds(state)
+  assertThreatBounds(state)
   return state
 }
 
@@ -190,6 +193,7 @@ export function submit(state: GameState, action: Action): void {
   advance(state)
   assertConservation(state)
   assertEnergyBounds(state)
+  assertThreatBounds(state)
 }
 
 /**

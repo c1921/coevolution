@@ -1,8 +1,8 @@
-import { cardRole, cardSelfHarm, effectsInclude, skillDoc } from '../dsl/registry'
+import { cardRole, cardSelfThreat, effectsInclude, skillDoc } from '../dsl/registry'
 import type { CardRole } from '../dsl/registry'
 import type { Effect } from '../dsl/types'
 import type { UseContext } from '../dsl/kinds'
-import { canPayEnergy, energyCost } from '../rules/energy'
+import { canPayEnergy } from '../rules/energy'
 import {
   activationCostCards,
   activationTargetChoice,
@@ -18,12 +18,6 @@ import { otherPlayer, RuleError } from '../util'
 
 /** AI 思考延迟（毫秒）：只影响界面节奏，引擎与单测不受影响 */
 export const AI_DELAY_MS = 600
-
-/**
- * 预留给防御的能量：手上还有能打出的【防御】（含疾影转化）时，
- * 进攻到只剩这么多能量就收手，留着拦对手下回合的【打击】。
- */
-export const DEFENSE_RESERVE = 1
 
 /* ------------------------------------------------------------------
  * 策略阈值：数值都属于"怎么打"，不属于规则，因此留在 AI 模块里。
@@ -169,9 +163,12 @@ function canTarget(state: GameState, p: PlayerIndex, kind: CardKind, context: Us
   return !choice.multi || choice.candidates.length >= choice.size
 }
 
-/** 自伤牌是否构成终结：对手体力 ≤ 自伤点数，且自己扛得住 */
-function selfHarmFinishes(state: GameState, p: PlayerIndex, kind: CardKind): boolean {
-  const harm = cardSelfHarm(kind)
+/**
+ * 自伤牌是否值得打：对手体力 ≤ 这张牌将造成的威胁，且自己扛得住它带给自己的威胁。
+ * 威胁在各自的回合结束时才兑现，这里只是保守的前置筛子。
+ */
+function selfHarmWorthwhile(state: GameState, p: PlayerIndex, kind: CardKind): boolean {
+  const harm = cardSelfThreat(kind)
   if (harm <= 0) return true
   const self = state.players[p]
   const opponent = state.players[otherPlayer(p)]
@@ -181,7 +178,7 @@ function selfHarmFinishes(state: GameState, p: PlayerIndex, kind: CardKind): boo
 function hasHarm(effects: readonly Effect[]): boolean {
   for (const effect of effects) {
     if (
-      (effect.kind === 'damage' || effect.kind === 'lose-hp' || effect.kind === 'pay-energy') &&
+      (effect.kind === 'threat' || effect.kind === 'lose-hp' || effect.kind === 'pay-energy') &&
       effect.target === 'target'
     ) {
       return true
@@ -272,10 +269,11 @@ function asAction(
 }
 
 /**
- * 出牌阶段决策：自我治疗 → 回血 → 换牌 → 攻击（受能量约束）→ 结束阶段。
+ * 出牌阶段决策：自我治疗 → 抵消威胁 → 回血 → 换牌 → 进攻主动技 → 攻击 → 结束阶段。
  *
  * 每次 submit 只走一步，引擎再把待输入项交回这里，所以「能打几张攻击牌」
- * 由循环自然形成：付得起就打，付不起或要留防御余量就结束出牌阶段。
+ * 由循环自然形成：付得起就打，付不起就结束出牌阶段。
+ * 能量在回合开始时回满，所以留能量过回合没有意义：先清掉自己身上的威胁，再用剩下的能量进攻。
  */
 function decidePlay(state: GameState, p: PlayerIndex): Action {
   const player = state.players[p]
@@ -308,7 +306,11 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     }
   }
 
-  // 2. 体力告急就用【回复】（要付得起能量，且目标要凑得出来）
+  // 2. 抵消威胁：剩余威胁会在自己的回合结束时变成伤害，先用防御类牌抵消
+  const defense = findDefensePlay(state, p)
+  if (defense) return defense
+
+  // 3. 体力告急就用【回复】（要付得起能量，且目标要凑得出来）
   if (player.hp <= HEAL_MAX_HP && player.hp < player.maxHp) {
     const heal = findDirect(state, p, 'recovery', 'use', (option) =>
       !canTarget(state, p, option.as, 'play'),
@@ -316,7 +318,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     if (heal) return asAction(state, p, heal, 'use')
   }
 
-  // 3. 换牌类主动技：体力充裕但手牌太少时换牌
+  // 4. 换牌类主动技：体力充裕但手牌太少时换牌
   const cycle = activations.find((item) => item.role === 'card-cycle')
   if (cycle && player.hp >= CYCLE_MIN_HP && player.hand.length <= CYCLE_MAX_HAND) {
     const target = chooseActivationTarget(state, p, cycle.skill)
@@ -325,7 +327,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
       : { kind: 'activate', skill: cycle.skill, target }
   }
 
-  // 4. 进攻型主动技：弃得起且留出余量时发动（如虎的【猛扑】）
+  // 5. 进攻型主动技：弃得起且留出余量时发动（如虎的【猛扑】）
   const offense = activations.find((item) => item.role === 'offense')
   if (offense) {
     const cost = activationCostCards(state, p, offense.skill)
@@ -341,50 +343,62 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     }
   }
 
-  // 5. 进攻
+  // 6. 进攻
   const attack = bestAttack(state, p)
   if (attack) return attack
 
   return { kind: 'end-phase' }
 }
 
-/** 手上是否还有能打出【防御】的牌（真【防御】或疾影把【打击】当【防御】） */
-function holdsDefense(state: GameState, p: PlayerIndex): boolean {
-  return state.players[p].hand.some((card) =>
-    playOptions(state, p, card).some((option) => cardRole(option.as) === 'defense'),
-  )
+/**
+ * 抵消自己的威胁：有威胁时才行动，优先真【防御】，其次技能转化（如疾影）。
+ * 威胁足以致命时不保留同类牌；否则沿用「同用途牌还有富余」的守卫。
+ */
+function findDefensePlay(state: GameState, p: PlayerIndex): Action | null {
+  const player = state.players[p]
+  if (player.threat <= 0) return null
+
+  const direct = findDirect(state, p, 'defense', 'use')
+  if (direct) return asAction(state, p, direct, 'use')
+
+  const transformed = findTransformed(state, p, 'defense', 'use')
+  if (!transformed) return null
+  if (player.threat < player.hp) {
+    const role = cardRole(transformed.card.kind)
+    const sameRole = player.hand.filter((card) => cardRole(card.kind) === role).length
+    if (sameRole < 2) return null
+  }
+  return asAction(state, p, transformed, 'use')
 }
 
 /**
  * 找出可用于进攻的最佳方案，优先真牌，其次技能转化。
- * 攻击没有次数限制，唯一的门槛是能量：除了这一张的费用，还要留出防御余量。
- * 会伤到自己的牌（对称的多目标牌）只在能直接终结对手时才打。
+ * 攻击没有次数限制，唯一的门槛是能量（能量在回合开始时回满，不需要留余量）。
+ * 会威胁到自己的牌（对称的多目标牌）只在对手会被这一击压垮时才打。
  */
 function bestAttack(state: GameState, p: PlayerIndex): Action | null {
   const player = state.players[p]
   if (!state.players[otherPlayer(p)].alive) return null
 
-  const reserve = holdsDefense(state, p) ? DEFENSE_RESERVE : 0
   const skip = (option: CardOption): boolean =>
-    !canTarget(state, p, option.as, 'play') || !selfHarmFinishes(state, p, option.as)
+    !canTarget(state, p, option.as, 'play') || !selfHarmWorthwhile(state, p, option.as)
 
   const direct = findDirect(state, p, 'attack', 'use', skip)
-  if (direct) {
-    if (player.energy - energyCost(state, p, direct.option.as) < reserve) return null
-    return asAction(state, p, direct, 'use')
-  }
+  if (direct) return asAction(state, p, direct, 'use')
 
   // 转化攻击：只在同用途的牌还有富余时（否则会把唯一的防御牌打光）
   const transformed = findTransformed(state, p, 'attack', 'use', skip)
   if (!transformed) return null
-  if (player.energy - energyCost(state, p, transformed.option.as) < reserve) return null
   const role = cardRole(transformed.card.kind)
   const sameRole = player.hand.filter((card) => cardRole(card.kind) === role).length
   if (sameRole < 2) return null
   return asAction(state, p, transformed, 'use')
 }
 
-/** 响应【打击】：付得起就抵消（优先真【防御】，其次技能转化），否则承受伤害 */
+/**
+ * 响应窗口（对抗机制的占位）：当前没有任何卡牌声明 play 变体，
+ * 因此永远只会走到「放弃响应」。保留这条路径，供后续反制机制复用。
+ */
 function decideRespond(state: GameState, p: PlayerIndex): Action {
   const direct = findDirect(state, p, 'defense', 'respond')
   if (direct) return asAction(state, p, direct, 'respond')

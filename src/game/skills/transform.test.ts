@@ -8,29 +8,23 @@ import { playOptions, useOptions } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 
 describe('转化型技能', () => {
-  it('疾影：【打击】可以当【防御】打出', () => {
+  it('疾影：【打击】可以当【防御】使用，抵消自己的威胁', () => {
     const state = makeState({
       playerSpecies: 'leopard',
       aiSpecies: 'lion',
-      active: 1,
       playerHand: [{ kind: 'strike' }],
-      aiHand: [{ kind: 'strike' }],
+      playerThreat: 1,
     })
 
-    submit(state, { kind: 'use-card', card: state.players[1].hand[0]! })
-    // 威压：需要两张【防御】
-    expect(state.pending).toMatchObject({ kind: 'respond', player: 0, need: 2, got: 0 })
-
     submit(state, {
-      kind: 'play-card',
+      kind: 'use-card',
       card: state.players[0].hand[0]!,
       as: 'defend',
       via: 'flicker',
     })
-    expect(state.pending).toMatchObject({ kind: 'respond', player: 0, need: 2, got: 1 })
 
-    submit(state, { kind: 'cancel' })
-    expect(state.players[0].hp).toBe(3)
+    expect(state.players[0].threat).toBe(0)
+    expect(state.pending).toEqual({ kind: 'play', player: 0 })
     assertConservation(state)
   })
 
@@ -43,11 +37,11 @@ describe('转化型技能', () => {
     const card = state.players[0].hand[0]!
 
     submit(state, { kind: 'use-card', card, as: 'strike', via: 'flicker' })
-    submit(state, { kind: 'cancel' })
 
-    expect(state.players[1].hp).toBe(3)
+    expect(state.players[1].threat).toBe(1)
     // 转化牌按「当作的牌名」计数与付费：这一张算一次【打击】（1 点能量）
     expect(cardUseCount(state, 0, 'strike')).toBe(1)
+    expect(cardUseCount(state, 0, 'defend')).toBe(0)
     assertConservation(state)
   })
 
@@ -91,13 +85,13 @@ describe('转化型技能', () => {
     expect(SPECIES.tiger.skills.map((s) => s.id)).toEqual(['pounce'])
     expect(SPECIES.deer.skills.map((s) => s.id)).toEqual(['mend'])
 
-    // 虎拿着【防御】也只有「打出【防御】」这一种用法，没有当【打击】的转化
+    // 虎拿着【防御】只有「抵消自己的威胁」这一种用法，没有当【打击】的转化
     const tiger = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
       playerHand: [{ kind: 'defend' }],
     })
-    expect(useOptions(tiger, 0, tiger.players[0].hand[0]!)).toHaveLength(0)
+    expect(useOptions(tiger, 0, tiger.players[0].hand[0]!)).toEqual([{ as: 'defend' }])
   })
 })
 
@@ -136,12 +130,11 @@ describe('转化由文档描述', () => {
 
     withRegistry(synthetic, () => {
       expect(useOptions(state, 0, heal)).toEqual([{ as: 'heal' }, { as: 'strike', via: 'roar' }])
-      // 端到端：把【回复】当【打击】使用，对手放弃响应后受到 1 点伤害
+      // 端到端：把【回复】当【打击】使用，对手获得 1 点威胁
       submit(state, { kind: 'use-card', card: heal, as: 'strike', via: 'roar' })
-      expect(state.pending).toMatchObject({ kind: 'respond', player: 1 })
-      submit(state, { kind: 'cancel' })
+      expect(state.players[1].threat).toBe(1)
+      expect(state.players[1].hp).toBe(4)
     })
-    expect(state.players[1].hp).toBe(3)
     assertConservation(state)
   })
 })

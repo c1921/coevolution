@@ -72,6 +72,8 @@ function refValue(env: EvalEnv, ref: ValueRefName, role: RoleRef, depth: number)
       return player.discard.length
     case 'energy':
       return player.energy
+    case 'threat':
+      return player.threat
     case 'energyMax':
       return channelValue(env.state, 'energy-max', p, depth + 1)
     default:

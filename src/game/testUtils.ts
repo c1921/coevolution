@@ -39,6 +39,10 @@ export interface MakeStateOptions {
   playerEnergy?: number
   /** AI（下标 1）的当前能量；缺省为上限 */
   aiEnergy?: number
+  /** 玩家（下标 0）的当前威胁点数；缺省 0 */
+  playerThreat?: number
+  /** AI（下标 1）的当前威胁点数；缺省 0 */
+  aiThreat?: number
   /** 当前回合角色，默认玩家 */
   active?: PlayerIndex
   phase?: Phase
@@ -88,6 +92,7 @@ export function makeState(o: MakeStateOptions): GameState {
     discard: [],
     // 先置 0，构造完 state 后统一回满（上限可能带技能修正）
     energy: 0,
+    threat: 0,
     usedCardsThisTurn: newCardUseRecord(),
     usedSkillsThisTurn: [],
   })
@@ -118,6 +123,8 @@ export function makeState(o: MakeStateOptions): GameState {
   refillEnergy(state, 1)
   if (o.playerEnergy !== undefined) state.players[0].energy = o.playerEnergy
   if (o.aiEnergy !== undefined) state.players[1].energy = o.aiEnergy
+  if (o.playerThreat !== undefined) state.players[0].threat = o.playerThreat
+  if (o.aiThreat !== undefined) state.players[1].threat = o.aiThreat
 
   return state
 }

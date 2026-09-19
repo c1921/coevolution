@@ -5,8 +5,8 @@
   "id": "menace",
   "priority": 70,
   "name": "威压",
-  "text": "你使用【打击】时，目标需依次打出两张【防御】才能抵消。",
+  "text": "你使用【打击】时，目标获得 2 点威胁（而不是 1 点）。",
   "modifiers": [
-    { "channel": "defend-need-against", "op": "set", "value": { "kind": "const", "value": 2 } }
+    { "channel": "threat-per-attack", "op": "set", "value": { "kind": "const", "value": 2 } }
   ]
 }

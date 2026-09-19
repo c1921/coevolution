@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { advance, submit } from '../engine'
 import { makeState } from '../testUtils'
 import { assertConservation } from './cardZones'
-import { dealDamage } from './damage'
+import { dealDamage, loseHp } from './damage'
 
+/**
+ * 伤害帧原语：内容层已经不再直接造成伤害（唯一途径是威胁结算，见 threat.test.ts），
+ * 但「扣减体力 → 受到伤害后技能 → 濒死检查」这条结算链仍由 dealDamage 提供。
+ */
 describe('伤害结算', () => {
   it('造成伤害会扣减体力并写入战报', () => {
     const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
@@ -20,81 +24,43 @@ describe('伤害结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'wolf',
-      playerHand: [{ kind: 'strike' }],
       aiHp: 1,
     })
-    const strike = state.players[0].hand[0]!
 
-    submit(state, { kind: 'use-card', card: strike })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
 
-    // 先询问夺食，此时造成伤害的牌仍在处理区
+    // 先询问狼的【反扑】，此时体力已经扣到 0
     expect(state.players[1].hp).toBe(0)
-    expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'snatch' })
-    expect(state.processing.map((e) => e.card.uid)).toContain(strike.uid)
+    expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'retaliate' })
 
     submit(state, { kind: 'trigger-choice', accept: true })
 
-    // 夺食拿到牌之后才进入濒死
-    expect(state.players[1].hand.map((c) => c.uid)).toContain(strike.uid)
+    // 触发结算完才进入濒死
+    expect(state.players[1].threat).toBe(0)
+    expect(state.players[0].threat).toBe(1)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
     assertConservation(state)
   })
 
-  it('放弃发动夺食则伤害牌进入弃牌堆', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'wolf',
-      playerHand: [{ kind: 'strike' }],
-    })
-    const strike = state.players[0].hand[0]!
+  it('「失去体力」不触发受到伤害后技能，也不压入伤害帧', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'wolf' })
 
-    submit(state, { kind: 'use-card', card: strike })
-    submit(state, { kind: 'cancel' })
-    expect(state.pending).toMatchObject({ kind: 'trigger', skill: 'snatch' })
-
-    submit(state, { kind: 'trigger-choice', accept: false })
+    loseHp(state, 1, 1)
 
     expect(state.players[1].hp).toBe(3)
-    expect(state.processing).toHaveLength(0)
-    // 打击牌归使用者（虎）：进他自己的弃牌堆
-    expect(state.players[0].discard.map((c) => c.uid)).toContain(strike.uid)
-    expect(state.pending).toEqual({ kind: 'play', player: 0 })
-    assertConservation(state)
+    expect(state.stack).toHaveLength(0)
+    expect(state.log.map((e) => e.text).join()).toContain('失去 1 点体力')
   })
 
-  it('狡计获得伤害来源的一张手牌', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'fox',
-      playerHand: [{ kind: 'strike' }, { kind: 'heal' }],
-    })
+  it('「失去体力」降到 0 及以下同样进入濒死', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'wolf', aiHp: 1 })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
-    expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'guile' })
-    expect(state.players[0].hand).toHaveLength(1)
+    loseHp(state, 1, 2)
+    advance(state)
 
-    submit(state, { kind: 'trigger-choice', accept: true })
-
-    expect(state.players[1].hand).toHaveLength(1)
-    expect(state.players[0].hand).toHaveLength(0)
-    expect(state.players[1].hp).toBe(2)
-    assertConservation(state)
-  })
-
-  it('伤害来源没有手牌时不会询问狡计', () => {
-    const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'fox',
-      playerHand: [{ kind: 'strike' }],
-    })
-
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
-
-    expect(state.players[1].hp).toBe(2)
-    expect(state.pending).toEqual({ kind: 'play', player: 0 })
+    expect(state.players[1].hp).toBe(-1)
+    expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
     assertConservation(state)
   })
 })

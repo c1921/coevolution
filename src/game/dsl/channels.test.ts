@@ -11,7 +11,7 @@ import {
   DRAW_PER_TURN,
   FIRST_TURN_DRAW,
 } from '../rules/turn'
-import { defendNeedAgainst } from '../skills'
+import { threatPerAttack } from '../skills'
 import { makeState } from '../testUtils'
 import { contentWith } from './fixtures'
 import { CHANNELS } from './kinds'
@@ -62,6 +62,52 @@ function registryWith(channel: Channel, op: ModifierOp, value: number) {
   ])
 }
 
+/**
+ * 对抗通道（defend-need-against）的探针：当前没有任何内容使用对抗机制，
+ * 因此用一份带 contest 指令的合成主动技来驱动它，保证「声明的通道都被消费」这条守卫不空转。
+ */
+function registryWithContest(channel: Channel, op: ModifierOp, value: number) {
+  return contentWith([
+    {
+      path: 'skills/probe.json',
+      value: {
+        dslVersion: 1,
+        kind: 'skill',
+        id: PROBE_SKILL,
+        name: '探针',
+        text: '测试用：一条通道修正 + 一个对抗指令。',
+        modifiers: [{ channel, op, value: { kind: 'const', value } }],
+        activate: {
+          timing: 'play',
+          effects: [
+            {
+              kind: 'contest',
+              responder: 'opponent',
+              expectedCard: 'defend',
+              need: { kind: 'channel', channel, of: 'self' },
+              onUnmet: [{ kind: 'log', template: '{target} 未抵消' }],
+            },
+          ],
+        },
+      },
+    },
+    {
+      path: 'species/tiger.json',
+      value: {
+        dslVersion: 1,
+        kind: 'species',
+        id: 'tiger',
+        priority: 10,
+        name: '虎',
+        emoji: '🐯',
+        maxHp: 4,
+        skills: [PROBE_SKILL],
+        deck: 'basic',
+      },
+    },
+  ])
+}
+
 /** 每条通道一个探针：注入修正 → 断言引擎行为真的变了 */
 const PROBES: Record<Channel, () => void> = {
   'energy-max': () => {
@@ -72,17 +118,26 @@ const PROBES: Record<Channel, () => void> = {
   },
 
   'defend-need-against': () => {
-    withRegistry(registryWith('defend-need-against', 'set', 3), () => {
+    withRegistry(registryWithContest('defend-need-against', 'set', 3), () => {
+      const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+
+      submit(state, { kind: 'activate', skill: PROBE_SKILL })
+      expect(state.pending).toMatchObject({ kind: 'respond', player: 1, need: 3 })
+    })
+  },
+
+  'threat-per-attack': () => {
+    withRegistry(registryWith('threat-per-attack', 'set', 3), () => {
       const state = makeState({
         playerSpecies: 'tiger',
         aiSpecies: 'bear',
         playerHand: [{ kind: 'strike' }],
-        aiHand: [{ kind: 'defend' }, { kind: 'defend' }, { kind: 'defend' }],
       })
-      expect(defendNeedAgainst(state, 0)).toBe(3)
+      expect(threatPerAttack(state, 0)).toBe(3)
 
+      // 观察行为：【打击】按通道值给对手叠加威胁
       submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
-      expect(state.pending).toMatchObject({ kind: 'respond', player: 1, need: 3 })
+      expect(state.players[1].threat).toBe(3)
     })
   },
 

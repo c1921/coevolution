@@ -7,6 +7,7 @@ import { otherPlayer } from '../util'
 import { drawCards } from './cardZones'
 import { energyTag, refillEnergy } from './energy'
 import { buildTurnPlan, finishPhaseBody, takeNextPhase } from './phase'
+import { resolveThreatAtTurnEnd } from './threat'
 import { resetTurnUsage } from './usage'
 
 /**
@@ -163,6 +164,12 @@ function stepTurnTiming(
       state.phaseStage = 'end'
       // 回合开始时：消耗战等规则效果与时机类技能；回合结束时：本作暂无
       run(state, { at: timing })
+      // 威胁结算是这个回合的最后一步（规则效果之后）：剩余威胁转为等量伤害。
+      // 伤害帧被压入结算栈后由引擎先处理完，再进入本时机的 'end' 子步骤切换回合，
+      // 因此结算期间的战报仍属于本回合。
+      if (timing === 'turn-end') {
+        resolveThreatAtTurnEnd(state, state.active)
+      }
       break
     }
 

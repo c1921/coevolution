@@ -5,9 +5,9 @@
   "id": "flicker",
   "priority": 50,
   "name": "疾影",
-  "text": "你可以将【打击】当【防御】、【防御】当【打击】使用或打出。",
+  "text": "你可以将【打击】当【防御】、【防御】当【打击】使用。",
   "transforms": [
     { "from": "defend", "to": "strike", "contexts": ["use"] },
-    { "from": "strike", "to": "defend", "contexts": ["play"] }
+    { "from": "strike", "to": "defend", "contexts": ["use"] }
   ]
 }

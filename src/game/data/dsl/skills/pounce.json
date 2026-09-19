@@ -5,7 +5,7 @@
   "id": "pounce",
   "priority": 15,
   "name": "猛扑",
-  "text": "出牌阶段限一次：弃置一张手牌，对对方造成 1 点伤害（不能被【防御】抵消）。",
+  "text": "出牌阶段限一次：弃置一张手牌，令对方获得 2 点威胁。",
   "activate": {
     "timing": "play",
     "oncePerTurn": true,
@@ -23,7 +23,7 @@
         "kind": "log",
         "template": "{self} 发动【猛扑】，弃置{cost}，扑向 {target}"
       },
-      { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+      { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 2 } }
     ],
     "ui": { "buttonLabel": "发动【猛扑】（先点选一张手牌）" }
   }

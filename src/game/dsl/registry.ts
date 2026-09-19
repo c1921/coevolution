@@ -214,8 +214,8 @@ export function registryToDocs(): { path: string; value: unknown }[] {
 /**
  * 牌面角色分类（由文档结构派生）：AI 与界面用它理解"这张牌是干什么的"，
  * 因此新增牌种不需要在 AI/界面里加分支。
- *  - attack  含 contest 或 damage 效果（打击）
- *  - defense 有 play 变体（响应别人的对抗）
+ *  - attack  含 threat 效果（叠加威胁）
+ *  - defense 含 offset-threat 效果（抵消威胁），或声明了 play 变体（占位对抗机制）
  *  - recovery 含 heal 效果（回复）
  *  - utility 其余
  */
@@ -242,7 +242,8 @@ export function cardRole(kind: string): CardRole {
   const doc = cardDoc(kind)
   if (doc.play) return 'defense'
   const effects = (doc.use ?? []).flatMap((variant) => variant.effects)
-  if (effectsInclude(effects, 'contest') || effectsInclude(effects, 'damage')) return 'attack'
+  if (effectsInclude(effects, 'threat')) return 'attack'
+  if (effectsInclude(effects, 'offset-threat')) return 'defense'
   if (effectsInclude(effects, 'heal')) return 'recovery'
   return 'utility'
 }
@@ -259,26 +260,26 @@ function constOr(value: Value, fallback: number): number {
   return fallback
 }
 
-/** 递归累计效果对自己造成的伤害（用于 AI 判断"这张牌会不会伤到自己"） */
-function selfHarmOf(effects: readonly Effect[] | undefined, mayHitSelfTarget: boolean): number {
+/** 递归累计效果对自己造成的威胁（用于 AI 判断"这张牌会不会伤到自己"） */
+function selfThreatOf(effects: readonly Effect[] | undefined, mayHitSelfTarget: boolean): number {
   let total = 0
   for (const effect of effects ?? []) {
-    if (effect.kind === 'damage' || effect.kind === 'lose-hp') {
+    if (effect.kind === 'threat' || effect.kind === 'lose-hp') {
       if (effect.target === 'self') total += constOr(effect.amount, 1)
       else if (effect.target === 'target' && mayHitSelfTarget) total += constOr(effect.amount, 1)
     }
     if (effect.kind === 'for-each-target') {
-      total += selfHarmOf(effect.effects, mayHitSelfTarget)
+      total += selfThreatOf(effect.effects, mayHitSelfTarget)
     }
     if (effect.kind === 'if') {
-      const thenHarm = selfHarmOf(effect.then, mayHitSelfTarget)
-      const elseHarm = selfHarmOf(effect.else, mayHitSelfTarget)
+      const thenHarm = selfThreatOf(effect.then, mayHitSelfTarget)
+      const elseHarm = selfThreatOf(effect.else, mayHitSelfTarget)
       total += Math.max(thenHarm, elseHarm)
     }
     if (effect.kind === 'contest') {
       total += Math.max(
-        selfHarmOf(effect.onMet, mayHitSelfTarget),
-        selfHarmOf(effect.onUnmet, mayHitSelfTarget),
+        selfThreatOf(effect.onMet, mayHitSelfTarget),
+        selfThreatOf(effect.onUnmet, mayHitSelfTarget),
       )
     }
   }
@@ -286,14 +287,14 @@ function selfHarmOf(effects: readonly Effect[] | undefined, mayHitSelfTarget: bo
 }
 
 /**
- * 卡牌对自己造成的伤害点数（由文档结构派生，AI 用它决定"这张牌能不能打"）。
- * 0 表示不会伤到自己。对称伤害（如多目标牌）在 1v1 里必然包含自己，故计入。
+ * 卡牌对自己造成的威胁点数（由文档结构派生，AI 用它决定"这张牌能不能打"）。
+ * 0 表示不会伤到自己。对称威胁（如多目标牌）在 1v1 里必然包含自己，故计入。
  */
-export function cardSelfHarm(kind: string): number {
+export function cardSelfThreat(kind: string): number {
   const doc = cardDoc(kind)
   let harm = 0
   for (const variant of doc.use ?? []) {
-    harm = Math.max(harm, selfHarmOf(variant.effects, mayTargetSelf(variant.target)))
+    harm = Math.max(harm, selfThreatOf(variant.effects, mayTargetSelf(variant.target)))
   }
   return harm
 }

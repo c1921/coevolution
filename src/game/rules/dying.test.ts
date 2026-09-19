@@ -9,13 +9,12 @@ describe('濒死结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike' }],
       aiHand: [{ kind: 'heal' }],
       aiHp: 1,
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
 
     submit(state, { kind: 'use-card', card: state.players[1].hand[0]!, as: 'heal' })
@@ -57,12 +56,11 @@ describe('濒死结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike' }],
       aiHp: 1,
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
 
     submit(state, { kind: 'cancel' })
@@ -79,12 +77,12 @@ describe('濒死结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike' }, { kind: 'heal' }],
+      playerHand: [{ kind: 'heal' }],
       aiHp: 1,
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
     submit(state, { kind: 'cancel' })
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 1 })
 
@@ -101,12 +99,12 @@ describe('濒死结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
+      playerHand: [{ kind: 'strike' }],
       aiHp: 1,
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
     submit(state, { kind: 'cancel' })
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 1 })
 
@@ -125,11 +123,10 @@ describe('濒死结算', () => {
       playerHand: [{ kind: 'heal' }],
       // 差 1 点就付不起【回复】的 2 点能量
       playerEnergy: 1,
-      aiHand: [{ kind: 'strike' }],
     })
 
-    submit(state, { kind: 'use-card', card: state.players[1].hand[0]!, as: 'strike' })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 1, target: 0, amount: 1, card: null })
+    advance(state)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
 
     expect(() =>
@@ -147,16 +144,15 @@ describe('濒死结算', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike' }, { kind: 'heal' }],
-      // 打出这次【打击】之后能量见底，救不了人
-      playerEnergy: 1,
+      playerHand: [{ kind: 'heal' }],
+      // 能量见底，救不了人
+      playerEnergy: 0,
       aiHp: 1,
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
-    submit(state, { kind: 'cancel' })
+    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+    advance(state)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
-    expect(state.players[0].energy).toBe(0)
 
     submit(state, { kind: 'cancel' })
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 1 })

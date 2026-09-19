@@ -7,6 +7,7 @@ import {
   errorMessage,
   humanPending,
   humanSkills,
+  humanThreat,
   legalOptions,
   optionText,
   selectedCards,
@@ -109,6 +110,13 @@ function skillButtonText(skill: SkillId): string {
 
         <span v-if="humanPending.kind !== 'trigger'" class="text-sm text-ink-500">
           {{ selectedCards.length === 0 ? '（先点选一张手牌）' : '' }}
+        </span>
+        <!-- 威胁会在自己的回合结束时结算为伤害：出牌阶段给一句可直接照做的提示 -->
+        <span
+          v-if="humanPending.kind === 'play' && humanThreat > 0"
+          class="text-sm text-ember-400"
+        >
+          你身上有 {{ humanThreat }} 点威胁：回合结束时结算为伤害，可打出【防御】抵消
         </span>
       </template>
 

@@ -457,11 +457,11 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
 
   it('多目标效果的 target 引用必须写在 for-each-target 内', () => {
     expectSingle(
-      multiTargetStrike([{ kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } }]),
+      multiTargetStrike([{ kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } }]),
       'bad-combination',
     )
     // 日志占位符、move-cards 的牌区归属同样受限
-    expectSingle(multiTargetStrike([{ kind: 'log', template: '{target} 受到伤害' }]), 'bad-combination')
+    expectSingle(multiTargetStrike([{ kind: 'log', template: '{target} 获得威胁' }]), 'bad-combination')
 
     // 包进 for-each-target 后完全没有问题
     expect(
@@ -470,8 +470,8 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
           {
             kind: 'for-each-target',
             effects: [
-              { kind: 'log', template: '{target} 受到伤害' },
-              { kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } },
+              { kind: 'log', template: '{target} 获得威胁' },
+              { kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } },
             ],
           },
         ]),

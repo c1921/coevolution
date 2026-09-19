@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeState } from '../testUtils'
+import { moveHandToProcessing } from '../rules/cardZones'
 import { baseDocs } from './fixtures'
 import { createRegistry, withRegistry } from './registry'
 import type { DamageCtx } from '../types'
@@ -94,7 +95,11 @@ describe('时机派发', () => {
   })
 
   it('技能触发：按 when 条件收集，可选发动只入队不执行', () => {
-    const state = makeState({ playerSpecies: 'wolf', aiSpecies: 'bear', playerHand: [{ kind: 'strike' }] })
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'strike' }],
+    })
     const card = state.players[0].hand[0]!
     const damage: DamageCtx = {
       source: 1,
@@ -102,58 +107,59 @@ describe('时机派发', () => {
       amount: 1,
       card: { as: 'strike', source: card },
     }
+    const synthetic = registryWithTrigger({
+      on: { at: 'after-damage' },
+      optional: true,
+      when: [{ kind: 'in-processing', card: 'event-card' }],
+      effects: [{ kind: 'log', template: '{self} 的伤害后触发' }],
+    })
 
-    // 造成伤害的牌还在手牌（不在处理区）→ 条件不成立
-    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([])
+    withRegistry(synthetic, () => {
+      // 造成伤害的牌还在手牌（不在处理区）→ 条件不成立
+      expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([])
 
-    state.processing.push({ card, owner: 1 })
-    const refs = collectTriggers(state, { at: 'after-damage' }, 0, { damage })
-    expect(refs).toEqual([{ owner: 0, skill: 'snatch', optional: true }])
+      moveHandToProcessing(state, 0, card)
+      const refs = collectTriggers(state, { at: 'after-damage' }, 0, { damage })
+      expect(refs).toEqual([{ owner: 0, skill: 'roar', optional: true }])
 
-    // emitTiming 只把可选触发返回给调用方，不立即执行
-    const pending = emitTiming(state, { at: 'after-damage' }, 0, { damage })
-    expect(pending).toEqual([{ owner: 0, skill: 'snatch', optional: true }])
-    expect(state.processing).toHaveLength(1)
+      // emitTiming 只把可选触发返回给调用方，不立即执行
+      const pending = emitTiming(state, { at: 'after-damage' }, 0, { damage })
+      expect(pending).toEqual([{ owner: 0, skill: 'roar', optional: true }])
+      expect(state.processing).toHaveLength(1)
+    })
   })
 
-  it('技能触发：狡计在伤害来源没有手牌时不收集', () => {
+  it('技能触发：when 不成立时不收集（【反扑】要求伤害来源存活）', () => {
+    const state = makeState({ playerSpecies: 'wolf', aiSpecies: 'bear' })
+    const damage: DamageCtx = { source: 1, target: 0, amount: 1, card: null }
+
+    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([
+      { owner: 0, skill: 'retaliate', optional: true },
+    ])
+
+    state.players[1].alive = false
+    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([])
+  })
+
+  it('runTrigger：执行【反扑】，令伤害来源获得 1 点威胁', () => {
+    const state = makeState({ playerSpecies: 'wolf', aiSpecies: 'bear' })
+    const damage: DamageCtx = { source: 1, target: 0, amount: 1, card: null }
+
+    runTrigger(state, { owner: 0, skill: 'retaliate', optional: true }, { damage })
+
+    expect(state.players[1].threat).toBe(1)
+    expect(state.log.map((entry) => entry.text).join('\n')).toContain('发动【反扑】')
+  })
+
+  it('runTrigger：执行【狡黠】，摸一张牌', () => {
     const state = makeState({ playerSpecies: 'fox', aiSpecies: 'bear' })
     const damage: DamageCtx = { source: 1, target: 0, amount: 1, card: null }
-    // 对手手牌为空（makeState 默认不发给 AI 手牌）
-    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([])
 
-    state.players[1].hand.push(state.players[1].deck[0]!)
-    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([
-      { owner: 0, skill: 'guile', optional: true },
-    ])
-  })
+    runTrigger(state, { owner: 0, skill: 'cunning', optional: true }, { damage })
 
-  it('runTrigger：执行夺食，把处理区的伤害牌取回手牌', () => {
-    const state = makeState({ playerSpecies: 'wolf', aiSpecies: 'bear' })
-    const card = state.players[1].deck.find((item) => item.kind === 'strike')!
-    state.processing.push({ card, owner: 1 })
-    const damage: DamageCtx = {
-      source: 1,
-      target: 0,
-      amount: 1,
-      card: { as: 'strike', source: card },
-    }
-
-    runTrigger(state, { owner: 0, skill: 'snatch', optional: true }, { damage })
-    expect(state.processing).toHaveLength(0)
-    expect(state.players[0].hand.map((item) => item.uid)).toContain(card.uid)
-    const text = state.log.map((entry) => entry.text).join('\n')
-    expect(text).toContain('发动【夺食】')
-    expect(text).toContain('【打击】')
-  })
-
-  it('runTrigger：狡计随机取走伤害来源的一张手牌', () => {
-    const state = makeState({ playerSpecies: 'fox', aiSpecies: 'bear', aiHand: [{ kind: 'heal' }] })
-    const damage: DamageCtx = { source: 1, target: 0, amount: 1, card: null }
-    runTrigger(state, { owner: 0, skill: 'guile', optional: true }, { damage })
     expect(state.players[0].hand).toHaveLength(1)
     expect(state.players[1].hand).toHaveLength(0)
-    expect(state.log.map((entry) => entry.text).join('\n')).toContain('发动【狡计】')
+    expect(state.log.map((entry) => entry.text).join('\n')).toContain('发动【狡黠】')
   })
 
   it('不可选的技能触发在 emitTiming 中立即执行', () => {

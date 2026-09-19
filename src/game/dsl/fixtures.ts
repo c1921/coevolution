@@ -25,6 +25,7 @@ export function baseDocs(): RawFixtureDoc[] {
         channels: {
           'energy-max': 3,
           'defend-need-against': 1,
+          'threat-per-attack': 1,
           'draw-count': 2,
           'hand-limit': 0,
           'card-cost': 0,

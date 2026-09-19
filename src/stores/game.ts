@@ -160,6 +160,8 @@ export const humanEnergy = computed(() => gameState.value?.players[HUMAN].energy
 export const humanEnergyMax = computed(() =>
   gameState.value ? energyMax(gameState.value, HUMAN) : 0,
 )
+/** 人类当前身上的威胁点数（回合结束时结算为等量伤害） */
+export const humanThreat = computed(() => gameState.value?.players[HUMAN].threat ?? 0)
 export const opponentEnergyMax = computed(() =>
   gameState.value ? energyMax(gameState.value, AI_PLAYER) : 0,
 )
@@ -294,8 +296,13 @@ export const pendingHint = computed(() => {
   if (!state || !pending) return ''
 
   switch (pending.kind) {
-    case 'play':
-      return `你的出牌阶段（能量 ${humanEnergy.value}/${humanEnergyMax.value}）：点选一张手牌再选择用法，或直接结束出牌阶段`
+    case 'play': {
+      const threat =
+        humanThreat.value > 0
+          ? ` · 你身上有 ${humanThreat.value} 点威胁（回合结束时结算为伤害，可用【防御】抵消）`
+          : ''
+      return `你的出牌阶段（能量 ${humanEnergy.value}/${humanEnergyMax.value}）：点选一张手牌再选择用法，或直接结束出牌阶段${threat}`
+    }
     case 'respond': {
       const need = pending.need - pending.got
       const opener = CARD_NAME[pending.card?.as ?? pending.expected]

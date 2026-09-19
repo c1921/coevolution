@@ -55,14 +55,24 @@ describe('效果解释器 · 基础指令', () => {
     expect(state.players[1].hp).toBe(state.players[1].maxHp)
   })
 
-  it('damage：造成伤害并压入伤害帧（触发受到伤害后技能）', () => {
-    const { state, ctx } = scenario('tiger', 'wolf')
+  it('threat / offset-threat：叠加与抵消威胁，都不直接扣血', () => {
+    const { state, ctx } = scenario('tiger', 'bear')
     ctx.target = 1
     ctx.source = 0
-    runEffects(state, [{ kind: 'damage', target: 'target', amount: CONST(1) }], ctx)
-    expect(state.players[1].hp).toBe(3)
-    expect(state.lastDamage).toMatchObject({ source: 0, target: 1, amount: 1 })
-    expect(state.stack[state.stack.length - 1]).toMatchObject({ kind: 'damage' })
+
+    runEffects(state, [{ kind: 'threat', target: 'target', amount: CONST(2) }], ctx)
+    expect(state.players[1].threat).toBe(2)
+    expect(state.players[1].hp).toBe(4)
+    // 威胁不是伤害：不压伤害帧、不写 lastDamage
+    expect(state.stack).toHaveLength(0)
+    expect(state.lastDamage).toBeNull()
+
+    runEffects(state, [{ kind: 'offset-threat', target: 'target', amount: CONST(1) }], ctx)
+    expect(state.players[1].threat).toBe(1)
+
+    // 抵消不会把威胁压到 0 以下
+    runEffects(state, [{ kind: 'offset-threat', target: 'target', amount: CONST(9) }], ctx)
+    expect(state.players[1].threat).toBe(0)
   })
 
   it('draw：摸牌并记战报，count 为延迟表达式也支持', () => {
@@ -251,8 +261,8 @@ describe('效果解释器 · move-cards', () => {
 })
 
 describe('效果解释器 · 帧与延迟', () => {
-  it('contest：按通道读取 need 并等待响应', () => {
-    const { state, ctx } = scenario('lion', 'bear', { playerHand: [{ kind: 'strike' }] })
+  it('contest：按通道读取 need 并等待响应（占位机制，当前无内容使用）', () => {
+    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [{ kind: 'strike' }] })
     const card = state.players[0].hand[0]!
     ctx.usedUid = card.uid
     ctx.usedCard = { as: 'strike', source: card }
@@ -266,20 +276,20 @@ describe('效果解释器 · 帧与延迟', () => {
           responder: 'target',
           expectedCard: 'defend',
           need: { kind: 'channel', channel: 'defend-need-against', of: 'self' },
-          onUnmet: [{ kind: 'damage', target: 'target', amount: CONST(1) }],
+          onUnmet: [{ kind: 'threat', target: 'target', amount: CONST(1) }],
         },
       ],
       ctx,
     )
     expect(state.stack[0]).toMatchObject({
       kind: 'contest',
-      need: 2,
+      need: 1,
       expected: 'defend',
       openedBy: 'strike',
     })
 
     advance(state)
-    expect(state.pending).toMatchObject({ kind: 'respond', player: 1, expected: 'defend', need: 2 })
+    expect(state.pending).toMatchObject({ kind: 'respond', player: 1, expected: 'defend', need: 1 })
   })
 
   it('contest-contribute：必须有对抗帧，之后累加抵消进度', () => {

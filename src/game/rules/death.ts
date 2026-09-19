@@ -12,6 +12,8 @@ export function killPlayer(state: GameState, p: PlayerIndex): void {
 
   player.alive = false
   if (player.hp > 0) player.hp = 0
+  // 阵亡者的未结算威胁随死亡消失（对局随即终局，不会再有属于他的回合结束时）
+  player.threat = 0
   log(state, `${playerLabel(state, p)} 阵亡`)
 
   if (player.hand.length > 0) {

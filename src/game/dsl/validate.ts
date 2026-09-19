@@ -485,7 +485,8 @@ function checkCondition(
 
 const EFFECT_KEYS: Record<string, string[]> = {
   log: ['kind', 'template', 'vars'],
-  damage: ['kind', 'target', 'amount'],
+  threat: ['kind', 'target', 'amount'],
+  'offset-threat': ['kind', 'target', 'amount'],
   'lose-hp': ['kind', 'target', 'amount'],
   heal: ['kind', 'target', 'amount'],
   draw: ['kind', 'target', 'count'],
@@ -596,7 +597,8 @@ function checkEffect(
         }
       }
       break
-    case 'damage':
+    case 'threat':
+    case 'offset-threat':
     case 'lose-hp':
     case 'heal':
       checkRole(obj, 'target', roles, path, issues)
@@ -886,7 +888,8 @@ function effectRefsTarget(effect: unknown): boolean {
   const obj = asObj(effect)
   if (!obj) return false
   switch (obj.kind) {
-    case 'damage':
+    case 'threat':
+    case 'offset-threat':
     case 'lose-hp':
     case 'heal':
     case 'draw':

@@ -57,7 +57,7 @@ describe('能量系统', () => {
     assertEnergyBounds(state)
   })
 
-  it('使用【打击】支付 1 点，响应打出【防御】也支付 1 点', () => {
+  it('使用【打击】支付 1 点，自己回合打出【防御】抵消威胁也支付 1 点', () => {
     const state = makeState({
       playerSpecies: 'tiger',
       aiSpecies: 'bear',
@@ -65,11 +65,17 @@ describe('能量系统', () => {
       aiHand: [{ kind: 'defend' }],
     })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
+    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
     expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - 1)
+    expect(state.players[1].threat).toBe(1)
 
-    submit(state, { kind: 'play-card', card: state.players[1].hand[0]!, as: 'defend' })
+    // 交到对手回合：他在自己的出牌阶段支付 1 点能量抵消威胁
+    submit(state, { kind: 'end-phase' })
+    expect(state.pending).toMatchObject({ kind: 'play', player: 1 })
+    submit(state, { kind: 'use-card', card: state.players[1].hand[0]! })
+
     expect(state.players[1].energy).toBe(energyMax(state, 1) - 1)
+    expect(state.players[1].threat).toBe(0)
     expect(state.players[1].hp).toBe(4)
   })
 

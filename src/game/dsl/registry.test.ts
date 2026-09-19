@@ -3,7 +3,7 @@ import {
   DslLoadError,
   cardIds,
   cardRole,
-  cardSelfHarm,
+  cardSelfThreat,
   createRegistry,
   registry,
   skillDoc,
@@ -25,6 +25,7 @@ export function baseDocs(): { path: string; value: unknown }[] {
         channels: {
           'energy-max': 3,
           'defend-need-against': 1,
+          'threat-per-attack': 1,
           'draw-count': 2,
           'hand-limit': 0,
           'card-cost': 0,
@@ -150,24 +151,25 @@ describe('内置内容文档', () => {
     expect(skillsOf('tiger').map((skill) => skill.id)).toEqual(['pounce'])
     expect(skillsOf('deer').map((skill) => skill.id)).toEqual(['mend'])
     expect(skillDoc('menace').modifiers?.[0]).toMatchObject({
-      channel: 'defend-need-against',
+      channel: 'threat-per-attack',
       op: 'set',
     })
-    expect(speciesDoc('wolf').skills).toEqual(['snatch'])
+    expect(speciesDoc('wolf').skills).toEqual(['retaliate'])
+    expect(speciesDoc('fox').skills).toEqual(['cunning'])
   })
 
-  it('牌面用途与自伤点数由文档结构派生（含 for-each-target 内的效果）', () => {
+  it('牌面用途与自伤威胁由文档结构派生（含 for-each-target 内的效果）', () => {
     expect(cardRole('strike')).toBe('attack')
     expect(cardRole('defend')).toBe('defense')
     expect(cardRole('heal')).toBe('recovery')
     expect(cardRole('first-aid')).toBe('recovery')
-    // 伤害写在 for-each-target 里也要被识别为攻击牌
+    // 威胁写在 for-each-target 里也要被识别为攻击牌
     expect(cardRole('storm')).toBe('attack')
 
-    // 对称伤害在 1v1 里必然打到自己，因此自伤点数为 1
-    expect(cardSelfHarm('storm')).toBe(1)
-    expect(cardSelfHarm('strike')).toBe(0)
-    expect(cardSelfHarm('first-aid')).toBe(0)
+    // 对称威胁在 1v1 里必然打到自己，因此自伤威胁为 2
+    expect(cardSelfThreat('storm')).toBe(2)
+    expect(cardSelfThreat('strike')).toBe(0)
+    expect(cardSelfThreat('first-aid')).toBe(0)
   })
 })
 

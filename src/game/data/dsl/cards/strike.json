@@ -5,8 +5,8 @@
   "id": "strike",
   "priority": 10,
   "name": "打击",
-  "short": "造成 1 点伤害",
-  "text": "消耗 1 点能量：对对方造成 1 点伤害；其可打出【防御】抵消。",
+  "short": "令对方获得 1 点威胁",
+  "text": "消耗 1 点能量：令对方获得 1 点威胁。对方可在自己的出牌阶段打出【防御】抵消；其回合结束时，剩余威胁结算为等量伤害。",
   "cost": { "kind": "const", "value": 1 },
   "use": [
     {
@@ -16,7 +16,7 @@
         {
           "kind": "move-cards",
           "from": { "zone": "hand", "of": "self" },
-          "to": { "zone": "processing", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
           "pick": { "mode": "played" }
         },
         { "kind": "record-card-use", "of": "self", "cardKind": "strike" },
@@ -34,13 +34,9 @@
           ]
         },
         {
-          "kind": "contest",
-          "responder": "target",
-          "expectedCard": "defend",
-          "need": { "kind": "channel", "channel": "defend-need-against", "of": "self" },
-          "onUnmet": [
-            { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
-          ]
+          "kind": "threat",
+          "target": "target",
+          "amount": { "kind": "channel", "channel": "threat-per-attack", "of": "self" }
         }
       ]
     }

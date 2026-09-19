@@ -3,7 +3,7 @@ import { hasSkill, SPECIES, SPECIES_IDS } from '../data/species'
 import { baseDocs } from '../dsl/fixtures'
 import { createRegistry, registry, skillDoc, withRegistry } from '../dsl/registry'
 import { BASE_ENERGY_MAX, energyMax } from '../rules/energy'
-import { defendNeedAgainst, energyMaxBonus } from '../skills'
+import { energyMaxBonus, threatPerAttack } from '../skills'
 import { makeState } from '../testUtils'
 
 describe('常驻型技能', () => {
@@ -17,12 +17,12 @@ describe('常驻型技能', () => {
     expect(energyMax(tiger, 0)).toBe(BASE_ENERGY_MAX)
   })
 
-  it('威压：使目标需要两张【防御】才能抵消', () => {
+  it('威压：使每张【打击】造成 2 点威胁', () => {
     const lion = makeState({ playerSpecies: 'lion', aiSpecies: 'tiger' })
     const tiger = makeState({ playerSpecies: 'tiger', aiSpecies: 'lion' })
 
-    expect(defendNeedAgainst(lion, 0)).toBe(2)
-    expect(defendNeedAgainst(tiger, 0)).toBe(1)
+    expect(threatPerAttack(lion, 0)).toBe(2)
+    expect(threatPerAttack(tiger, 0)).toBe(1)
   })
 
   it('修正通道：换一份技能文档即可改变能量上限，引擎代码不用动', () => {

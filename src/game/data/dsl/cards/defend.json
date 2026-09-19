@@ -5,30 +5,44 @@
   "id": "defend",
   "priority": 20,
   "name": "防御",
-  "short": "抵消一次【打击】",
-  "text": "消耗 1 点能量：抵消一次【打击】。只能在响应时打出。",
+  "short": "抵消自己 1 点威胁",
+  "text": "消耗 1 点能量：抵消自己 1 点威胁（自己至少有 1 点威胁时才能使用）。",
   "cost": { "kind": "const", "value": 1 },
-  "play": {
-    "respondsTo": "strike",
-    "effects": [
-      {
-        "kind": "move-cards",
-        "from": { "zone": "hand", "of": "self" },
-        "to": { "zone": "processing", "of": "self" },
-        "pick": { "mode": "played" }
-      },
-      { "kind": "contest-contribute", "amount": { "kind": "const", "value": 1 } },
-      {
-        "kind": "if",
-        "condition": { "kind": "card-transformed" },
-        "then": [
-          {
-            "kind": "log",
-            "template": "{self} 发动【{via}】，将{usedRaw}当{usedAs}打出{self.energyTag}"
-          }
-        ],
-        "else": [{ "kind": "log", "template": "{self} 打出{usedAs}{self.energyTag}" }]
-      }
-    ]
-  }
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "self", "required": false, "alive": true },
+      "requires": [
+        {
+          "kind": "compare",
+          "op": "gte",
+          "left": { "kind": "ref", "ref": "threat", "of": "self" },
+          "right": { "kind": "const", "value": 1 },
+          "reason": "你没有需要抵消的威胁"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "offset-threat", "target": "self", "amount": { "kind": "const", "value": 1 } },
+        {
+          "kind": "if",
+          "condition": { "kind": "card-transformed" },
+          "then": [
+            {
+              "kind": "log",
+              "template": "{self} 发动【{via}】，将{usedRaw}当{usedAs}使用，抵消 1 点威胁{self.energyTag}"
+            }
+          ],
+          "else": [
+            { "kind": "log", "template": "{self} 使用{usedAs}，抵消 1 点威胁{self.energyTag}" }
+          ]
+        }
+      ]
+    }
+  ]
 }

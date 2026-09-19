@@ -7,16 +7,17 @@ import { evalCondition } from './condition'
 import {
   addExtraPhaseFor,
   contributeToContest,
-  damageFor,
   drawFor,
   gainEnergy,
   healHp,
   moveCards,
+  offsetThreatFor,
   pushContestFrame,
   pushEffectsFrame,
   resolveDying,
   skipPhaseFor,
   spendEnergy,
+  threatFor,
 } from './internal'
 import { assertNever, requireRole } from './runtime'
 import type { EffectContext, EvalEnv } from './runtime'
@@ -64,10 +65,17 @@ export function runEffect(env: EvalEnv, effect: Effect): void {
       log(state, renderLog(env, effect))
       return
 
-    case 'damage': {
+    case 'threat': {
       const amount = evalValue(env, effect.amount)
       ctx.lastAmount = amount
-      damageFor(state, env, effect.target, amount)
+      threatFor(state, env, effect.target, amount)
+      return
+    }
+
+    case 'offset-threat': {
+      const amount = evalValue(env, effect.amount)
+      ctx.lastAmount = amount
+      offsetThreatFor(state, env, effect.target, amount)
       return
     }
 

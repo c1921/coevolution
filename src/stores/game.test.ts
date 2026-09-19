@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiDecide } from '../game/ai'
-import { isOver } from '../game/engine'
+import { advance, isOver } from '../game/engine'
 import { contentWith } from '../game/dsl/fixtures'
 import { withRegistry } from '../game/dsl/registry'
 import { assertEnergyBounds, energyCost } from '../game/rules/energy'
@@ -114,13 +114,10 @@ describe('界面状态与驱动循环', () => {
     const usable = state.players[0].hand.filter((c) => store.legalOptions(c).length > 0)
     expect(usable.length).toBeGreaterThan(0)
 
-    // 非法用法不会出现：防御牌在出牌阶段没有任何选项
+    // 非法用法不会出现：威胁为 0 时【防御】没有任何合法用法
     const defend = state.players[0].hand.find((c) => c.kind === 'defend')
     if (defend) {
-      const onlyStrikeConversion = store
-        .legalOptions(defend)
-        .every((o) => o.as === 'strike')
-      expect(onlyStrikeConversion).toBe(true)
+      expect(store.legalOptions(defend)).toHaveLength(0)
     }
 
     const card = usable[0]!
@@ -145,49 +142,48 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('非法操作给出中文提示且状态不变', () => {
-    store.beginDraft(FIXED_SEED)
-    store.chooseSpecies(store.draftOptions.value[0]!)
-    const state = store.gameState.value!
+    const state = loadState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'defend' }],
+    })
     const before = JSON.stringify(state.players.map((p) => p.hp))
 
-    store.act({ kind: 'play-card', card: state.players[0].hand[0]!, as: 'defend' })
+    // 没有威胁时使用【防御】：文档给出的 reason 直接显示在界面上
+    store.act({ kind: 'use-card', card: state.players[0].hand[0]! })
 
-    expect(store.errorMessage.value).toBeTruthy()
+    expect(store.errorMessage.value).toContain('没有需要抵消的威胁')
     expect(JSON.stringify(state.players.map((p) => p.hp))).toBe(before)
   })
 
   it('弃牌阶段：选够张数才能确认', () => {
-    store.beginDraft(FIXED_SEED)
-    store.chooseSpecies(store.draftOptions.value[0]!)
-
-    // 一直推进到玩家的弃牌阶段
-    let guard = 0
-    let count = 0
-    while (!store.over.value) {
-      if (++guard > 500) throw new Error('没有进入弃牌阶段')
-      vi.runAllTimers()
-      if (store.over.value) break
-      const pending = store.humanPending.value
-      if (!pending) throw new Error('驱动循环停滞')
-      if (pending.kind === 'discard') {
-        count = pending.count
-        break
-      }
-      actLikeHuman()
-    }
-
-    expect(count).toBeGreaterThan(0)
+    const state = loadState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      phase: 'discard',
+      playerHand: [
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'strike' },
+      ],
+    })
+    // 手牌上限 = 当前体力 = 2 → 需要弃 2 张
+    advance(state)
+    expect(store.humanPending.value).toMatchObject({ kind: 'discard', count: 2 })
 
     // 选不满时拒绝提交
     store.submitDiscard()
     expect(store.errorMessage.value).toContain('需要弃置')
 
-    const hand = store.gameState.value!.players[0].hand
-    for (const card of hand.slice(0, count)) store.pickCard(card.uid)
-    expect(store.selectedCards.value).toHaveLength(count)
+    const hand = state.players[0].hand
+    for (const card of hand.slice(0, 2)) store.pickCard(card.uid)
+    expect(store.selectedCards.value).toHaveLength(2)
 
     store.submitDiscard()
     expect(store.errorMessage.value).toBeNull()
+    expect(state.players[0].hand).toHaveLength(2)
   })
 
   it('再来一局会重置对局，旧的 AI 回调不会污染新对局', () => {
@@ -357,8 +353,8 @@ describe('界面状态与驱动循环', () => {
           kind: 'card',
           id: 'dual',
           name: '双震',
-          short: '对两名角色各造成 1 点伤害',
-          text: '消耗 1 点能量：选择两名角色，各造成 1 点伤害。',
+          short: '令两名角色各获得 1 点威胁',
+          text: '消耗 1 点能量：选择两名角色，各获得 1 点威胁。',
           cost: { kind: 'const', value: 1 },
           use: [
             {
@@ -378,7 +374,7 @@ describe('界面状态与驱动循环', () => {
                 {
                   kind: 'for-each-target',
                   effects: [
-                    { kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } },
+                    { kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } },
                   ],
                 },
               ],
@@ -431,15 +427,15 @@ describe('界面状态与驱动循环', () => {
       // 数量不够时确认会被拦下
       store.confirmTargets()
       expect(store.errorMessage.value).toContain('需要选择 2 个目标')
-      expect(state.players[0].hp).toBe(4)
+      expect(state.players[0].threat).toBe(0)
 
       store.chooseTarget(1)
       expect(store.targetsReady.value).toBe(true)
       store.confirmTargets()
 
       expect(store.pendingTarget.value).toBeNull()
-      expect(state.players[0].hp).toBe(3)
-      expect(state.players[1].hp).toBe(3)
+      expect(state.players[0].threat).toBe(1)
+      expect(state.players[1].threat).toBe(1)
     })
   })
 })

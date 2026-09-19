@@ -20,6 +20,7 @@
             "discardCount",
             "energy",
             "energyMax",
+            "threat",
             "turn",
             "damageAmount"
           ]
@@ -60,6 +61,7 @@
           "enum": [
             "energy-max",
             "defend-need-against",
+            "threat-per-attack",
             "draw-count",
             "hand-limit",
             "card-cost",
@@ -316,7 +318,8 @@
         "kind": {
           "enum": [
             "log",
-            "damage",
+            "threat",
+            "offset-threat",
             "lose-hp",
             "heal",
             "draw",
@@ -465,6 +468,7 @@
           "enum": [
             "energy-max",
             "defend-need-against",
+            "threat-per-attack",
             "draw-count",
             "hand-limit",
             "card-cost",
@@ -891,6 +895,7 @@
             "enum": [
               "energy-max",
               "defend-need-against",
+              "threat-per-attack",
               "draw-count",
               "hand-limit",
               "card-cost",

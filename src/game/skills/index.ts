@@ -260,12 +260,12 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
 }
 
 /**
- * 【打击】需要目标打出几张【防御】才能抵消。
- * 数值来自 defend-need-against 通道：基准值在 rules/base.json，威压以 set 覆盖为 2。
- * 参考与 subject 都是"打击的使用者"。
+ * 【打击】每次给目标叠加多少点威胁。
+ * 数值来自 threat-per-attack 通道：基准值在 rules/base.json（1），威压以 set 覆盖为 2。
+ * subject 是"打击的使用者"。
  */
-export function defendNeedAgainst(state: GameState, source: PlayerIndex): number {
-  return channelValue(state, 'defend-need-against', source)
+export function threatPerAttack(state: GameState, source: PlayerIndex): number {
+  return channelValue(state, 'threat-per-attack', source)
 }
 
 /**

@@ -63,6 +63,28 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     expect(html).toContain('协同进化 · 1v1')
     expect(html).toContain('第 1 回合')
     expect(html).toContain('结束出牌阶段')
+    // 威胁是本作的基础伤害机制：面板上必须能看到它
+    expect(html).toContain('威胁')
+
+    backToStart()
+  })
+
+  it('面板显示双方的威胁点数', async () => {
+    backToStart()
+    gameState.value = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerThreat: 2,
+      aiThreat: 1,
+    })
+    screen.value = 'battle'
+
+    const html = await renderApp()
+    expect(html).toContain('威胁')
+    expect(html).toContain('>2<')
+    expect(html).toContain('>1<')
+    // 出牌阶段给出可照做的提示
+    expect(html).toContain('你身上有 2 点威胁')
 
     backToStart()
   })
@@ -121,10 +143,11 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     })
     screen.value = 'battle'
 
-    act({ kind: 'play-card', card: gameState.value.players[0].hand[0]!, as: 'defend' })
+    // 没有威胁时使用【防御】：文档 reason 作为错误说明显示出来
+    act({ kind: 'use-card', card: gameState.value.players[0].hand[0]! })
 
     const html = await renderApp()
-    expect(html).toContain('当前不是打出响应牌的时机')
+    expect(html).toContain('没有需要抵消的威胁')
 
     backToStart()
   })
