@@ -168,6 +168,7 @@ describe('【打击】结算', () => {
       playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
     submit(state, { kind: 'end-phase' })
-    expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 2 })
+    // 手牌上限基准 0：手牌全部要弃
+    expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 4 })
   })
 })

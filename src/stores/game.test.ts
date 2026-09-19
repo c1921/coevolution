@@ -164,9 +164,9 @@ describe('界面状态与驱动循环', () => {
       phase: 'discard',
       playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
-    // 手牌上限 = 当前体力 = 2 → 需要弃 2 张
+    // 手牌上限基准 0 → 手牌全部要弃
     advance(state)
-    expect(store.humanPending.value).toMatchObject({ kind: 'discard', count: 2 })
+    expect(store.humanPending.value).toMatchObject({ kind: 'discard', count: 4 })
     // 视图派生：选不满时「确认弃置」不可点
     expect(store.canConfirmDiscard.value).toBe(false)
 
@@ -177,11 +177,15 @@ describe('界面状态与驱动循环', () => {
     const hand = state.players[0].hand
     for (const card of hand.slice(0, 2)) store.pickCard(card.uid)
     expect(store.selectedCards.value).toHaveLength(2)
+    expect(store.canConfirmDiscard.value).toBe(false)
+
+    for (const card of hand.slice(2)) store.pickCard(card.uid)
+    expect(store.selectedCards.value).toHaveLength(4)
     expect(store.canConfirmDiscard.value).toBe(true)
 
     store.submitDiscard()
     expect(store.errorMessage.value).toBeNull()
-    expect(state.players[0].hand).toHaveLength(2)
+    expect(state.players[0].hand).toHaveLength(0)
   })
 
   it('视图派生集中在 store：操作按钮、放弃文案与费用求值', () => {

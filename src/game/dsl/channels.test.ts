@@ -157,7 +157,7 @@ const PROBES: Record<Channel, () => void> = {
   },
 
   'hand-limit': () => {
-    // 体力 3、手牌 4：默认上限 3 需要弃 1 张
+    // 手牌 4：默认上限 0，手牌全部要弃
     const options = {
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -168,14 +168,24 @@ const PROBES: Record<Channel, () => void> = {
 
     const base = makeState({ ...options, playerHand: [...options.playerHand] })
     expect(advanceTurn(base)).toBe('pending')
-    expect(base.pending).toEqual({ kind: 'discard', player: 0, count: 1 })
+    expect(base.pending).toEqual({ kind: 'discard', player: 0, count: 4 })
 
-    withRegistry(registryWith('hand-limit', 'add', 1), () => {
+    // 上限 +2 → 只需弃 2 张，弃牌询问的张数随之改变
+    withRegistry(registryWith('hand-limit', 'add', 2), () => {
+      const state = makeState({ ...options, playerHand: [...options.playerHand] })
+      expect(handLimit(state, 0)).toBe(2)
+      expect(discardCount(state, 0)).toBe(2)
+
+      advanceTurn(state)
+      expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 2 })
+    })
+
+    // 上限抬到 4（= 手牌数）后不再需要弃牌：推进时不会停在弃牌询问上
+    withRegistry(registryWith('hand-limit', 'add', 4), () => {
       const state = makeState({ ...options, playerHand: [...options.playerHand] })
       expect(handLimit(state, 0)).toBe(4)
       expect(discardCount(state, 0)).toBe(0)
 
-      // 上限 +1 后不再需要弃牌：推进时不会停在弃牌询问上
       advanceTurn(state)
       expect(state.pending?.kind).not.toBe('discard')
     })

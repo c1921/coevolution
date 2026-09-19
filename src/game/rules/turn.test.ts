@@ -13,7 +13,6 @@ import {
   ATTRITION_STEP,
   discardCount,
   drawCount,
-  HAND_LIMIT_MAX,
   handLimit,
 } from './turn'
 import { cardUseCount, recordCardUse, recordSkillUse, skillUsed } from './usage'
@@ -82,7 +81,7 @@ describe('回合流程', () => {
     expect(state.players[0].energy).toBe(energyMax(state, 0))
   })
 
-  it('弃牌阶段：手牌上限等于当前体力值', () => {
+  it('弃牌阶段：手牌上限为 0，必须弃光手牌', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -98,16 +97,16 @@ describe('回合流程', () => {
     })
 
     expect(advanceTurn(state)).toBe('pending')
-    expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 2 })
+    expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 5 })
   })
 
-  it('手牌数不超过体力值时无需弃牌，直接进入下一回合', () => {
+  it('手牌为空时跳过弃牌阶段，直接进入下一回合', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       phase: 'discard',
       playerHp: 3,
-      playerHand: [{ kind: 'strike' }],
+      playerHand: [],
     })
 
     advanceTurn(state)
@@ -284,7 +283,7 @@ describe('规范额度', () => {
     expect(drawCount(state, 1)).toBe(DRAW_PER_TURN)
   })
 
-  it('手牌上限取 min(当前体力, 6)，弃牌数是超出的部分', () => {
+  it('手牌上限默认为 0，弃牌数是全部手牌', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -298,28 +297,25 @@ describe('规范额度', () => {
       ],
     })
 
-    expect(handLimit(state, 0)).toBe(3)
-    expect(discardCount(state, 0)).toBe(2)
-
-    state.players[0].hp = -1
     expect(handLimit(state, 0)).toBe(0)
+    expect(discardCount(state, 0)).toBe(5)
+
+    state.players[0].hand = []
+    expect(discardCount(state, 0)).toBe(0)
   })
 
-  it('体力超过封顶值时手牌上限截断为 HAND_LIMIT_MAX，体力更高不再放宽', () => {
+  it('体力高低不改变手牌上限（基准 0，只有 hand-limit 通道修正能放宽）', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       playerHp: 10,
     })
 
-    // 体力 10（上限）时手牌上限仍是 6，不会随体力继续膨胀
-    expect(handLimit(state, 0)).toBe(HAND_LIMIT_MAX)
-    state.players[0].hp = HAND_LIMIT_MAX
-    expect(handLimit(state, 0)).toBe(HAND_LIMIT_MAX)
-
-    // 体力低于封顶值时按体力算
-    state.players[0].hp = HAND_LIMIT_MAX - 2
-    expect(handLimit(state, 0)).toBe(HAND_LIMIT_MAX - 2)
+    expect(handLimit(state, 0)).toBe(0)
+    state.players[0].hp = 1
+    expect(handLimit(state, 0)).toBe(0)
+    state.players[0].hp = -1
+    expect(handLimit(state, 0)).toBe(0)
   })
 
   it('消耗战挂在「回合开始时」时机：先失去体力，再进行摸牌阶段', () => {
