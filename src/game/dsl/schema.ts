@@ -22,14 +22,17 @@ import {
   VALUE_REF_NAMES,
   ZONE_NAMES,
 } from './kinds'
-import { DOC_SCHEMA_KEYS } from './validate'
+// 字段表住在 validate/fieldTables（唯一来源）：生成器只依赖这张表，
+// 不再依赖整个校验器，两个模块之间没有耦合。
+import { DOC_SCHEMA_KEYS } from './validate/fieldTables'
 
 /**
  * 由代码生成 JSON Schema（draft 2020-12）。
  *
  * 为什么是"生成"而不是手写：手写的 schema 会与校验器漂移，而 schema 是编辑器补全与
- * 内容作者的规范文本。这里把 kinds.ts 的词表与 validate.ts 的字段表当作唯一来源，
- * 生成结果由 schema.test.ts 与提交的 schema.json 逐字节比对，因此不可能悄悄过期。
+ * 内容作者的规范文本。这里把 kinds.ts 的词表与 validate/fieldTables.ts 的字段表当作
+ * 唯一来源，生成结果由 schema.test.ts 与提交的 schema.json 逐字节比对，因此不可能
+ * 悄悄过期。
  *
  * 覆盖范围：文档结构、允许/必填字段、判别式枚举、嵌套节点引用与取值类型。
  * 语义约束（引用完整性、费用 ≥ 1、牌区组合、占位符与角色可用性）由 validate.ts 在加载期强制，
