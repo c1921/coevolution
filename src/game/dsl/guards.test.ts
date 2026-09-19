@@ -263,3 +263,42 @@ describe('守卫：README 的测试覆盖表不许腐烂', () => {
     )
   })
 })
+
+describe('守卫：界面状态层只从 barrel 进入', () => {
+  /**
+   * `stores/` 被拆成若干子模块后，`game.ts` 是唯一入口。绕过它直接 import
+   * `stores/state` 之类会**跳过 `selection.ts` 的模块级 watch**
+   * （待输入项变化时清空选择态），界面就会出现残留的过期选择。
+   * 这条守卫把"只从 barrel 进"钉死，避免日后又抄近路。
+   */
+  const STORE_SUBMODULES = [
+    'stores/state',
+    'stores/selectors',
+    'stores/actions',
+    'stores/aiDriver',
+    'stores/selection',
+    'stores/session',
+  ]
+
+  it('stores/ 之外没有文件直接 import 子模块', () => {
+    const offenders: string[] = []
+    for (const path of sourceFiles()) {
+      if (path.startsWith(join(SRC, 'stores') + '/')) continue
+      const source = readFileSync(path, 'utf8')
+      for (const sub of STORE_SUBMODULES) {
+        if (source.includes(`/${sub}'`) || source.includes(`/${sub}"`)) {
+          offenders.push(`${path} 直接 import 了 ${sub}，请改为 import '../stores/game'`)
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  it('守卫本身确实在扫描（barrel 自己当然会 import 子模块）', () => {
+    const barrel = readFileSync(join(SRC, 'stores/game.ts'), 'utf8')
+    for (const sub of STORE_SUBMODULES) {
+      expect(barrel).toContain(`'./${sub.replace('stores/', '')}'`)
+    }
+    expect(sourceFiles().length).toBeGreaterThan(50)
+  })
+})
