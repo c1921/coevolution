@@ -106,7 +106,7 @@ describe('能量系统', () => {
       via: 'convert',
     })
 
-    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - energyCost(state, 0, 'strike'))
+    expect(state.players[0].energy).toBe(energyMax(state, 0) - energyCost(state, 0, 'strike'))
     // 注：【打击】与【防御】目前同费（都是 1），所以「源牌与目标牌费用不同」的强断言
     // 要等出现一个源牌更便宜的转化技（如已移除的【灵草】红牌→2 费【回复】）才能复现。
   })

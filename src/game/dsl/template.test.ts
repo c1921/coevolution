@@ -67,7 +67,7 @@ describe('日志模板渲染', () => {
     }
     const effect = logOf(variantOf('strike', 'play').effects, 'then')
     expect(renderLog(env, effect)).toBe(
-      '转化型 发动【转换】，将【防御】当【打击】对 防御型 使用（能量 3/3）',
+      '转化型 发动【转换】，将【防御】当【打击】对 防御型 使用（能量 5/5）',
     )
   })
 

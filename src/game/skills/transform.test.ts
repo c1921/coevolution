@@ -45,7 +45,7 @@ describe('转化型技能', () => {
     assertConservation(state)
   })
 
-  it('转换只能双向转化，不能把【回复】当【打击】', () => {
+  it('转换：【回复】也可以当【打击】使用，但它没有 play 变体、不能作为响应打出', () => {
     const state = makeState({
       playerSpecies: 'morph',
       aiSpecies: 'defensive',
@@ -53,14 +53,12 @@ describe('转化型技能', () => {
     })
     const heal = state.players[0].hand[0]!
 
-    expect(useOptions(state, 0, heal).some((o) => o.via === 'convert')).toBe(false)
+    expect(useOptions(state, 0, heal).some((o) => o.via === 'convert')).toBe(true)
     expect(playOptions(state, 0, heal)).toHaveLength(0)
 
-    const before = snapshot(state)
-    expect(() =>
-      submit(state, { kind: 'use-card', card: heal, as: 'strike', via: 'convert' }),
-    ).toThrow('无法发动【转换】')
-    expect(state).toEqual(before)
+    submit(state, { kind: 'use-card', card: heal, as: 'strike', via: 'convert' })
+    expect(state.players[1].threat).toBe(1)
+    assertConservation(state)
   })
 
   it('没有对应技能时不能冒用转化', () => {
