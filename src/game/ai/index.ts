@@ -9,6 +9,7 @@ import {
   activeOptions,
   cardTargetChoice,
   playOptions,
+  targetsSatisfied,
   useOptions,
   useVariantOf,
 } from '../skills'
@@ -156,10 +157,7 @@ function cardHarmsChosenTarget(kind: CardKind, context: UseContext): boolean {
 
 /** 该牌面现在是否连目标都凑不出来（AI 据此跳过，绝不提交必失败的牌） */
 function canTarget(state: GameState, p: PlayerIndex, kind: CardKind, context: UseContext): boolean {
-  const choice = cardTargetChoice(state, p, kind, context)
-  if (choice === null) return false
-  if (!choice.spec) return true
-  return !choice.multi || choice.candidates.length >= choice.size
+  return targetsSatisfied(cardTargetChoice(state, p, kind, context))
 }
 
 /**

@@ -18,10 +18,12 @@ import {
   activationTargetChoice,
   activeOptions,
   cardTargetChoice,
+  defaultTargets,
   dyingRescueOptions,
   dyingUsableLabel,
   optionLabel,
   playOptions,
+  targetsSatisfied,
   useOptions,
   useVariantOf,
   type CardOption,
@@ -225,16 +227,10 @@ export function legalOptions(card: Card): CardOption[] {
   const context: UseContext = dying === undefined ? 'play' : 'dying'
   return useOptions(state, HUMAN, card).filter((o) => {
     // 需要选目标的牌面：用「存在合法目标」判定可用性，与主动技的 activeOptions 同一手法，
-    // 保证「按钮可用 ⟺ 进入选择态后必能提交成功」。
+    // 保证「按钮可用 ⟺ 进入选择态后必能提交成功」。缺省目标集的推导在 skills 里只有一份。
     const choice = cardTargetChoice(state, HUMAN, o.as, context, dying)
-    if (choice === null) return false
-    const bound = choice.multi
-      ? choice.candidates.slice(0, choice.size)
-      : choice.mustChoose
-        ? [choice.fallback ?? choice.candidates[0]].filter(
-            (index): index is PlayerIndex => index !== undefined,
-          )
-        : []
+    if (!targetsSatisfied(choice)) return false
+    const bound = defaultTargets(choice as TargetChoice)
     return checkUseCard(state, HUMAN, card, o.as, o.via, bound.length > 0 ? bound : undefined).ok
   })
 }

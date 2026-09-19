@@ -145,6 +145,38 @@ export interface TargetChoice {
 export type ActivationTargetChoice = TargetChoice
 
 /**
+ * 目标规格现在是否凑得齐：声明了 target 却候选不足（多目标选不够 N 个）时为 false。
+ *
+ * AI 与界面据此跳过该牌面，绝不提交必失败的牌；与 `defaultTargets` 一起构成
+ * "可用性 ⟺ 提交必成功"这条不变量的唯一实现。
+ */
+export function targetsSatisfied(choice: TargetChoice | null): boolean {
+  if (choice === null) return false
+  if (!choice.multi) return true
+  return choice.candidates.length >= choice.size
+}
+
+/**
+ * 交给引擎的**缺省目标集**，用于「按得到就必然提交得成」这条判定。
+ *
+ *  - 多目标（`count.mode = exactly`）：取候选前 N 个；候选不足时返回少于 N 个，
+ *    提交会被 `resolveTargetChoices` 拒绝——调用方因此能如实反映"凑不齐"；
+ *  - 单选且需要玩家选择：用文档缺省目标，缺省不合格时退回第一个候选；
+ *  - 不需要选择（`count.mode = all`，或缺省目标本身合格）：返回**空数组**，
+ *    含义是"不带目标提交，由引擎按文档解析"。
+ *
+ * 注意与 `activeOptions` 里的绑定区分：那里连"不需要选择"的情况也要绑一个候选，
+ * 因为它问的是"**存在**一个合法目标吗"（决定按钮出不出现）；
+ * 这里问的是"**提交时**该带哪些目标"，两者不可互换。
+ */
+export function defaultTargets(choice: TargetChoice): PlayerIndex[] {
+  if (choice.multi) return choice.candidates.slice(0, choice.size)
+  if (!choice.mustChoose) return []
+  const bound = choice.fallback ?? choice.candidates[0]
+  return bound === undefined ? [] : [bound]
+}
+
+/**
  * 解析目标选择；返回 null 表示声明了 target 却一个合法候选都没有。
  * 没有声明 target 时返回 `{ candidates: [], mustChoose: false, size: 1 }`。
  */

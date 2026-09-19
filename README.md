@@ -246,7 +246,7 @@ src/
 | `rules/death.test.ts` | 弃置全部手牌、未结算威胁清零、处理区按归属收尾、终局后拒绝动作 |
 | `skills/transform.test.ts` | 转换双向（都在「使用」语境：打击当防御抵消威胁 / 防御当打击叠威胁）、不能转化【回复】、不可冒用、进攻型不带转化技（【强袭】是主动技）、换文档即新增一条转化 |
 | `skills/active.test.ts` | 【强袭】弃牌、令对手获得 2 点威胁、每回合限一次、手牌不足按钮不出现、不消耗能量；目标的文档驱动选择用合成内容验证：`activationTargetChoice` 判定（required / 多候选 / 无 target 不需要选择）、`required:true` 必须显式指定目标 |
-| `skills/cardTarget.test.ts` | `cardTargetChoice`：打击唯一候选、回复的候选与 requires 分工、【防御】的出牌阶段变体与「没有濒死变体」、急救候选随受伤情况变化、风暴 all 模式的 size 随候选变化、濒死语境需要濒死者绑定 |
+| `skills/cardTarget.test.ts` | `cardTargetChoice`：打击唯一候选、回复的候选与 requires 分工、【防御】的出牌阶段变体与「没有濒死变体」、急救候选随受伤情况变化、风暴 all 模式的 size 随候选变化、濒死语境需要濒死者绑定；**`defaultTargets` / `targetsSatisfied`**：不需要选择返回空数组、缺省不合格退回首个候选、多目标候选不足如实返回并判不可满足（界面与 AI 共用的那条不变量） |
 | `skills/passive.test.ts` | 蓄能能量上限 +2、无技能修正时 `threat-per-attack` 基准 1、每个代号恰好一个技能、代号统一以「型」结尾、代号与技能名不重复、代号引用与注册表一一对应、换文档即改数值 |
 | `dsl/validate.test.ts` | 40 个校验用例：版本、未知键/判别式/通道/条件/指令、费用下限、牌区与取牌组合、日志占位符与角色、引用完整性与死文档、多目标 count 的字段与冲突、多目标下直接引用 target 被拒、主动技不支持多目标 |
 | `dsl/registry.test.ts` | 内置文档全部通过校验、代号与牌种顺序不变、三套牌组构成、`cardRole` / `cardSelfThreat` 结构派生、withRegistry 注入与还原、问题聚合 |

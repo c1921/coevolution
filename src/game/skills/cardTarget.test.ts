@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeState } from '../testUtils'
-import { cardTargetChoice, useVariantOf } from './index'
+import { cardTargetChoice, defaultTargets, targetsSatisfied, useVariantOf } from './index'
+import type { TargetChoice } from './index'
 
 /**
  * 卡牌使用时的目标解析（`cardTargetChoice`）：与主动技共用同一入口，
@@ -100,5 +101,59 @@ describe('卡牌目标选择入口', () => {
       candidates: [0],
       mustChoose: true,
     })
+  })
+})
+
+/**
+ * `defaultTargets` / `targetsSatisfied`：可用性判定与提交共用同一份缺省目标集，
+ * 这是「按钮可用 ⟺ 提交必成功」这条不变量的唯一实现（界面与 AI 都走它）。
+ *
+ * 多目标（count.mode = exactly）当前没有内置内容使用，用直接构造的 TargetChoice
+ * 锁住契约——`TargetChoice` 是普通接口，不需要为了测它而伪造一份内容文档。
+ */
+describe('缺省目标集与可满足性', () => {
+  it('不需要选择时返回空数组（all 模式与缺省目标合格都走这条）', () => {
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
+
+    // 风暴：count.mode = all，引擎自己作用于全部候选
+    const storm = cardTargetChoice(state, 0, 'storm', 'play')
+    expect(storm).not.toBeNull()
+    expect(defaultTargets(storm as TargetChoice)).toEqual([])
+    expect(targetsSatisfied(storm)).toBe(true)
+
+    // 打击：唯一候选就是合格的文档缺省目标，提交时不必带目标
+    const strike = cardTargetChoice(state, 0, 'strike', 'play')
+    expect(defaultTargets(strike as TargetChoice)).toEqual([])
+    expect(targetsSatisfied(strike)).toBe(true)
+  })
+
+  it('单选且必须选择时用缺省目标，缺省不合格时退回第一个候选', () => {
+    // 自己满血、只有对手受伤：缺省目标不合格 → mustChoose，候选只剩对手
+    const onlyOpponent = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      aiHp: 2,
+    })
+    const choice = cardTargetChoice(onlyOpponent, 0, 'first-aid', 'play')
+    expect(choice?.mustChoose).toBe(true)
+    expect(choice?.fallback).toBeUndefined()
+    expect(defaultTargets(choice as TargetChoice)).toEqual([1])
+    expect(targetsSatisfied(choice)).toBe(true)
+  })
+
+  it('多目标候选足够时取前 N 个，候选不足时如实返回少于 N 个并判定为不可满足', () => {
+    const enough: TargetChoice = { candidates: [0, 1], mustChoose: true, multi: true, size: 2 }
+    expect(defaultTargets(enough)).toEqual([0, 1])
+    expect(targetsSatisfied(enough)).toBe(true)
+
+    const short: TargetChoice = { candidates: [1], mustChoose: true, multi: true, size: 2 }
+    expect(defaultTargets(short)).toEqual([1])
+    expect(targetsSatisfied(short)).toBe(false)
+  })
+
+  it('声明了 target 却一个候选都没有：choice 为 null，判定为不可满足', () => {
+    const healthy = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
+    expect(cardTargetChoice(healthy, 0, 'first-aid', 'play')).toBeNull()
+    expect(targetsSatisfied(null)).toBe(false)
   })
 })
