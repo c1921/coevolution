@@ -361,7 +361,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 | 字段 | 必填 | 类型 | 说明 |
 |---|---|---|---|
-| `on` | 是 | `Timing` | `{ at: 'turn-start' }` / `turn-end` / `{ at: 'phase-start' \| 'phase-end', phase }` / `after-damage` |
+| `on` | 是 | `Timing` | `{ at: 'turn-start' }` / `turn-end` / `{ at: 'phase-start' \| 'phase-end', phase }` / `after-damage` / `after-threat` |
 | `when` | 否 | `Condition[]` | 非空数组；全部成立才执行 `effects` |
 | `effects` | 是 | `Effect[]` | 非空；按声明顺序执行 |
 
@@ -507,6 +507,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `offer-reward` | `reward: 'card' \| 'service'`（必填）、`candidates?`、`allowSkip?`、`weights?`、`healAmount?`、`removeFloor?` | 压入奖励结算帧，让双方各做一次三选一（见 §6.2） |
 
 **威胁是基础伤害机制**：攻击不再直接扣体力，而是用 `threat` 给目标叠加威胁；承受者在自己的出牌阶段打出【防御】，用 `offset-threat` 抵消；其**回合结束时**剩余威胁结算为等量伤害（走伤害帧：先 emit `after-damage` 触发，再做濒死检查），随后威胁归零、不跨回合累积。`damage` 指令已从 `EFFECT_KINDS` 删除。
+每次 `threat` 效果叠加威胁后，引擎还会立刻压入**威胁帧**逐个询问 / 执行 `after-threat` 触发（【反击】就在这里）。
 
 【打击】按 `threat-per-attack` 通道叠加威胁（基准值见 `rules/base.json`；内置内容未修改该通道，技能修正可覆盖）：
 
@@ -835,25 +836,29 @@ export interface EffectContext {
 
 ## 10. 时机与触发
 
-`TIMING_KINDS`：`turn-start`、`turn-end`、`phase-start`、`phase-end`、`after-damage`。
+`TIMING_KINDS`：`turn-start`、`turn-end`、`phase-start`、`phase-end`、`after-damage`、`after-threat`。
 
 | 时机 | 谁来执行 | 说明 |
 |---|---|---|
 | `turn-start` / `turn-end` | `rule` | 回合边界；消耗战挂在 `turn-start`，威胁结算在 `turn-end` 的最后一步 |
 | `phase-start` / `phase-end` | `rule` | 阶段边界，需要 `phase` 字段；非这两个时机的 `at` 不允许带 `phase` |
-| `after-damage` | `trigger` | 事件类时机：引擎**只在回合结束的威胁结算**（走伤害帧）里 emit，用于「受到伤害后」的可选技能 |
+| `after-damage` | `trigger` | 事件类时机：引擎**只在回合结束的威胁结算**（走伤害帧）里 emit，用于「受到伤害后」技能（内置内容暂无） |
+| `after-threat` | `trigger` | 事件类时机：每次 `threat` 效果叠加威胁后 emit（带 `{threat:{source,target,amount}}` payload），用于「受到威胁后」技能（内置【反击】） |
 
 要点：
 
-- **`after-damage` 是目前引擎唯一 emit 的事件类时机**，也是唯一允许 `optional: true` 的时机（`validate/docs.ts` 的 `checkSkill` 明确拒绝其它时机 + `optional: true`，报 `bad-combination`）。
-- **触发点已从「直接造成伤害」改到「回合结束时威胁结算」**：攻击只叠威胁（`threat` 指令），承受到伤害的方式是自己在回合结束时让剩余威胁结算为等量伤害，`dealDamage` 在这一刻 emit `after-damage`，随后做濒死检查。因此同一回合里先叠的威胁不会立刻触发「受到伤害后」技能。
-- 触发型的其它字段：`on`（必填）、`optional?`（当前只有 `after-damage` 可为 `true`）、`when?`（非空条件数组）、`effects`（必填）、`after?`。
+- **引擎 emit 的事件类时机有 `after-damage` 与 `after-threat`**，也是仅有的两个允许 `optional: true` 的时机（`validate/docs.ts` 的 `checkSkill` 拒绝其它时机 + `optional: true`，报 `bad-combination`）。
+  两者都由结算帧驱动：伤害帧在濒死检查之前逐个询问，威胁帧在威胁叠加后立刻逐个询问；不可选的立即执行。
+  `after-threat` 的 payload 是 `{ threat: { source, target, amount } }`（`contextFor` 同时把 `target` / `source` 绑进语境）。
+  两条防连锁规则：`source === target`（自己给自己叠威胁）不触发；**栈上已有威胁帧时不再收集**（反击造成的威胁不会再触发反击）。
+- **伤害与威胁是两个触发点**：`threat` 指令叠加威胁后立刻 emit `after-threat`（【反击】在这里还手）；而伤害要等到承受者自己的回合结束、剩余威胁结算时才由 `dealDamage` emit `after-damage`，随后做濒死检查。因此「先叠的威胁」不会立刻变成伤害，但会立刻触发 `after-threat`。
+- 触发型的其它字段：`on`（必填）、`optional?`（当前只有 `after-damage` / `after-threat` 可为 `true`）、`when?`（非空条件数组）、`effects`（必填）、`after?`。
 - 非可选的时机技能与 `rule` 按注册顺序（`priority`, `id`）依次执行；`trigger` 里可选的技能由引擎询问玩家，玩家应答后再结算其 `effects`。
-- 挂在 `after-damage` 上的内置技能只有一个：反击型【反击】（`optional: true`，令伤害来源获得 1 点威胁）。`optional: true` 的技能示例——`skills/riposte.json`：
+- 内置的触发技只有一个：反击型【反击】挂在 `after-threat` 上（`optional: true`，令来源获得 1 点威胁）。`optional: true` 的技能示例——`skills/riposte.json`：
 
 ```json
 "trigger": {
-  "on": { "at": "after-damage" },
+  "on": { "at": "after-threat" },
   "optional": true,
   "when": [{ "kind": "alive", "of": "source" }],
   "effects": [
@@ -863,17 +868,17 @@ export interface EffectContext {
 }
 ```
 
-`when` 只是**发动前**的可用性条件；真正「是否发动」由玩家应答决定。`when` 是可选的，省略它就表示只要受到伤害就能选择发动；内置内容暂时没有这样的技能，合成示例如下：
+`when` 只是**发动前**的可用性条件；真正「是否发动」由玩家应答决定。`when` 是可选的，省略它就表示只要发生该事件就能选择发动；合成示例如下：
 
 ```json
 "trigger": {
-  "on": { "at": "after-damage" },
+  "on": { "at": "after-threat" },
   "optional": true,
   "effects": [ { "kind": "draw", "target": "self", "count": { "kind": "const", "value": 1 } } ]
 }
 ```
 
-> 注意：校验器接受 `TIMING_KINDS` 里的任意 `at`，但引擎今天只执行 `turn-start` / `turn-end` / `phase-start` / `phase-end` 四类 `rule` 时机，并且只 emit `after-damage` 这一个事件。**只声明引擎会 emit 的时机**，否则文档合法但永远不会执行。
+> 注意：校验器接受 `TIMING_KINDS` 里的任意 `at`，但引擎今天只执行 `turn-start` / `turn-end` / `phase-start` / `phase-end` 四类 `rule` 时机，并且只 emit `after-damage` / `after-threat` 两个事件。**只声明引擎会 emit 的时机**，否则文档合法但永远不会执行。
 
 ---
 
@@ -1000,7 +1005,7 @@ export interface EffectContext {
 
 - 常驻数值 → `modifiers`（通道 + `add`/`set`/`min`/`max` + `Value`）。例：蓄能 `energy-max` +2。通道也可以被覆盖（`set`），但内置内容不再修改 `threat-per-attack`。
 - 牌面转化 → `transforms`（`from`、`to`、`contexts: ["use"] / ["play"]`；`play` 语境当前没有内容使用）。例：转换把【防御】当【打击】、把【打击】当【防御】使用。
-- 「受到伤害后」可选发动 → `trigger`（`on: { "at": "after-damage" }`、`optional: true`、`when`、`effects`）。例：反击（令伤害来源获得 1 点威胁）。**伤害只来自回合结束的威胁结算**，写触发技时要按威胁语义来，不要假设攻击会立即造成伤害。
+- 「受到威胁后」可选发动 → `trigger`（`on: { "at": "after-threat" }`、`optional: true`、`when`、`effects`）。例：反击（令来源获得 1 点威胁，来源即本次施加威胁的人）。也可以用 `after-damage` 挂在伤害帧上（内置内容暂无）。
 - 出牌阶段主动技 → `activate`（`timing: "play"`、`oncePerTurn`、`costCards`、`target`、`effects`、`after`）。例：强袭（弃一张手牌令对方获得 2 点威胁）。
 
 ### 13.2 新增一张卡牌
@@ -1020,7 +1025,7 @@ export interface EffectContext {
 
 **要写防御牌**：用 `use`（`context: "play"`）变体，`scope: self`，`requires` 读 `threat(self) >= 1`，效果是 `offset-threat` 自己 1 点（【防御】）。响应窗口式的 `play` 变体不再需要。
 
-**要写触发技**：挂 `after-damage`，按「回合结束的威胁结算」这一触发点写效果（如反击给来源叠威胁）。
+**要写触发技**：挂 `after-threat`（每次被叠威胁时触发，如反击给来源叠威胁）或 `after-damage`（回合结束的威胁结算兑现时触发）。
 
 **要写「使用时选目标」的牌**：在 `use.target` 上给目标规格（第 9 节）。候选不唯一或缺省目标不合格时界面会自动弹选择器，
 提交带上 `Action.use-card.targets`；引擎与合法性判定都不需要改。
@@ -1037,7 +1042,7 @@ export interface EffectContext {
 ### 13.4 新增一条时机规则
 
 1. 新建 `src/game/data/dsl/rules/<id>.json`，`kind: "rule"`，字段 `on` / `when?` / `effects`。
-2. `on` 只声明引擎会执行/emit 的时机：`turn-start` / `turn-end` / `phase-start` / `phase-end`（需要 `phase`）。事件类时机目前只有 `after-damage`，且只用于 `trigger`。
+2. `on` 只声明引擎会执行/emit 的时机：`turn-start` / `turn-end` / `phase-start` / `phase-end`（需要 `phase`）。事件类时机有 `after-damage` / `after-threat`，只用于 `trigger`。
 3. 规则按注册顺序执行；`when` 全部成立才执行 `effects`。
 4. 想发奖励就用 `effects: [{ kind: "offer-reward", reward: "card" | "service", ... }]`（§6.2）。
    同一时机上多份奖励规则时，**priority 更大的先弹**（规则先执行、帧后进先出）；
@@ -1079,7 +1084,7 @@ export interface EffectContext {
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
 | `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`threat`/`offset-threat`/`lose-hp`/`heal`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
 | `src/game/dsl/effects.test.ts` | 效果树结构查询：`effectsInclude` 递归进 `if` / `contest` / `for-each-target`；`effectsHarmChosenTarget` 区分「打向选定目标」与「打向自己」；`findEffect` 返回命中的节点 |
-| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（反击）、不可选触发立即执行、可选触发只支持 `after-damage` |
+| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件（含 `after-threat` 的 payload）、`runTrigger`（反击）、不可选触发立即执行、可选触发只支持 `after-damage` / `after-threat` |
 | `src/game/dsl/schema.test.ts` | 没有孤儿 `$defs` 节点；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
 | `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、**运行时依赖图零环**（强连通分量比对）、README 测试表覆盖全部测试文件、stores 只从 barrel 进入 |
 | `src/game/dsl/channels.test.ts` | 通道接线验收：七条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、每次攻击叠加的威胁、占位对抗的抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
@@ -1113,7 +1118,7 @@ export interface EffectContext {
 | 限制 | 说明 |
 |---|---|
 | 内容是构建期打包，不做热更新 | `registry.ts` 用 `import.meta.glob(..., { eager: true })` 静态导入；改 JSON 需重新构建/刷新，不存在运行时重新加载内容的入口 |
-| `optional: true` 只支持 `after-damage` | 其它时机 + `optional: true` 会被校验器以 `bad-combination` 拒绝 |
+| `optional: true` 只支持 `after-damage` / `after-threat` | 其它时机 + `optional: true` 会被校验器以 `bad-combination` 拒绝 |
 | 目标选择同时覆盖主动技与卡牌 | `activationTargetChoice` / `cardTargetChoice` 共用 `targetChoice`，服务可用性、校验、结算、界面与 AI；`Action.use-card.targets` 承载卡牌的目标选择结果 |
 | 多目标只支持卡牌的使用变体 | `UseVariant.target.count` 已接通（`all` / `exactly` + `for-each-target`）；主动技的 `target` 带 `count` 会被 `bad-combination` 拒绝，仍是单选 |
 | 多目标下 `ctx.target` 不绑定 | 声明了 `count` 的变体必须在 `for-each-target` 内引用 `target`（加载期守卫，`threat` 同样受约束）；迭代内的上下文写入不冒泡到外层 |
@@ -1121,7 +1126,7 @@ export interface EffectContext {
 | 威胁不跨回合累积 | 威胁只在「施加者回合 → 承受者回合结束」之间存活一轮：回合结束时剩余威胁结算为等量伤害并立即归零，不做历史累计 |
 | 手牌上限按伤害前体力 | 威胁结算在回合的**最后一步**（弃牌阶段之后），因此本回合结算出的伤害不会回头改变本回合的弃牌上限 |
 | `contest` / `play` 变体是占位 | 内置内容没有任何卡牌声明 `play` 变体，`contest` / `contest-contribute` 与 `defend-need-against` 通道当前不可达，只保留给后续反制机制 |
-| 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage` 这一个事件（发生在回合结束的威胁结算里）；声明其它事件时机不会报错，但永远不会触发 |
+| 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage`（回合结束的威胁结算）与 `after-threat`（每次叠加威胁后）两个事件；声明其它事件时机不会报错，但永远不会触发 |
 | `move-cards` 不能访问 `deck` | 牌组只能通过 `draw` 访问，以免绕过洗回逻辑 |
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
 | 数值递归上限 16 | 表达式/通道递归超过 16 层抛 `RuleError`；这是防自引用与防栈溢出的硬保护 |
