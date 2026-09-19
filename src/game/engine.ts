@@ -35,7 +35,7 @@ import { runTrigger } from './dsl/event'
 import type { UseContext } from './dsl/kinds'
 import { cardDoc, skillDoc } from './dsl/registry'
 import type { EffectContext } from './dsl/runtime'
-import { resolveTargetChoice } from './dsl/target'
+import { resolveTargetChoice, resolveTargetChoices } from './dsl/target'
 import type {
   Action,
   Card,
@@ -329,7 +329,7 @@ function applyUseCard(
   }
   const p = pending.player
   const as: CardKind = action.as ?? action.card.kind
-  ensure(checkUseCard(state, p, action.card, as, action.via))
+  ensure(checkUseCard(state, p, action.card, as, action.via, action.targets))
   const card = requireInHand(state, p, action.card)
   // 付费按「当作的牌面」：转化牌付转化后那张牌的费用
   payEnergy(state, p, as)
@@ -354,9 +354,15 @@ function applyUseCard(
     ctx.source = p
   }
   if (variant.target) {
-    const chosen = pending.kind === 'dying' ? pending.dying : undefined
-    const resolved = resolveTargetChoice({ state, ctx }, variant.target, chosen)
-    if (resolved.ok) ctx.target = resolved.target
+    // 濒死语境的目标由结算决定（濒死者），其余语境用提交的目标或文档缺省目标
+    const provided = action.targets && action.targets.length > 0 ? action.targets : undefined
+    const chosen = pending.kind === 'dying' ? [pending.dying] : provided
+    const resolved = resolveTargetChoices({ state, ctx }, variant.target, chosen)
+    // checkUseCard 已经校验过，这里只是兜底：校验通过却解析失败说明调用点与文档不匹配
+    if (!resolved.ok) throw new RuleError(resolved.reason)
+    ctx.targets = resolved.targets
+    // 多目标时不绑定 target：效果必须写在 for-each-target 内（加载期已守住）
+    if (resolved.targets.length === 1) ctx.target = resolved.targets[0]
   }
   runEffectGroup(state, variant, ctx)
 }

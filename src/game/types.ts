@@ -144,8 +144,12 @@ export type Prompt =
   | { kind: 'discard'; player: PlayerIndex; count: number }
 
 export type Action =
-  /** 使用一张牌（出牌阶段主动使用，或濒死时使用【回复】） */
-  | { kind: 'use-card'; card: Card; as?: CardKind; via?: SkillId }
+  /**
+   * 使用一张牌（出牌阶段主动使用，或濒死时使用【回复】）。
+   * targets 是卡牌文档 TargetSpec 的选择结果：单目标即长度 1，
+   * 多目标（count）按文档要求给出全部目标；卡牌没有 target 时不得提供。
+   */
+  | { kind: 'use-card'; card: Card; as?: CardKind; via?: SkillId; targets?: PlayerIndex[] }
   /** 打出一张牌（响应【打击】时打出【防御】） */
   | { kind: 'play-card'; card: Card; as?: CardKind; via?: SkillId }
   /** 发动主动技：透支 / 疗愈（疗愈需指定目标，缺省为自己） */

@@ -125,21 +125,72 @@ export function activationCostCards(
 }
 
 /**
- * 主动技的目标选择：界面/AI 想知道「要不要选、能选谁、不选时用谁」。
+ * 目标选择：引擎、合法性判定、界面与 AI 想知道的「要不要选、能选谁、不选时用谁」。
  *
- * 这是目标解析的**唯一入口**——可用性判定（activeOptions）、合法性校验
- * （checkActivate）与界面选择器都从这里取同一份结论，因此
- * 「按钮可用」与「提交必成功」不会再分叉。
+ * 这是目标解析的**唯一入口**——可用性判定（activeOptions / legalOptions）、合法性校验
+ * （checkActivate / checkUseCard）与界面选择器都从这里取同一份结论，因此
+ * 「按钮可用」与「提交必成功」不会再分叉。主动技与卡牌共用同一条实现。
  */
-export interface ActivationTargetChoice {
-  /** 目标规格；技能没有声明 target 时为 undefined（提交不带目标） */
+export interface TargetChoice {
+  /** 目标规格；没有声明 target 时为 undefined（提交不带目标） */
   spec?: TargetSpec
   /** 全部合法候选（已按 alive / 距离 / conditions 过滤） */
   candidates: PlayerIndex[]
-  /** 不需要玩家选择时，提交将使用的目标（= 合法的文档缺省目标） */
+  /** 单选时不需要玩家选择所用的目标（= 合法的文档缺省目标） */
   fallback?: PlayerIndex
-  /** 界面/AI 必须先选定目标：required、候选不唯一，或缺省目标不合格 */
+  /** 界面/AI 必须先选定目标 */
   mustChoose: boolean
+  /** 需要选定多个目标（count.mode = exactly 且 N > 1） */
+  multi: boolean
+  /** 需要选定的目标个数（all 模式为候选个数，其余为 1 或 N） */
+  size: number
+}
+
+/** 主动技目标选择的兼容别名（既有的调用点与测试沿用这个名字） */
+export type ActivationTargetChoice = TargetChoice
+
+/**
+ * 解析目标选择；返回 null 表示声明了 target 却一个合法候选都没有。
+ * 没有声明 target 时返回 `{ candidates: [], mustChoose: false, size: 1 }`。
+ */
+export function targetChoice(
+  state: GameState,
+  p: PlayerIndex,
+  spec?: TargetSpec,
+  /** 濒死语境下的濒死者：scope 为 dying 的目标规格需要它才有候选 */
+  dying?: PlayerIndex,
+): TargetChoice | null {
+  if (!spec) return { candidates: [], mustChoose: false, multi: false, size: 1 }
+
+  const ctx: EffectContext = {
+    ...baseContext(state, p),
+    ...(dying !== undefined ? { dying, target: dying } : {}),
+  }
+  const env: EvalEnv = { state, ctx }
+  const candidates = targetCandidates(env, spec)
+  // 声明了 target 却一个候选都没有：不能"无目标地"继续结算
+  if (candidates.length === 0) return null
+
+  if (spec.count?.mode === 'all') {
+    // 作用于全部合法候选：不需要玩家选择
+    return { spec, candidates, mustChoose: false, multi: false, size: candidates.length }
+  }
+  if (spec.count?.mode === 'exactly') {
+    const size = Math.max(1, Math.floor(evalValue(env, spec.count.count)))
+    return { spec, candidates, mustChoose: true, multi: size > 1, size }
+  }
+
+  const resolved = resolveTargetChoice(env, spec, undefined)
+  const fallback = resolved.ok ? resolved.target : undefined
+  const mustChoose = spec.required === true || candidates.length > 1 || fallback === undefined
+  return {
+    spec,
+    candidates,
+    ...(fallback !== undefined ? { fallback } : {}),
+    mustChoose,
+    multi: false,
+    size: 1,
+  }
 }
 
 /**
@@ -150,23 +201,27 @@ export function activationTargetChoice(
   state: GameState,
   p: PlayerIndex,
   skill: SkillId,
-): ActivationTargetChoice | null {
+): TargetChoice | null {
   const activate = skillDoc(skill).activate
   if (!activate) return null
+  return targetChoice(state, p, activate.target)
+}
 
-  const spec = activate.target
-  if (!spec) return { candidates: [], mustChoose: false }
-
-  const env: EvalEnv = { state, ctx: baseContext(state, p) }
-  const candidates = targetCandidates(env, spec)
-  // 声明了 target 却一个候选都没有：不能"无目标地"继续结算
-  if (candidates.length === 0) return null
-
-  const resolved = resolveTargetChoice(env, spec, undefined)
-  const fallback = resolved.ok ? resolved.target : undefined
-  const mustChoose =
-    spec.required === true || candidates.length > 1 || fallback === undefined
-  return { spec, candidates, ...(fallback !== undefined ? { fallback } : {}), mustChoose }
+/**
+ * 解析卡牌使用时的目标选择（出牌阶段 / 濒死自救）。
+ * 返回 null 表示该牌面在这个语境下根本不能用；没有 target 的牌面返回"无需选择"。
+ * 濒死语境的 scope=dying 规格需要传入 dying（结算时由引擎强制为濒死者）。
+ */
+export function cardTargetChoice(
+  state: GameState,
+  p: PlayerIndex,
+  kind: CardKind,
+  context: UseContext,
+  dying?: PlayerIndex,
+): TargetChoice | null {
+  const variant = useVariantOf(kind, context)
+  if (!variant) return null
+  return targetChoice(state, p, variant.target, context === 'dying' ? dying : undefined)
 }
 
 /**

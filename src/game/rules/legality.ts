@@ -4,7 +4,7 @@ import { firstFailed } from '../dsl/condition'
 import type { UseContext } from '../dsl/kinds'
 import { cardDoc, skillDoc } from '../dsl/registry'
 import type { EffectContext, EvalEnv } from '../dsl/runtime'
-import { resolveTargetChoice } from '../dsl/target'
+import { resolveTargetChoice, resolveTargetChoices } from '../dsl/target'
 import {
   activationCostCards,
   activationTargetChoice,
@@ -68,6 +68,7 @@ export function checkUseCard(
   card: Card,
   as: CardKind,
   via?: SkillId,
+  targets?: PlayerIndex[],
 ): Legality {
   const pending = state.pending
   const player = state.players[p]
@@ -101,6 +102,18 @@ export function checkUseCard(
   // 所有「使用」都要按「当作的牌面」付费，付不起就不能用
   if (!canPayEnergy(state, p, as)) return fail(shortfallReason(state, p, as))
 
+  const provided = targets && targets.length > 0 ? targets : undefined
+  if (provided !== undefined && !variant.target) {
+    return fail(`【${CARD_NAME[as]}】不需要指定目标`)
+  }
+  if (
+    pending.kind === 'dying' &&
+    provided !== undefined &&
+    !(provided.length === 1 && provided[0] === pending.dying)
+  ) {
+    return fail('濒死结算的目标必须是濒死者')
+  }
+
   const ctx: EffectContext = { self: p, active: state.active, usedUid: card.uid, costCards: [] }
   if (pending.kind === 'dying') {
     ctx.dying = pending.dying
@@ -109,10 +122,12 @@ export function checkUseCard(
   const env: EvalEnv = { state, ctx }
 
   if (variant.target) {
-    const chosen = pending.kind === 'dying' ? pending.dying : undefined
-    const resolved = resolveTargetChoice(env, variant.target, chosen)
+    // 濒死语境的目标由结算决定（濒死者），其余语境用提交的目标或文档缺省目标
+    const chosen = pending.kind === 'dying' ? [pending.dying] : provided
+    const resolved = resolveTargetChoices(env, variant.target, chosen)
     if (!resolved.ok) return fail(resolved.reason)
-    ctx.target = resolved.target
+    ctx.targets = resolved.targets
+    if (resolved.targets.length === 1) ctx.target = resolved.targets[0]
   }
   const failed = firstFailed(env, variant.requires)
   if (failed) return fail(failed.reason ?? `【${CARD_NAME[as]}】当前无法使用`)
