@@ -4,23 +4,13 @@ import { CARD_DEFS } from '../data/cardDefs'
 import { SPECIES, speciesDef } from '../data/species'
 import { assertConservation } from '../rules/cardZones'
 import { makeState } from '../testUtils'
-import { createRegistry, registryToDocs, withRegistry } from './registry'
-import type { RawFixtureDoc } from './fixtures'
+import { withRegistry } from './registry'
+import { contentWith } from './fixtures'
 
 /**
  * 扩展性验收：只改 JSON（这里用内存文档模拟）就能新增内容，
  * 引擎、legality、AI、界面一行都不用动。
  */
-
-/**
- * 用完整内容集为底，按 id 替换/新增文档（与"改一份 JSON"等价）。
- * 同 id 的旧文档会被剔除，避免重复 id；新 id 则是纯新增。
- */
-function contentWith(docs: RawFixtureDoc[]): ReturnType<typeof createRegistry> {
-  const patchIds = new Set(docs.map((doc) => (doc.value as { id: string }).id))
-  const base = registryToDocs().filter((doc) => !patchIds.has((doc.value as { id: string }).id))
-  return createRegistry([...base, ...docs])
-}
 
 describe('扩展性：新增内容不需要改代码', () => {
   it('新增一个主动技（含费用、目标、限一次）即可端到端生效', () => {

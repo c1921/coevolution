@@ -111,5 +111,11 @@ describe('目标选取', () => {
     env.state.players[1].alive = false
     expect(targetCandidates(env, strikeTarget())).toEqual([])
     expect(hasTargetCandidate(env, strikeTarget())).toBe(false)
+    // 候选为空即「没有符合条件的目标」：不能无目标地继续结算
+    // （攻击范围、存活条件这类修正都能让候选变空）
+    expect(resolveTargetChoice(env, strikeTarget())).toEqual({
+      ok: false,
+      reason: '没有符合条件的目标',
+    })
   })
 })

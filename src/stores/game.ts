@@ -202,7 +202,9 @@ export function legalOptions(card: Card): CardOption[] {
 
 export function optionText(option: CardOption): string {
   const verb = humanPending.value?.kind === 'respond' ? '打出' : '使用'
-  return `${optionLabel(option, verb)}（${energyCost(option.as)} 能量）`
+  const state = gameState.value
+  const cost = state ? energyCost(state, HUMAN, option.as) : 0
+  return `${optionLabel(option, verb)}（${cost} 能量）`
 }
 
 export function isSelectable(card: Card): boolean {
@@ -255,13 +257,13 @@ export const pendingHint = computed(() => {
       const need = pending.need - pending.got
       const opener = CARD_NAME[pending.card?.as ?? pending.expected]
       const expected = CARD_NAME[pending.expected]
-      const cost = energyCost(pending.expected)
+      const cost = energyCost(state, HUMAN, pending.expected)
       return `对手对你使用【${opener}】，还需打出 ${need} 张【${expected}】才能抵消 · 每张 ${cost} 点能量（当前 ${state.players[HUMAN].energy}）`
     }
     case 'dying': {
       const rescue = dyingRescueOptions()[0]
       const label = dyingUsableLabel()
-      const cost = rescue ? energyCost(rescue.kind) : 0
+      const cost = rescue ? energyCost(state, HUMAN, rescue.kind) : 0
       const energy = `需 ${cost} 点能量（当前 ${state.players[HUMAN].energy}）`
       return pending.dying === HUMAN
         ? `你已濒死，使用${label}自救（${energy}）；放弃则阵亡`

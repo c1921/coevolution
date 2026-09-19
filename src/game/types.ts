@@ -78,7 +78,7 @@ export interface PlayerState {
   hand: Card[]
   /**
    * 私有牌组：只属于这个物种（玩家）的 20 张牌，摸牌只从自己的牌组摸。
-   * 每个物种暂时共用同一套牌（见 data/deck.ts 的 SPECIES_DECKS）。
+   * 每个物种暂时共用同一套牌（见 data/dsl/decks/basic.json 与物种文档的 `deck` 字段）。
    */
   deck: Card[]
   /** 私有弃牌堆：自己使用 / 弃置的牌；自己的牌组耗尽时洗回自己的牌组 */

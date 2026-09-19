@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { CARD_NAME, CARD_DEFS } from '../game/data/cardDefs'
+import { energyCost } from '../game/rules/energy'
+import { gameState, HUMAN } from '../stores/game'
 import type { Card } from '../game/types'
 
 const props = defineProps<{
@@ -12,6 +14,12 @@ const props = defineProps<{
 const emit = defineEmits<{ pick: [uid: number] }>()
 
 const def = computed(() => CARD_DEFS[props.card.kind])
+
+/** 费用按付费者求值（card-cost 通道可修正）；无对局时退回牌种文档的基准费用 */
+const cost = computed(() => {
+  const state = gameState.value
+  return state ? energyCost(state, HUMAN, props.card.kind) : def.value.cost
+})
 </script>
 
 <template>
@@ -26,12 +34,12 @@ const def = computed(() => CARD_DEFS[props.card.kind])
     ]"
     @click="emit('pick', card.uid)"
   >
-    <!-- 能量费用：与卡面效果说明一致（打击 1 / 防御 1 / 回复 2） -->
+    <!-- 能量费用：与卡面效果说明一致（打击 1 / 防御 1 / 回复 2），可按通道修正 -->
     <span
       class="absolute top-0.5 right-1 rounded-sm border border-jade-600 bg-jade-400/90 px-1 text-[10px] leading-tight font-bold text-table-950"
       title="使用 / 打出这张牌需要支付的能量"
     >
-      {{ def.cost }}
+      {{ cost }}
     </span>
     <span class="mt-1 block text-center text-sm font-bold text-face-black">
       {{ CARD_NAME[card.kind] }}

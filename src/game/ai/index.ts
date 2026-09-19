@@ -188,14 +188,14 @@ function bestAttack(state: GameState, p: PlayerIndex): Action | null {
 
   const direct = findDirect(state, p, 'attack', 'use')
   if (direct) {
-    if (player.energy - energyCost(direct.option.as) < reserve) return null
+    if (player.energy - energyCost(state, p, direct.option.as) < reserve) return null
     return asAction('use', direct)
   }
 
   // 转化攻击：只在同用途的牌还有富余时（否则会把唯一的防御牌打光）
   const transformed = findTransformed(state, p, 'attack', 'use')
   if (!transformed) return null
-  if (player.energy - energyCost(transformed.option.as) < reserve) return null
+  if (player.energy - energyCost(state, p, transformed.option.as) < reserve) return null
   const role = cardRole(transformed.card.kind)
   const sameRole = player.hand.filter((card) => cardRole(card.kind) === role).length
   if (sameRole < 2) return null

@@ -5,6 +5,9 @@
  * 不命名为 *.test.ts，避免被 vitest 当作测试文件收集。
  */
 
+import { createRegistry, registryToDocs } from './registry'
+import type { Registry } from './types'
+
 export interface RawFixtureDoc {
   path: string
   value: unknown
@@ -95,4 +98,16 @@ export function mutateDoc(
   if (!target) throw new Error(`夹具里没有 ${path}`)
   change(target.value as Record<string, unknown>)
   return docs
+}
+
+/**
+ * 以**当前完整内容集**为底，按 id 替换/新增文档（与"改一份 JSON"等价）。
+ *
+ * 用完整内容集而不是最小夹具，是因为牌数守恒、引用完整性与 schema 校验
+ * 都要求一份自洽的内容；同 id 的旧文档会被剔除，新 id 则是纯新增。
+ */
+export function contentWith(docs: RawFixtureDoc[]): Registry {
+  const patchIds = new Set(docs.map((doc) => (doc.value as { id: string }).id))
+  const base = registryToDocs().filter((doc) => !patchIds.has((doc.value as { id: string }).id))
+  return createRegistry([...base, ...docs])
 }

@@ -1,8 +1,8 @@
 import { CARD_DEFS, CARD_NAME } from '../data/cardDefs'
 import { skillDef } from '../data/species'
 import { evalConditions } from '../dsl/condition'
-import { channelValue } from '../dsl/modifier'
-import { baseChannel, cardDoc, registry, skillDoc, skillsOf } from '../dsl/registry'
+import { channelBonus, channelValue } from '../dsl/modifier'
+import { cardDoc, registry, skillDoc, skillsOf } from '../dsl/registry'
 import { baseContext } from '../dsl/runtime'
 import type { EffectContext } from '../dsl/runtime'
 import { defaultTarget, targetCandidates } from '../dsl/target'
@@ -185,5 +185,5 @@ export function defendNeedAgainst(state: GameState, source: PlayerIndex): number
  * 任何把【打击】降成 0 费的效果都会与「无次数限制」组合成无限连击。
  */
 export function energyMaxBonus(state: GameState, p: PlayerIndex): number {
-  return channelValue(state, 'energy-max', p) - baseChannel('energy-max')
+  return channelBonus(state, 'energy-max', p)
 }

@@ -262,6 +262,19 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 缺少任一通道报 `missing-field`；未知键报 `unknown-channel`。`baseChannel(channel)` 读取基准值。
 
+**每条通道的基准值都是"默认值"，且都被引擎真实消费**（`dsl/channels.test.ts` 逐条以行为断言守卫）：
+
+| 通道 | 基准含义 | 引擎消费点 | 修正语义 |
+|---|---|---|---|
+| `energy-max` | 每回合能量上限（3） | `rules/energy.ts` `energyMax` | 绝对值，`set` 即覆盖上限 |
+| `defend-need-against` | 抵消一次【打击】需要的【防御】张数（1） | `skills/index.ts` `defendNeedAgainst` | 绝对值，威压 `set` 为 2 |
+| `draw-count` | 摸牌阶段摸几张（2） | `rules/turn.ts` `drawCount` | 偏移量：先手首回合再 −1 |
+| `hand-limit` | 手牌上限相对体力的偏移（0） | `rules/turn.ts` `handLimit` | 偏移量：上限 = 体力 + 修正 |
+| `card-cost` | 牌面费用的偏移（0） | `rules/energy.ts` `energyCost` | 偏移量：费用 = 牌种费用 + 修正，**最终不低于 1** |
+| `attack-range` | 攻击范围（1） | `rules/distance.ts` `isInRange` | 绝对值，1v1 座位距离恒为 1 |
+
+需要「默认 + 偏移」两段合成的通道用 `channelBonus(state, channel, p)`（= 聚合值 − 基准值）；绝对值语义直接用 `channelValue`。
+
 `rules/base.json`：
 
 ```json
@@ -367,6 +380,8 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 2. 按 `(priority, id)` 顺序遍历 `subject` 物种的技能，对匹配通道的每条 `modifier` 依次应用：`add` 累加、`set` 覆盖、`min` / `max` 夹取。
 
 `subject` 是「该数值属于谁」：怒吼看自己，威压看【打击】的使用者，由调用方给出。修正值本身可以是任意 `Value`，因此修正与求值互相递归。
+
+六条通道**全部**被引擎消费（摸牌数、手牌上限、费用、攻击范围也走通道，见 3.5 的表），因此内容侧的修正不会"校验通过但不生效"。引擎读通道时统一遵守两条夹取规则：摸牌数、手牌上限、攻击范围夹到非负，牌面费用夹到 ≥ 1（0 费 + 无次数限制 = 无限连击）。
 
 ### 4.4 递归深度保护
 
@@ -615,7 +630,7 @@ export interface EffectContext {
 }
 ```
 
-`resolveTargetChoice` 的规则：显式目标必须在候选内；`required: true` 时必须提供；否则用 `default`（再退化为唯一候选 → 自己）。
+`resolveTargetChoice` 的规则：显式目标必须在候选内；`required: true` 时必须提供；否则用 `default`（再退化为唯一候选 → 自己）；**候选为空时返回 `{ ok: false, reason: '没有符合条件的目标' }`**——声明了 `target` 就不能"无目标地"继续结算，否则效果里引用 `target` 时会在更深处抛错（攻击范围、存活条件这类修正都能让候选变空）。
 
 **已知取舍（重要）**：疗愈缺省目标是 `self`。因此「自己满血、只有对手受伤」时，缺省目标不合法，会返回 `{ ok: false, reason: '目标角色体力已满，无法回复' }`（文案来自该条件的 `reason`），必须显式传入目标（`resolveTargetChoice(env, spec, 1)` 才成立）。但当前界面**还没有目标选择器**：`stores/game.ts` 发动主动技时不带 `target`（`act({ kind: 'activate', skill })`），于是只能走缺省值。`TargetSpec.required` 字段是为将来接入目标选择器预留的。
 
@@ -840,9 +855,10 @@ export interface EffectContext {
 | `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（夺食/狡计）、不可选触发立即执行、可选触发只支持 `after-damage` |
 | `src/game/dsl/schema.test.ts` | `uncoveredFields()` 为空；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
 | `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、扫描非空跑 |
+| `src/game/dsl/channels.test.ts` | 通道接线验收：六条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
 | `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限都只改文档即可端到端生效 |
 
-`src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 物种的最小自洽文档集）与 `mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
+`src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 物种的最小自洽文档集）、`mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）与 `contentWith(docs)`（以完整内容集为底按 id 替换/新增文档）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
 
 `registry.ts` 另提供 `registryToDocs()`：把当前注册表还原成文档列表。做"只替换一份文档"的扩展性测试时需要一份完整自洽的内容集（牌数守恒、引用完整性都还要成立），用它作底最省事。
 
@@ -871,7 +887,7 @@ export interface EffectContext {
 | 界面没有目标选择器 | `TargetSpec.required` 已预留，但 `stores/game.ts` 发动主动技时不传 `target`；因此疗愈只能走缺省 `self`，「自己满血、只有对手受伤」时无法在界面上选中对手 |
 | 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage` 这一个事件；声明其它事件时机不会报错，但永远不会触发 |
 | `move-cards` 不能访问 `deck` | 牌组只能通过 `draw` 访问，以免绕过洗回逻辑 |
-| 部分通道还没被引擎消费 | `ruleset` 必须为六个通道都给基准值，但目前内容/测试实际读取的是 `energy-max` 与 `defend-need-against`；`draw-count`、`hand-limit`、`card-cost`、`attack-range` 的基准值已声明，对应数值仍由 `rules/turn.ts`（摸牌数 2/1、手牌上限 = 体力）、`rules/energy.ts`（费用）、`rules/distance.ts`（攻击范围）直接计算 |
+| 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
 | 数值递归上限 16 | 表达式/通道递归超过 16 层抛 `RuleError`；这是防自引用与防栈溢出的硬保护 |
 | 没有 native 逃生舱 | 效果必须表达为数据；无法表达的新机制只能扩展指令集（改词表、类型、校验器、解释器、schema），不能绕过校验直接调函数 |
 | 手牌上限 = 体力、守恒/能量不变式、RNG、距离仍在引擎 | 这些是机器不变量，不属于内容；见第 1 节的边界表 |

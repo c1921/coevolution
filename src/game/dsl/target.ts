@@ -37,7 +37,7 @@ export function targetCandidates(env: EvalEnv, spec: TargetSpec): PlayerIndex[] 
   return list.filter((index) => {
     const player = env.state.players[index]
     if (spec.alive && !player.alive) return false
-    if (spec.range && !isInRange(self, index)) return false
+    if (spec.range && !isInRange(env.state, self, index)) return false
     if (!spec.conditions || spec.conditions.length === 0) return true
     // 条件的 of:'target' 在候选语境下求值
     const scoped: EvalEnv = { state: env.state, ctx: { ...env.ctx, target: index } }
@@ -95,7 +95,12 @@ export function resolveTargetChoice(
     return { ok: false, reason: '必须指定一个目标' }
   }
   const target = defaultTarget(env, spec)
-  if (target === undefined) return { ok: true }
+  if (target === undefined) {
+    // 声明了 target 却一个候选都没有：**不能"无目标地"继续结算**。
+    // 否则效果里引用 target 时会在更深处抛错（报错离开内容文档很远），
+    // 而攻击范围、存活条件这类修正恰恰能让候选变空。
+    return { ok: false, reason: '没有符合条件的目标' }
+  }
   if (!candidates.includes(target)) {
     return {
       ok: false,

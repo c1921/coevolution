@@ -67,8 +67,8 @@ describe('界面状态与驱动循环', () => {
     store.submitOption(card, option)
 
     expect(store.errorMessage.value).toBeNull()
-    expect(state.players[0].energy).toBe(before - energyCost(option.as))
-    expect(store.optionText(option)).toContain(`${energyCost(option.as)} 能量`)
+    expect(state.players[0].energy).toBe(before - energyCost(state, 0, option.as))
+    expect(store.optionText(option)).toContain(`${energyCost(state, 0, option.as)} 能量`)
   })
 
   it('能量见底后没有可选的牌，只能结束出牌阶段', () => {

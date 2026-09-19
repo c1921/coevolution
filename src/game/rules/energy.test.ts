@@ -20,18 +20,21 @@ const ALL_KINDS: CardKind[] = ['strike', 'defend', 'heal']
 
 describe('能量系统', () => {
   it('费用按牌种固定：打击 1 / 防御 1 / 回复 2，且与牌面说明一致', () => {
-    expect(energyCost('strike')).toBe(1)
-    expect(energyCost('defend')).toBe(1)
-    expect(energyCost('heal')).toBe(2)
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    expect(energyCost(state, 0, 'strike')).toBe(1)
+    expect(energyCost(state, 0, 'defend')).toBe(1)
+    expect(energyCost(state, 0, 'heal')).toBe(2)
 
     for (const kind of ALL_KINDS) {
+      expect(energyCost(state, 0, kind)).toBe(CARD_DEFS[kind].cost)
       expect(CARD_DEFS[kind].text).toContain(`消耗 ${CARD_DEFS[kind].cost} 点能量`)
     }
   })
 
   it('任何牌面的费用都至少 1 点（0 费 + 无次数限制 = 无限连击）', () => {
+    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
     for (const kind of ALL_KINDS) {
-      expect(energyCost(kind)).toBeGreaterThanOrEqual(1)
+      expect(energyCost(state, 0, kind)).toBeGreaterThanOrEqual(1)
     }
   })
 
@@ -97,7 +100,7 @@ describe('能量系统', () => {
       via: 'flicker',
     })
 
-    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - energyCost('strike'))
+    expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - energyCost(state, 0, 'strike'))
     // 注：【打击】与【防御】目前同费（都是 1），所以「源牌与目标牌费用不同」的强断言
     // 要等出现一个源牌更便宜的转化技（如已移除的【灵草】红牌→2 费【回复】）才能复现。
   })

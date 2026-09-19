@@ -1,4 +1,5 @@
 import { emitTiming } from '../dsl/event'
+import { baseChannel, channelBonus } from '../dsl/modifier'
 import type { Timing } from '../dsl/types'
 import { log, playerLabel } from '../log'
 import type { GameState, PlayerIndex, TurnPhase } from '../types'
@@ -8,7 +9,11 @@ import { energyTag, refillEnergy } from './energy'
 import { buildTurnPlan, finishPhaseBody, takeNextPhase } from './phase'
 import { resetTurnUsage } from './usage'
 
-/** 摸牌数：摸牌阶段默认摸两张牌 */
+/**
+ * 摸牌数：摸牌阶段默认摸两张牌。
+ * **默认值是 ruleset 的 draw-count 通道基准**（`data/dsl/rules/base.json`），
+ * 这两个常量只用于界面提示与测试断言，turn.test.ts 会断言 DRAW_PER_TURN 与文档一致。
+ */
 export const DRAW_PER_TURN = 2
 /** 先手玩家第一回合的摸牌数：先手补偿，先手少摸一张 */
 export const FIRST_TURN_DRAW = 1
@@ -45,18 +50,24 @@ const runRegisteredTiming: TimingRunner = (state, timing) => {
 }
 
 /**
- * 摸牌数：默认 DRAW_PER_TURN；先手角色的第一个回合为 FIRST_TURN_DRAW（先手补偿）。
- * 将来出现「摸牌数 +1」类技能或效果时在这里叠加修正，并保证结果不为负。
+ * 摸牌数：默认 `draw-count` 通道的基准值（ruleset 文档，当前 2 张）；
+ * 先手角色的第一个回合少摸一张（先手补偿，由 FIRST_TURN_DRAW 与默认值的差表达）。
+ * 技能的「摸牌数 +1」写在文档的 `draw-count` 通道修正里，这里叠加修正并保证结果不为负。
  */
 export function drawCount(state: GameState, p: PlayerIndex): number {
-  const base =
-    state.turn === 1 && p === state.firstPlayer ? FIRST_TURN_DRAW : DRAW_PER_TURN
-  return Math.max(0, base)
+  const base = baseChannel('draw-count')
+  const firstTurnPenalty =
+    state.turn === 1 && p === state.firstPlayer ? FIRST_TURN_DRAW - DRAW_PER_TURN : 0
+  return Math.max(0, base + firstTurnPenalty + channelBonus(state, 'draw-count', p))
 }
 
-/** 手牌上限：默认等于当前体力值（体力值按不小于 0 计算） */
+/**
+ * 手牌上限：默认等于当前体力值（体力值按不小于 0 计算），
+ * `hand-limit` 通道的基准值 0 表示"不改变这条默认规则"，
+ * 技能的「手牌上限 +1」以通道修正表达，因此这里叠加修正后再夹到非负。
+ */
 export function handLimit(state: GameState, p: PlayerIndex): number {
-  return Math.max(0, state.players[p].hp)
+  return Math.max(0, state.players[p].hp + channelBonus(state, 'hand-limit', p))
 }
 
 /** 弃牌阶段需要弃置的张数：手牌数超过手牌上限的部分 */
