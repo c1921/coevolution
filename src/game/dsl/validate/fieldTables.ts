@@ -1,3 +1,17 @@
+import {
+  BASE_KEYS,
+  CONDITION_SPECS,
+  EFFECT_SPECS,
+  NODE_SPECS,
+  PICK_KEYS,
+  TARGET_KEYS,
+  TARGET_COUNT_KEYS,
+  VALUE_SPECS,
+  allowedFields,
+  kindAllowedFields,
+  requiredFieldsOf,
+} from '../fieldSpecs'
+import type { Spec } from '../fieldSpecs'
 import type { RoleRef } from '../kinds'
 import type { Doc } from '../types'
 
@@ -75,7 +89,10 @@ export interface Ref {
   expect?: 'use' | 'play'
 }
 
-export const BASE_KEYS = ['$schema', 'dslVersion', 'kind', 'id', 'priority']
+// 字段表的**实现**在 ../fieldSpecs（校验器与 schema 生成器共用的唯一来源）。
+// 这里只按校验器的调用习惯把同一份数据转成 allowed/required 两张表，
+// 并原样转出字段名常量，因此 validate/ 下的各节点校验器不需要知道字段表的来源。
+export { BASE_KEYS, PICK_KEYS, TARGET_KEYS, TARGET_COUNT_KEYS }
 
 /** 字段集合：allowed = 允许出现的键（多余键即报错），required = 必填键 */
 export interface FieldSet {
@@ -83,112 +100,27 @@ export interface FieldSet {
   required: readonly string[]
 }
 
-/** 取牌对象的字段 */
-export const PICK_KEYS = ['mode', 'count', 'cardKind', 'card']
-/** 目标规格的字段 */
-export const TARGET_KEYS = ['scope', 'required', 'default', 'alive', 'range', 'conditions', 'count']
-/** 目标个数规格的字段 */
-export const TARGET_COUNT_KEYS = ['mode', 'count']
+/** 各数值节点允许的字段（键 = `Value['kind']`，含判别式字段 `kind`） */
+export const VALUE_KEYS: Record<string, readonly string[]> = mapKinds(VALUE_SPECS)
 
-export const DOC_FIELDS = {
-  zoneRef: { allowed: ['zone', 'of'], required: ['zone'] },
-  pick: { allowed: PICK_KEYS, required: ['mode'] },
-  target: { allowed: TARGET_KEYS, required: ['scope', 'alive'] },
-  targetCount: { allowed: TARGET_COUNT_KEYS, required: ['mode'] },
-  modifier: { allowed: ['channel', 'op', 'value'], required: ['channel', 'op', 'value'] },
-  transform: { allowed: ['from', 'to', 'contexts'], required: ['from', 'to', 'contexts'] },
-  timing: { allowed: ['at', 'phase'], required: ['at'] },
-  species: {
-    allowed: [...BASE_KEYS, 'name', 'maxHp', 'skills', 'deck'],
-    required: ['name', 'maxHp', 'skills', 'deck'],
-  },
-  skill: {
-    allowed: [...BASE_KEYS, 'name', 'text', 'modifiers', 'transforms', 'trigger', 'activate'],
-    required: ['name', 'text'],
-  },
-  trigger: {
-    allowed: ['on', 'optional', 'when', 'effects', 'after'],
-    required: ['on', 'effects'],
-  },
-  activate: {
-    allowed: ['timing', 'oncePerTurn', 'costCards', 'requires', 'target', 'effects', 'after', 'ui'],
-    required: ['timing', 'effects'],
-  },
-  costCards: { allowed: ['count', 'cardKind'], required: ['count'] },
-  ui: { allowed: ['buttonLabel'], required: [] },
-  card: {
-    allowed: [...BASE_KEYS, 'name', 'short', 'text', 'cost', 'use', 'play'],
-    required: ['name', 'short', 'text', 'cost'],
-  },
-  useVariant: {
-    allowed: ['context', 'target', 'requires', 'effects', 'after'],
-    required: ['context', 'effects'],
-  },
-  playVariant: {
-    allowed: ['respondsTo', 'requires', 'effects'],
-    required: ['respondsTo', 'effects'],
-  },
-  ruleset: { allowed: [...BASE_KEYS, 'channels'], required: ['channels'] },
-  deck: { allowed: [...BASE_KEYS, 'cards'], required: ['cards'] },
-  deckEntry: { allowed: ['kind', 'count'], required: ['kind', 'count'] },
-  rule: { allowed: [...BASE_KEYS, 'on', 'when', 'effects'], required: ['on', 'effects'] },
-} satisfies Record<string, FieldSet>
-
-/** 各数值节点允许的字段（键 = `Value['kind']`） */
-export const VALUE_KEYS: Record<string, string[]> = {
-  const: ['kind', 'value'],
-  ref: ['kind', 'ref', 'of'],
-  add: ['kind', 'of'],
-  sub: ['kind', 'of'],
-  mul: ['kind', 'of'],
-  min: ['kind', 'of'],
-  max: ['kind', 'of'],
-  'floor-div': ['kind', 'of', 'by'],
-  clamp: ['kind', 'of', 'min', 'max'],
-  channel: ['kind', 'channel', 'of'],
-}
-
-/** 各条件节点允许的字段（键 = `Condition['kind']`） */
-export const CONDITION_KEYS: Record<string, string[]> = {
-  always: ['kind'],
-  not: ['kind', 'of'],
-  all: ['kind', 'of'],
-  any: ['kind', 'of'],
-  compare: ['kind', 'op', 'left', 'right'],
-  alive: ['kind', 'of'],
-  'has-cards': ['kind', 'of', 'zone', 'atLeast'],
-  'card-kind-count': ['kind', 'of', 'zone', 'cardKind', 'atLeast'],
-  'in-processing': ['kind', 'card'],
-  'card-transformed': ['kind'],
-  'picked-count': ['kind', 'atLeast'],
-  'skill-unused': ['kind', 'skill'],
-  'is-active': ['kind'],
-  'phase-is': ['kind', 'phase'],
-}
+/** 各条件节点允许的字段（键 = `Condition['kind']`）；`reason` 单独在 checkCondition 里补 */
+export const CONDITION_KEYS: Record<string, readonly string[]> = mapKinds(CONDITION_SPECS)
 
 /** 各效果节点允许的字段（键 = `Effect['kind']`） */
-export const EFFECT_KEYS: Record<string, string[]> = {
-  log: ['kind', 'template', 'vars'],
-  threat: ['kind', 'target', 'amount'],
-  'offset-threat': ['kind', 'target', 'amount'],
-  'lose-hp': ['kind', 'target', 'amount'],
-  heal: ['kind', 'target', 'amount'],
-  draw: ['kind', 'target', 'count'],
-  'move-cards': ['kind', 'from', 'to', 'pick'],
-  'pay-energy': ['kind', 'target', 'amount'],
-  'gain-energy': ['kind', 'target', 'amount'],
-  'record-card-use': ['kind', 'of', 'cardKind'],
-  'record-skill-use': ['kind', 'skill'],
-  contest: ['kind', 'responder', 'expectedCard', 'need', 'onMet', 'onUnmet'],
-  'contest-contribute': ['kind', 'amount'],
-  'resolve-dying': ['kind', 'of'],
-  'skip-phase': ['kind', 'phase'],
-  'extra-phase': ['kind', 'phase', 'position'],
-  'for-each-target': ['kind', 'effects'],
-  if: ['kind', 'condition', 'then', 'else'],
-}
+export const EFFECT_KEYS: Record<string, readonly string[]> = mapKinds(EFFECT_SPECS)
 
-/** 供 schema.test.ts 与文档生成使用：各节点的字段表 */
+/** 各节点的 allowed / required（键与 `DefName` 一致） */
+export const DOC_FIELDS: Record<string, FieldSet> = Object.fromEntries(
+  Object.entries(NODE_SPECS).map(([name]) => [
+    name,
+    {
+      allowed: allowedFields(name as keyof typeof NODE_SPECS),
+      required: requiredFieldsOf(name as keyof typeof NODE_SPECS),
+    },
+  ]),
+)
+
+/** 供 schema.test.ts 与 kinds.test.ts 使用：各节点的字段表一览 */
 export const DOC_SCHEMA_KEYS = {
   base: BASE_KEYS,
   fields: DOC_FIELDS,
@@ -198,5 +130,11 @@ export const DOC_SCHEMA_KEYS = {
   pick: PICK_KEYS,
   target: TARGET_KEYS,
   targetCount: TARGET_COUNT_KEYS,
-  timing: ['at', 'phase'],
+  timing: Object.keys(NODE_SPECS.timing.fields),
 } as const
+
+function mapKinds(table: Record<string, Record<string, Spec>>): Record<string, readonly string[]> {
+  return Object.fromEntries(
+    Object.keys(table).map((kind) => [kind, kindAllowedFields(table, kind)]),
+  )
+}

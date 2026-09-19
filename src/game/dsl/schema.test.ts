@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildSchema, schemaJson, uncoveredFields } from './schema'
+import { buildSchema, schemaJson, unreachableDefs } from './schema'
 import type { JsonSchema } from './schema'
 
 /**
@@ -139,8 +139,8 @@ function validateDef(schema: JsonSchema, name: string, value: unknown): string[]
 }
 
 describe('DSL schema.json', () => {
-  it('字段表里的每个字段都在 schema 生成器里声明了类型', () => {
-    expect(uncoveredFields()).toEqual([])
+  it('每个 $defs 节点都能从顶层文档种类到达（没有孤儿节点）', () => {
+    expect(unreachableDefs()).toEqual([])
   })
 
   it('提交的 schema.json 与代码生成的一致', () => {
