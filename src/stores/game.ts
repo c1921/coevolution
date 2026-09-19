@@ -9,8 +9,11 @@ import { energyCost, energyMax } from '../game/rules/energy'
 import { ATTRITION_TURN } from '../game/rules/turn'
 import { CARD_NAME } from '../game/data/cardDefs'
 import { skillDoc } from '../game/dsl/registry'
+import { baseContext } from '../game/dsl/runtime'
+import { resolveTargetChoice, targetScopeMembers } from '../game/dsl/target'
 import {
   activationCostCards,
+  activationTargetChoice,
   activeOptions,
   dyingRescueOptions,
   dyingUsableLabel,
@@ -42,6 +45,8 @@ export const draftOptions = ref<SpeciesId[]>([])
 export const gameState = ref<GameState | null>(null)
 export const selected = ref<number[]>([])
 export const errorMessage = ref<string | null>(null)
+/** 正在为哪个主动技选择目标；null 表示不在目标选择态 */
+export const pendingSkillTarget = ref<SkillId | null>(null)
 
 let pumpToken = 0
 let seed = 0
@@ -57,6 +62,7 @@ export function beginDraft(seedOverride?: number): void {
   gameState.value = null
   selected.value = []
   errorMessage.value = null
+  pendingSkillTarget.value = null
   screen.value = 'draft'
 }
 
@@ -65,6 +71,7 @@ export function chooseSpecies(species: SpeciesId): void {
   pumpToken += 1
   selected.value = []
   errorMessage.value = null
+  pendingSkillTarget.value = null
   gameState.value = reactive(createGame({ seed, playerSpecies: species })) as GameState
   screen.value = 'battle'
   pump()
@@ -75,6 +82,7 @@ export function backToStart(): void {
   gameState.value = null
   selected.value = []
   errorMessage.value = null
+  pendingSkillTarget.value = null
   screen.value = 'start'
 }
 
@@ -86,6 +94,7 @@ export function act(action: Action): void {
     submit(state, action)
     errorMessage.value = null
     selected.value = []
+    pendingSkillTarget.value = null
     pump()
   } catch (error) {
     errorMessage.value = error instanceof RuleError ? error.message : String(error)
@@ -302,10 +311,55 @@ export function skillButtonLabel(skill: SkillId): string {
   return `发动【${skillDef(skill).name}】`
 }
 
-/** 发动主动技：需要弃牌的技能把已选手牌作为费用传给引擎 */
-export function submitActivate(skill: SkillId): void {
+/** 目标选择器里的一个候选；不可选的候选带上文档给出的原因 */
+export interface TargetOption {
+  index: PlayerIndex
+  label: string
+  selectable: boolean
+  reason?: string
+}
+
+/**
+ * 目标选择器的候选列表：scope 的成员**全部**列出，
+ * 不合法的附上目标规格里条件的 `reason`（界面不自己编理由）。
+ */
+export function skillTargetOptions(skill: SkillId): TargetOption[] {
+  const state = gameState.value
+  if (!state) return []
+  const spec = skillDoc(skill).activate?.target
+  if (!spec) return []
+
+  const env = { state, ctx: baseContext(state, HUMAN) }
+  return targetScopeMembers(env, spec).map((index) => {
+    const resolved = resolveTargetChoice(env, spec, index)
+    const player = state.players[index]
+    const side = index === HUMAN ? '你' : '对手'
+    const option: TargetOption = {
+      index,
+      label: `${playerLabel(state, index)}（${side}） ${player.hp}/${player.maxHp}`,
+      selectable: resolved.ok,
+    }
+    if (!resolved.ok) option.reason = resolved.reason
+    return option
+  })
+}
+
+/** 当前目标选择态下的候选列表（不在选择态时为空） */
+export const pendingSkillTargetOptions = computed<TargetOption[]>(() =>
+  pendingSkillTarget.value === null ? [] : skillTargetOptions(pendingSkillTarget.value),
+)
+
+/**
+ * 发动主动技：需要弃牌的技能把已选手牌作为费用传给引擎。
+ *
+ * 文档要求选目标（required / 多候选 / 缺省目标不合格）时先进入目标选择态，
+ * 由 chooseSkillTarget 带着 target 再提交——绝不让玩家点出一个必失败的按钮。
+ */
+export function submitActivate(skill: SkillId, target?: PlayerIndex): void {
   const state = gameState.value
   if (!state) return
+
+  const action: Extract<Action, { kind: 'activate' }> = { kind: 'activate', skill }
   const need = activationCostCards(state, HUMAN, skill)
   if (need > 0) {
     const cards = selectedCards.value.slice(0, need)
@@ -313,10 +367,29 @@ export function submitActivate(skill: SkillId): void {
       errorMessage.value = `发动【${skillDef(skill).name}】需要先点选 ${need} 张手牌`
       return
     }
-    act({ kind: 'activate', skill, cards })
+    action.cards = cards
+  }
+
+  if (target === undefined && activationTargetChoice(state, HUMAN, skill)?.mustChoose) {
+    pendingSkillTarget.value = skill
+    errorMessage.value = null
     return
   }
-  act({ kind: 'activate', skill })
+  if (target !== undefined) action.target = target
+  act(action)
+}
+
+/** 在目标选择态里选定目标并提交（非法目标由引擎给出文档 reason） */
+export function chooseSkillTarget(index: PlayerIndex): void {
+  const skill = pendingSkillTarget.value
+  if (skill === null) return
+  pendingSkillTarget.value = null
+  submitActivate(skill, index)
+}
+
+/** 放弃选择目标，回到出牌阶段（已选手牌保留） */
+export function cancelSkillTarget(): void {
+  pendingSkillTarget.value = null
 }
 
 export function submitEndPhase(): void {

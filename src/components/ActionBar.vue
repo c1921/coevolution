@@ -4,6 +4,7 @@ import type { CardOption } from '../game/skills'
 import type { Card, SkillId } from '../game/types'
 import {
   discardCount,
+  errorMessage,
   humanPending,
   humanSkills,
   legalOptions,
@@ -113,5 +114,8 @@ function skillButtonText(skill: SkillId): string {
 
       <span v-else class="text-sm text-ink-500">等待对手行动…</span>
     </div>
+
+    <!-- 引擎拒绝的说明（含文档给出的目标/条件 reason）：不再静默失败 -->
+    <p v-if="errorMessage" class="mt-2 text-sm text-ember-400">{{ errorMessage }}</p>
   </div>
 </template>

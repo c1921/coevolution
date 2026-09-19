@@ -1,7 +1,14 @@
 import { cardRole, effectsInclude, skillDoc } from '../dsl/registry'
 import type { CardRole } from '../dsl/registry'
+import type { Effect } from '../dsl/types'
 import { canPayEnergy, energyCost } from '../rules/energy'
-import { activationCostCards, activeOptions, playOptions, useOptions } from '../skills'
+import {
+  activationCostCards,
+  activationTargetChoice,
+  activeOptions,
+  playOptions,
+  useOptions,
+} from '../skills'
 import type { CardOption } from '../skills'
 import type { Action, Card, GameState, PlayerIndex, SkillId } from '../types'
 import { otherPlayer, RuleError } from '../util'
@@ -73,6 +80,65 @@ function activationRole(skill: SkillId): ActivationRole | undefined {
   return undefined
 }
 
+/**
+ * 主动技的目标：完全由文档结构派生，AI 不认识任何技能 id。
+ *
+ *  - 对敌效果（伤害 / 失去体力 / 扣能量指向 target）优先选对手；
+ *  - 其余（治疗等）优先选自己；
+ *  - 首选不在候选内时退回文档缺省目标，再退回第一个候选。
+ *
+ * 返回 undefined 表示该技能现在没有合法目标，调用方应跳过它。
+ */
+export function chooseActivationTarget(
+  state: GameState,
+  p: PlayerIndex,
+  skill: SkillId,
+): PlayerIndex | undefined {
+  const choice = activationTargetChoice(state, p, skill)
+  if (!choice?.spec) return undefined
+
+  const candidates = choice.candidates
+  if (candidates.length === 0) return undefined
+  if (choice.spec.scope === 'self') return p
+
+  const other = candidates.find((index) => index !== p)
+  if (harmsChosenTarget(skill)) {
+    if (other !== undefined) return other
+  } else if (candidates.includes(p)) {
+    return p
+  }
+  if (choice.fallback !== undefined) return choice.fallback
+  return candidates[0]
+}
+
+/** 主动技是否以「伤害选定的目标」为目的（看效果指令与它引用的角色） */
+function harmsChosenTarget(skill: SkillId): boolean {
+  const activate = skillDoc(skill).activate
+  if (!activate) return false
+  return hasHarm([...activate.effects, ...(activate.after ?? [])])
+}
+
+function hasHarm(effects: readonly Effect[]): boolean {
+  for (const effect of effects) {
+    if (
+      (effect.kind === 'damage' || effect.kind === 'lose-hp' || effect.kind === 'pay-energy') &&
+      effect.target === 'target'
+    ) {
+      return true
+    }
+    if (effect.kind === 'if' && (hasHarm(effect.then) || hasHarm(effect.else ?? []))) {
+      return true
+    }
+    if (
+      effect.kind === 'contest' &&
+      (hasHarm(effect.onUnmet ?? []) || hasHarm(effect.onMet ?? []))
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 /** 某张手牌在该语境下的可选牌面（直接用法优先，其次技能转化） */
 function optionsOf(
   state: GameState,
@@ -142,10 +208,22 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
   const selfHeal = activations.find((item) => item.role === 'self-heal')
   if (selfHeal && player.hp < player.maxHp) {
     const cost = activationCostCards(state, p, selfHeal.skill)
-    if (player.hand.length >= cost + HAND_RESERVE) {
-      const fodder = worstCard(player.hand)
-      if (fodder) {
-        return { kind: 'activate', skill: selfHeal.skill, cards: [fodder], target: p }
+    // 文档声明了目标时，只有选得中自己才发动：这个分支是"自我治疗"，
+    // 不能因为自己不是候选（例如满血）就把治疗送给对手。
+    const choice = activationTargetChoice(state, p, selfHeal.skill)
+    const target = chooseActivationTarget(state, p, selfHeal.skill)
+    const selfTargeted = choice?.spec === undefined || target === p
+    if (player.hand.length >= cost + HAND_RESERVE && selfTargeted) {
+      // 按文档的费用张数取最差的几张（costCards 可能不是 1）
+      const fodder = worstCards(player.hand, cost)
+      if (fodder.length === cost) {
+        const action: Extract<Action, { kind: 'activate' }> = {
+          kind: 'activate',
+          skill: selfHeal.skill,
+        }
+        if (choice?.spec && target !== undefined) action.target = target
+        if (cost > 0) action.cards = fodder
+        return action
       }
     }
   }
@@ -159,7 +237,10 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
   // 3. 换牌类主动技：体力充裕但手牌太少时换牌
   const cycle = activations.find((item) => item.role === 'card-cycle')
   if (cycle && player.hp >= CYCLE_MIN_HP && player.hand.length <= CYCLE_MAX_HAND) {
-    return { kind: 'activate', skill: cycle.skill }
+    const target = chooseActivationTarget(state, p, cycle.skill)
+    return target === undefined
+      ? { kind: 'activate', skill: cycle.skill }
+      : { kind: 'activate', skill: cycle.skill, target }
   }
 
   // 4. 进攻
@@ -237,13 +318,13 @@ function cardScore(card: Card): number {
   return DISCARD_PRIORITY[cardRole(card.kind)]
 }
 
-function worstCard(hand: Card[]): Card | undefined {
-  return [...hand].sort((a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid)[0]
+/** 最不值得留的 count 张手牌（发动费用与弃牌阶段共用同一份优先级） */
+function worstCards(hand: Card[], count: number): Card[] {
+  return [...hand]
+    .sort((a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid)
+    .slice(0, count)
 }
 
 function decideDiscard(state: GameState, p: PlayerIndex, count: number): Action {
-  const sorted = [...state.players[p].hand].sort(
-    (a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid,
-  )
-  return { kind: 'discard-cards', cards: sorted.slice(0, count) }
+  return { kind: 'discard-cards', cards: worstCards(state.players[p].hand, count) }
 }

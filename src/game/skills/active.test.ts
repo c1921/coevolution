@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { contentWith } from '../dsl/fixtures'
+import { withRegistry } from '../dsl/registry'
 import { submit } from '../engine'
 import { assertConservation } from '../rules/cardZones'
 import { skillUsed } from '../rules/usage'
-import { activeOptions } from '../skills'
+import { activationTargetChoice, activeOptions } from '../skills'
 import { makeState, snapshot } from '../testUtils'
 
 describe('主动技', () => {
@@ -127,6 +129,8 @@ describe('主动技', () => {
     })
 
     expect(activeOptions(state, 0)).not.toContain('mend')
+    // 候选为空：技能直接不可用，界面不会出现「点了必失败」的按钮
+    expect(activationTargetChoice(state, 0, 'mend')).toBeNull()
 
     const before = snapshot(state)
     expect(() =>
@@ -170,5 +174,194 @@ describe('主动技', () => {
     const before = snapshot(state)
     expect(() => submit(state, { kind: 'activate', skill: 'overexert' })).toThrow()
     expect(state).toEqual(before)
+  })
+})
+
+/**
+ * 目标选择是「可用性判定（activeOptions 决定按钮）」与「结算解析（checkActivate）」
+ * 的共同入口：按钮出现的每个技能，都必须存在一个能提交成功的目标。
+ */
+describe('主动技的目标选择', () => {
+  /** 一份只有对手受伤的疗愈场面（就是"点了必失败"的那个坏路径） */
+  function onlyOpponentWounded() {
+    return makeState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      aiHp: 2,
+      playerHand: [{ kind: 'strike' }],
+    })
+  }
+
+  it('疗愈：要选谁由文档决定（required / 多候选 / 缺省不合格）', () => {
+    const onlyOpponent = activationTargetChoice(onlyOpponentWounded(), 0, 'mend')!
+    expect(onlyOpponent.spec?.scope).toBe('any')
+    expect(onlyOpponent.candidates).toEqual([1])
+    // default: self 不合格 → 没有可用缺省，必须显式选
+    expect(onlyOpponent.fallback).toBeUndefined()
+    expect(onlyOpponent.mustChoose).toBe(true)
+
+    const bothWounded = activationTargetChoice(
+      makeState({ playerSpecies: 'deer', aiSpecies: 'bear', playerHp: 2, aiHp: 2 }),
+      0,
+      'mend',
+    )!
+    expect(bothWounded.candidates).toEqual([0, 1])
+    expect(bothWounded.fallback).toBe(0)
+    // 候选不唯一：界面让玩家选（可以主动治疗对手）
+    expect(bothWounded.mustChoose).toBe(true)
+
+    const onlySelf = activationTargetChoice(
+      makeState({ playerSpecies: 'deer', aiSpecies: 'bear', playerHp: 2 }),
+      0,
+      'mend',
+    )!
+    expect(onlySelf.candidates).toEqual([0])
+    expect(onlySelf.fallback).toBe(0)
+    expect(onlySelf.mustChoose).toBe(false)
+  })
+
+  it('没有 target 规格的技能：不需要目标，也不需要选择', () => {
+    const state = makeState({ playerSpecies: 'ox', aiSpecies: 'bear', playerHp: 4 })
+    const choice = activationTargetChoice(state, 0, 'overexert')!
+    expect(choice.spec).toBeUndefined()
+    expect(choice.candidates).toEqual([])
+    expect(choice.mustChoose).toBe(false)
+  })
+
+  it('可用 ⟺ 提交必成功：候选逐个提交都被引擎接受', () => {
+    // 双方都受伤时两个候选都成立，各自在独立状态上验证（疗愈每回合限一次）
+    const probe = makeState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      aiHp: 2,
+      playerHand: [{ kind: 'strike' }],
+    })
+    const choice = activationTargetChoice(probe, 0, 'mend')!
+    expect(activeOptions(probe, 0)).toContain('mend')
+
+    for (const target of choice.candidates) {
+      const state = makeState({
+        playerSpecies: 'deer',
+        aiSpecies: 'bear',
+        playerHp: 2,
+        aiHp: 2,
+        playerHand: [{ kind: 'strike' }],
+      })
+      const before = state.players[target].hp
+      submit(state, {
+        kind: 'activate',
+        skill: 'mend',
+        cards: [state.players[0].hand[0]!],
+        target,
+      })
+      expect(state.players[target].hp).toBe(before + 1)
+      assertConservation(state)
+    }
+  })
+
+  it('只有对手受伤：按钮可用，显式指向对手即可成功（不再点了必失败）', () => {
+    const state = onlyOpponentWounded()
+    expect(activeOptions(state, 0)).toContain('mend')
+
+    submit(state, {
+      kind: 'activate',
+      skill: 'mend',
+      cards: [state.players[0].hand[0]!],
+      target: 1,
+    })
+
+    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].hp).toBe(3)
+    assertConservation(state)
+  })
+
+  it('必须选目标却不给：拒绝并保持状态不变', () => {
+    const state = onlyOpponentWounded()
+    const before = snapshot(state)
+
+    expect(() =>
+      submit(state, {
+        kind: 'activate',
+        skill: 'mend',
+        cards: [state.players[0].hand[0]!],
+      }),
+    ).toThrow('【疗愈】需要指定一个目标')
+    expect(state).toEqual(before)
+  })
+
+  it('required:true 的技能：不指定目标不可发动，指定后正常结算', () => {
+    const synthetic = contentWith([
+      {
+        path: 'skills/setbone.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'setbone',
+          name: '正骨',
+          text: '出牌阶段：令一名已受伤的角色回复 1 点体力（必须指定目标）。',
+          activate: {
+            timing: 'play',
+            target: {
+              scope: 'any',
+              required: true,
+              alive: true,
+              conditions: [
+                {
+                  kind: 'compare',
+                  op: 'lt',
+                  left: { kind: 'ref', ref: 'hp', of: 'target' },
+                  right: { kind: 'ref', ref: 'maxHp', of: 'target' },
+                  reason: '目标体力已满',
+                },
+              ],
+            },
+            effects: [
+              { kind: 'heal', target: 'target', amount: { kind: 'const', value: 1 } },
+              { kind: 'log', template: '{self} 发动【正骨】，{target} 回复 1 点体力' },
+            ],
+          },
+        },
+      },
+      {
+        path: 'species/deer.json',
+        value: {
+          dslVersion: 1,
+          kind: 'species',
+          id: 'deer',
+          priority: 50,
+          name: '鹿',
+          emoji: '🦌',
+          maxHp: 3,
+          skills: ['setbone'],
+          deck: 'basic',
+        },
+      },
+    ])
+
+    withRegistry(synthetic, () => {
+      const state = makeState({
+        playerSpecies: 'deer',
+        aiSpecies: 'bear',
+        playerHp: 2,
+        aiHp: 2,
+      })
+      const choice = activationTargetChoice(state, 0, 'setbone')!
+      expect(choice.candidates).toEqual([0, 1])
+      expect(choice.fallback).toBeUndefined()
+      expect(choice.mustChoose).toBe(true)
+      expect(activeOptions(state, 0)).toContain('setbone')
+
+      const before = snapshot(state)
+      expect(() => submit(state, { kind: 'activate', skill: 'setbone' })).toThrow(
+        '【正骨】需要指定一个目标',
+      )
+      expect(state).toEqual(before)
+
+      submit(state, { kind: 'activate', skill: 'setbone', target: 1 })
+      expect(state.players[1].hp).toBe(3)
+      expect(state.players[0].hp).toBe(2)
+      assertConservation(state)
+    })
   })
 })

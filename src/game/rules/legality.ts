@@ -7,6 +7,7 @@ import type { EffectContext, EvalEnv } from '../dsl/runtime'
 import { resolveTargetChoice } from '../dsl/target'
 import {
   activationCostCards,
+  activationTargetChoice,
   activeOptions,
   dyingUsableLabel,
   playOptions,
@@ -196,8 +197,18 @@ export function checkActivate(
   }
 
   if (activate.target) {
-    const resolved = resolveTargetChoice(env, activate.target, target)
+    const choice = activationTargetChoice(state, p, skill)
+    if (!choice?.spec) return fail(`当前无法发动【${name}】`)
+    // 必须选目标却没给：给玩家一句能照做的提示，而不是缺省目标的条件原因
+    if (target === undefined && choice.mustChoose) {
+      return fail(`【${name}】需要指定一个目标`)
+    }
+    const resolved = resolveTargetChoice(env, choice.spec, target)
     if (!resolved.ok) return fail(resolved.reason)
+    // 用最终目标重算 requires：可用（activeOptions 用了存在性目标）⟺ 提交必成功
+    const scoped: EvalEnv = { state, ctx: { ...env.ctx, target: resolved.target } }
+    const failed = firstFailed(scoped, activate.requires)
+    if (failed) return fail(failed.reason ?? `当前无法发动【${name}】`)
   }
 
   return OK

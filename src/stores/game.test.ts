@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiDecide } from '../game/ai'
 import { isOver } from '../game/engine'
 import { assertEnergyBounds, energyCost } from '../game/rules/energy'
+import { makeState } from '../game/testUtils'
+import type { MakeStateOptions } from '../game/testUtils'
+import type { GameState } from '../game/types'
 import * as store from './game'
 
 /** 固定种子：对局随机只影响"抽到什么物种/什么牌"，测试用固定种子避免偶发失败 */
@@ -12,6 +15,17 @@ function actLikeHuman(): void {
   const state = store.gameState.value
   if (!state || isOver(state)) return
   store.act(aiDecide(state))
+}
+
+/**
+ * 装载一个手牌与体力都可精确指定的对局状态（主动技的目标选择需要确定的场面，
+ * 靠固定种子抽将撞不出"自己满血、对手受伤"这种组合）。
+ */
+function loadState(options: MakeStateOptions): GameState {
+  store.backToStart()
+  const state = makeState(options)
+  store.gameState.value = state
+  return state
 }
 
 describe('界面状态与驱动循环', () => {
@@ -197,5 +211,102 @@ describe('界面状态与驱动循环', () => {
     expect(store.screen.value).toBe('start')
     expect(store.gameState.value).toBeNull()
     expect(store.human.value).toBeNull()
+  })
+
+  it('只有对手受伤时，界面提供「治疗对手」并提交成功', () => {
+    const state = loadState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      playerHp: 3,
+      aiHp: 2,
+      playerHand: [{ kind: 'strike' }],
+    })
+
+    // 按钮出现（技能可用），点击后进入目标选择态而不是直接报错
+    expect(store.humanSkills.value).toContain('mend')
+    store.pickCard(state.players[0].hand[0]!.uid)
+    store.submitActivate('mend')
+
+    expect(store.errorMessage.value).toBeNull()
+    expect(store.pendingSkillTarget.value).toBe('mend')
+    expect(state.players[1].hp).toBe(2) // 还没结算
+
+    const options = store.pendingSkillTargetOptions.value
+    expect(options.map((option) => option.index)).toEqual([0, 1])
+    expect(options.find((option) => option.index === 1)).toMatchObject({ selectable: true })
+    // 不可选的候选带上文档里的 reason
+    expect(options.find((option) => option.index === 0)).toMatchObject({
+      selectable: false,
+      reason: '目标角色体力已满，无法回复',
+    })
+
+    store.chooseSkillTarget(1)
+
+    expect(store.errorMessage.value).toBeNull()
+    expect(store.pendingSkillTarget.value).toBeNull()
+    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].hp).toBe(3)
+  })
+
+  it('双方都受伤时，界面让玩家选，可以主动治疗对手', () => {
+    const state = loadState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      aiHp: 2,
+      playerHand: [{ kind: 'strike' }],
+    })
+
+    store.pickCard(state.players[0].hand[0]!.uid)
+    store.submitActivate('mend')
+    expect(store.pendingSkillTarget.value).toBe('mend')
+    expect(
+      store.pendingSkillTargetOptions.value.map((option) => [option.index, option.selectable]),
+    ).toEqual([
+      [0, true],
+      [1, true],
+    ])
+
+    store.chooseSkillTarget(1)
+
+    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].hp).toBe(2) // 没有治疗自己
+  })
+
+  it('候选为空时主动技按钮不出现，也不会进入目标选择态', () => {
+    const state = loadState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'strike' }],
+    })
+
+    expect(store.humanSkills.value).not.toContain('mend')
+
+    store.pickCard(state.players[0].hand[0]!.uid)
+    store.submitActivate('mend')
+
+    expect(store.pendingSkillTarget.value).toBeNull()
+    expect(store.errorMessage.value).toContain('当前无法发动')
+  })
+
+  it('取消目标选择不提交，已选手牌保留', () => {
+    const state = loadState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      playerHp: 3,
+      aiHp: 2,
+      playerHand: [{ kind: 'strike' }],
+    })
+
+    store.pickCard(state.players[0].hand[0]!.uid)
+    store.submitActivate('mend')
+    expect(store.pendingSkillTarget.value).toBe('mend')
+
+    store.cancelSkillTarget()
+
+    expect(store.pendingSkillTarget.value).toBeNull()
+    expect(state.players[1].hp).toBe(2)
+    expect(state.players[0].hand).toHaveLength(1)
+    expect(store.selectedCards.value).toHaveLength(1)
   })
 })

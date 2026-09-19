@@ -4,10 +4,10 @@ import { evalConditions } from '../dsl/condition'
 import { channelBonus, channelValue } from '../dsl/modifier'
 import { cardDoc, registry, skillDoc, skillsOf } from '../dsl/registry'
 import { baseContext } from '../dsl/runtime'
-import type { EffectContext } from '../dsl/runtime'
-import { defaultTarget, targetCandidates } from '../dsl/target'
+import type { EffectContext, EvalEnv } from '../dsl/runtime'
+import { resolveTargetChoice, targetCandidates } from '../dsl/target'
 import type { UseContext } from '../dsl/kinds'
-import type { ActivateSpec, UseVariant } from '../dsl/types'
+import type { TargetSpec, UseVariant } from '../dsl/types'
 import { evalValue } from '../dsl/value'
 import { skillUsed } from '../rules/usage'
 import type { Card, CardKind, GameState, PlayerIndex, SkillId } from '../types'
@@ -124,24 +124,49 @@ export function activationCostCards(
   return Math.max(0, Math.floor(evalValue(env, activate.costCards.count)))
 }
 
-/** 主动技的发动语境：把缺省目标绑定好，使 requires 里可以引用 target */
-function activationEnv(
+/**
+ * 主动技的目标选择：界面/AI 想知道「要不要选、能选谁、不选时用谁」。
+ *
+ * 这是目标解析的**唯一入口**——可用性判定（activeOptions）、合法性校验
+ * （checkActivate）与界面选择器都从这里取同一份结论，因此
+ * 「按钮可用」与「提交必成功」不会再分叉。
+ */
+export interface ActivationTargetChoice {
+  /** 目标规格；技能没有声明 target 时为 undefined（提交不带目标） */
+  spec?: TargetSpec
+  /** 全部合法候选（已按 alive / 距离 / conditions 过滤） */
+  candidates: PlayerIndex[]
+  /** 不需要玩家选择时，提交将使用的目标（= 合法的文档缺省目标） */
+  fallback?: PlayerIndex
+  /** 界面/AI 必须先选定目标：required、候选不唯一，或缺省目标不合格 */
+  mustChoose: boolean
+}
+
+/**
+ * 解析主动技的目标选择；返回 null 表示该技能现在不能发动
+ * （没有 activate，或声明了 target 却一个合法候选都没有）。
+ */
+export function activationTargetChoice(
   state: GameState,
   p: PlayerIndex,
   skill: SkillId,
-): { env: { state: GameState; ctx: EffectContext }; activate: ActivateSpec } | null {
+): ActivationTargetChoice | null {
   const activate = skillDoc(skill).activate
   if (!activate) return null
-  const ctx: EffectContext = { self: p, active: state.active, costCards: [] }
-  const env = { state, ctx }
-  if (activate.target) {
-    const candidates = targetCandidates(env, activate.target)
-    if (candidates.length === 0) return null
-    const preferred = defaultTarget(env, activate.target)
-    ctx.target =
-      preferred !== undefined && candidates.includes(preferred) ? preferred : candidates[0]
-  }
-  return { env, activate }
+
+  const spec = activate.target
+  if (!spec) return { candidates: [], mustChoose: false }
+
+  const env: EvalEnv = { state, ctx: baseContext(state, p) }
+  const candidates = targetCandidates(env, spec)
+  // 声明了 target 却一个候选都没有：不能"无目标地"继续结算
+  if (candidates.length === 0) return null
+
+  const resolved = resolveTargetChoice(env, spec, undefined)
+  const fallback = resolved.ok ? resolved.target : undefined
+  const mustChoose =
+    spec.required === true || candidates.length > 1 || fallback === undefined
+  return { spec, candidates, ...(fallback !== undefined ? { fallback } : {}), mustChoose }
 }
 
 /**
@@ -154,9 +179,21 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
 
   const out: SkillId[] = []
   for (const skill of skillsOf(player.species)) {
-    const resolved = activationEnv(state, p, skill.id)
-    if (!resolved) continue
-    const { env, activate } = resolved
+    const activate = skillDoc(skill.id).activate
+    if (!activate) continue
+    const choice = activationTargetChoice(state, p, skill.id)
+    if (!choice) continue
+
+    // requires 按"存在一个合法目标"求值，从而决定按钮是否出现；
+    // 提交时 checkActivate 会用玩家最终选定的目标重算同一组条件。
+    const ctx: EffectContext = { self: p, active: state.active, costCards: [] }
+    if (choice.spec) {
+      const bound = choice.fallback ?? choice.candidates[0]
+      if (bound === undefined) continue
+      ctx.target = bound
+    }
+    const env = { state, ctx }
+
     if (activate.oncePerTurn && skillUsed(state, p, skill.id)) continue
     if (activate.costCards && player.hand.length < evalValue(env, activate.costCards.count)) {
       continue

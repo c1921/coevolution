@@ -10,6 +10,7 @@ import {
   hasTargetCandidate,
   resolveTargetChoice,
   targetCandidates,
+  targetScopeMembers,
 } from './target'
 import type { TargetSpec } from './types'
 
@@ -117,5 +118,22 @@ describe('目标选取', () => {
       ok: false,
       reason: '没有符合条件的目标',
     })
+  })
+
+  it('scope 成员集是过滤前的集合（目标选择器据此列出"为什么不能选"）', () => {
+    // 自己满血、对手受伤：候选只剩对手，但成员集仍是双方
+    const env = envOf('deer', 'bear', { aiHp: 2 })
+    expect(targetCandidates(env, mendTarget())).toEqual([1])
+    expect(targetScopeMembers(env, mendTarget())).toEqual([0, 1])
+
+    // 阵亡者仍是 scope 成员，但被 alive 过滤掉
+    env.state.players[1].alive = false
+    expect(targetScopeMembers(env, strikeTarget())).toEqual([1])
+    expect(targetCandidates(env, strikeTarget())).toEqual([])
+
+    // dying scope 没有濒死者时成员集为空
+    expect(targetScopeMembers(env, healTarget('dying'))).toEqual([])
+    const dying: EvalEnv = { state: env.state, ctx: { ...env.ctx, dying: 1 } }
+    expect(targetScopeMembers(dying, healTarget('dying'))).toEqual([1])
   })
 })

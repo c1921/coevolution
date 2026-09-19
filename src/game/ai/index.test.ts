@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest'
+import { contentWith } from '../dsl/fixtures'
+import { withRegistry } from '../dsl/registry'
+import type { Registry } from '../dsl/types'
+import { makeState } from '../testUtils'
+import type { Action } from '../types'
+import { aiDecide, chooseActivationTarget } from './index'
+
+/**
+ * AI 选目标：完全由文档结构派生。
+ *
+ * AI 里不允许出现技能 id，因此"治疗效果选自己 / 伤害效果选对手 / required 必须带目标"
+ * 都要能从技能文档推出来；测试用合成技能（withRegistry）验证这条约定。
+ */
+
+/** 用一份合成技能替换鹿的技能表（技能与物种文档必须同时替换，否则是死文档） */
+function deerWith(skill: Record<string, unknown> & { id: string }): Registry {
+  return contentWith([
+    { path: `skills/${skill.id}.json`, value: skill },
+    {
+      path: 'species/deer.json',
+      value: {
+        dslVersion: 1,
+        kind: 'species',
+        id: 'deer',
+        priority: 50,
+        name: '鹿',
+        emoji: '🦌',
+        maxHp: 3,
+        skills: [skill.id],
+        deck: 'basic',
+      },
+    },
+  ])
+}
+
+/** 出牌阶段动作里带的费用牌与目标 */
+function activationOf(action: Action): Extract<Action, { kind: 'activate' }> {
+  if (action.kind !== 'activate') throw new Error(`期待主动技动作，实际是 ${action.kind}`)
+  return action
+}
+
+/** 令一名任意角色（可用 required 强制显式选择）回复体力的合成技 */
+function healSkill(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> & {
+  id: string
+} {
+  return {
+    dslVersion: 1,
+    kind: 'skill',
+    id,
+    name: '合成治疗',
+    text: '出牌阶段：令一名已受伤的角色回复 1 点体力。',
+    activate: {
+      timing: 'play',
+      target: {
+        scope: 'any',
+        required: true,
+        alive: true,
+        conditions: [
+          {
+            kind: 'compare',
+            op: 'lt',
+            left: { kind: 'ref', ref: 'hp', of: 'target' },
+            right: { kind: 'ref', ref: 'maxHp', of: 'target' },
+            reason: '目标体力已满',
+          },
+        ],
+      },
+      effects: [{ kind: 'heal', target: 'target', amount: { kind: 'const', value: 1 } }],
+      ...extra,
+    },
+  }
+}
+
+describe('AI 选目标', () => {
+  it('自我治疗类主动技：受伤时选自己，并把 target 交给引擎', () => {
+    const state = makeState({
+      playerSpecies: 'deer',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
+    })
+
+    const action = activationOf(aiDecide(state))
+    expect(action).toMatchObject({ skill: 'mend', target: 0 })
+    expect(action.cards).toHaveLength(1)
+  })
+
+  it('required:true 的技能：AI 会带上显式目标', () => {
+    withRegistry(deerWith(healSkill('setbone')), () => {
+      const state = makeState({
+        playerSpecies: 'deer',
+        aiSpecies: 'bear',
+        playerHp: 2,
+        aiHp: 2,
+        playerHand: [{ kind: 'strike' }],
+      })
+
+      const action = activationOf(aiDecide(state))
+      expect(action).toMatchObject({ skill: 'setbone', target: 0 })
+    })
+  })
+
+  it('对敌效果：目标倾向对手（由效果指令与角色引用派生）', () => {
+    const venom: Record<string, unknown> & { id: string } = {
+      dslVersion: 1,
+      kind: 'skill',
+      id: 'venom',
+      name: '毒牙',
+      text: '出牌阶段：对任意一名角色造成 1 点伤害。',
+      activate: {
+        timing: 'play',
+        target: { scope: 'any', required: true, alive: true },
+        effects: [{ kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } }],
+      },
+    }
+
+    withRegistry(deerWith(venom), () => {
+      const state = makeState({
+        playerSpecies: 'deer',
+        aiSpecies: 'bear',
+        playerHp: 2,
+        aiHp: 2,
+      })
+      // 自己也是候选，但"伤害 target"的效果倾向让 AI 选对手
+      expect(chooseActivationTarget(state, 0, 'venom')).toBe(1)
+    })
+  })
+
+  it('费用张数由文档决定：costCards 为 2 时传两张', () => {
+    const rites = healSkill('rites', {
+      costCards: { count: { kind: 'const', value: 2 } },
+    })
+
+    withRegistry(deerWith(rites), () => {
+      const state = makeState({
+        playerSpecies: 'deer',
+        aiSpecies: 'bear',
+        playerHp: 2,
+        playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
+      })
+
+      const action = activationOf(aiDecide(state))
+      expect(action).toMatchObject({ skill: 'rites', target: 0 })
+      expect(action.cards).toHaveLength(2)
+    })
+  })
+})

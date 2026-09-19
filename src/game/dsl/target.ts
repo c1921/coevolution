@@ -11,33 +11,35 @@ import type { TargetSpec } from './types'
  * 合法性判定与结算共用这里的同一套规则，避免"校验通过但结算取到别的目标"。
  */
 
-/** 全部候选目标（按 scope 过滤 alive / 距离 / 条件） */
-export function targetCandidates(env: EvalEnv, spec: TargetSpec): PlayerIndex[] {
+/**
+ * scope 的成员集合（尚未按 alive / 距离 / 条件过滤）。
+ *
+ * 目标选择器需要把"被条件挡掉的候选"也列出来并附上文档 reason，
+ * 所以过滤前的成员集必须与过滤共用同一个 scope 定义。
+ */
+export function targetScopeMembers(env: EvalEnv, spec: TargetSpec): PlayerIndex[] {
   const self = env.ctx.self
   const all = env.state.players.map((player) => player.index)
-  let list: PlayerIndex[]
   switch (spec.scope) {
     case 'self':
-      list = [self]
-      break
+      return [self]
     case 'any':
-      list = all
-      break
+      return all
     case 'others':
-      list = all.filter((index) => index !== self)
-      break
+      return all.filter((index) => index !== self)
     case 'opponent':
-      list = [otherPlayer(self)]
-      break
+      return [otherPlayer(self)]
     case 'dying':
-      list = env.ctx.dying === undefined ? [] : [env.ctx.dying]
-      break
+      return env.ctx.dying === undefined ? [] : [env.ctx.dying]
   }
+}
 
-  return list.filter((index) => {
+/** 全部候选目标（按 scope 过滤 alive / 距离 / 条件） */
+export function targetCandidates(env: EvalEnv, spec: TargetSpec): PlayerIndex[] {
+  return targetScopeMembers(env, spec).filter((index) => {
     const player = env.state.players[index]
     if (spec.alive && !player.alive) return false
-    if (spec.range && !isInRange(env.state, self, index)) return false
+    if (spec.range && !isInRange(env.state, env.ctx.self, index)) return false
     if (!spec.conditions || spec.conditions.length === 0) return true
     // 条件的 of:'target' 在候选语境下求值
     const scoped: EvalEnv = { state: env.state, ctx: { ...env.ctx, target: index } }

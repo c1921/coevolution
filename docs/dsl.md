@@ -632,7 +632,24 @@ export interface EffectContext {
 
 `resolveTargetChoice` 的规则：显式目标必须在候选内；`required: true` 时必须提供；否则用 `default`（再退化为唯一候选 → 自己）；**候选为空时返回 `{ ok: false, reason: '没有符合条件的目标' }`**——声明了 `target` 就不能"无目标地"继续结算，否则效果里引用 `target` 时会在更深处抛错（攻击范围、存活条件这类修正都能让候选变空）。
 
-**已知取舍（重要）**：疗愈缺省目标是 `self`。因此「自己满血、只有对手受伤」时，缺省目标不合法，会返回 `{ ok: false, reason: '目标角色体力已满，无法回复' }`（文案来自该条件的 `reason`），必须显式传入目标（`resolveTargetChoice(env, spec, 1)` 才成立）。但当前界面**还没有目标选择器**：`stores/game.ts` 发动主动技时不带 `target`（`act({ kind: 'activate', skill })`），于是只能走缺省值。`TargetSpec.required` 字段是为将来接入目标选择器预留的。
+### 9.2 主动技的目标选择（界面 / AI 接线）
+
+主动技的目标解析只有 `game/skills/index.ts` 的 `activationTargetChoice(state, p, skill)` 一个入口，它给出：
+
+| 字段 | 说明 |
+|---|---|
+| `spec` | 目标规格；技能没有声明 `target` 时为 `undefined`（提交不带目标） |
+| `candidates` | 已按 `alive` / 距离 / `conditions` 过滤的合法候选 |
+| `fallback` | 不需要玩家选择时提交所用的目标（= 合法的文档缺省目标） |
+| `mustChoose` | 界面/AI 是否必须先选定目标 |
+
+`mustChoose = spec.required === true || candidates.length > 1 || fallback === undefined`；返回 `null` 表示现在不能发动（没有 `activate`，或声明了 `target` 却一个候选都没有，此时按钮不出现）。
+
+- `activeOptions` 与 `checkActivate` 共用它：前者按"存在一个合法候选"决定按钮是否出现，后者用玩家最终选定的目标重算 `requires`，所以**可用 ⟺ 提交必成功**。
+- 多候选或缺省目标不合格时，界面进入目标选择态（`stores/game.ts` 的 `pendingSkillTarget`），候选列表由 `dsl/target.ts` 的 `targetScopeMembers` 给出**过滤前**的 scope 成员，不可选的候选附上 `conditions` 里的 `reason`。
+- AI（`game/ai/index.ts` 的 `chooseActivationTarget`）同样由文档结构派生：对 `target` 造成伤害/失去体力/扣能量的效果选对手，其余选自己，再退回 `fallback` 与第一个候选。
+
+**卡牌用法仍未接通**：`Action.use-card` 没有 `target` 字段，`UseVariant.target` 只能走文档缺省目标（现有【打击】= 唯一候选对手、【回复】= 自己 / 濒死者），所以暂时写不出"使用时选目标"或多目标的牌。
 
 ---
 
@@ -884,7 +901,7 @@ export interface EffectContext {
 |---|---|
 | 内容是构建期打包，不做热更新 | `registry.ts` 用 `import.meta.glob(..., { eager: true })` 静态导入；改 JSON 需重新构建/刷新，不存在运行时重新加载内容的入口 |
 | `optional: true` 只支持 `after-damage` | 其它时机 + `optional: true` 会被校验器以 `bad-combination` 拒绝 |
-| 界面没有目标选择器 | `TargetSpec.required` 已预留，但 `stores/game.ts` 发动主动技时不传 `target`；因此疗愈只能走缺省 `self`，「自己满血、只有对手受伤」时无法在界面上选中对手 |
+| 目标选择器只覆盖主动技 | `ActivateSpec.target` 已接通（`activationTargetChoice` 同时服务可用性、校验、结算、界面与 AI）；`Action.use-card` 没有 `target` 字段，卡牌的 `UseVariant.target` 仍走文档缺省目标 |
 | 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage` 这一个事件；声明其它事件时机不会报错，但永远不会触发 |
 | `move-cards` 不能访问 `deck` | 牌组只能通过 `draw` 访问，以免绕过洗回逻辑 |
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |

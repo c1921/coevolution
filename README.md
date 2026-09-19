@@ -176,16 +176,16 @@ src/
                            # energy（能量消耗、回满、能量不变式）
                            # usage（使用次数统计与「每回合限一次」技能记录）
                            # legality / damage / dying / death / cardZones / distance
-    skills/                # index（牌面生成、主动技枚举、通道读取）
-    ai/                    # 规则式 AI（按文档派生的用途决策，确定性）
-  stores/game.ts           # reactive 状态 + AI 驱动循环（pumpToken 防竞态）
+    skills/                # index（牌面生成、主动技枚举、目标选择解析、通道读取）
+    ai/                    # 规则式 AI（按文档派生的用途决策与选目标，确定性）
+  stores/game.ts           # reactive 状态 + 目标选择态 + AI 驱动循环（pumpToken 防竞态）
   components/              # StartScreen / DraftScreen / GameBoard / PlayerPanel / HandCard
                            # ActionBar / PromptOverlay / LogPanel / HealthBar
 ```
 
 引擎以 **prompt 驱动的状态机**对外：`submit(state, action)` 先校验再应用，然后 `advance()` 自动推进系统步骤，直到停在需要人或 AI 决策的点上。回合推进由 `(阶段, 子步骤)` 游标加剩余阶段队列 `phaseQueue` 表示，规则效果按「时机」注册。界面用 `reactive()` 包裹同一份状态对象，引擎就地修改它即自动刷新，引擎本身永远不 import Vue。
 
-## 测试覆盖（258 个用例）
+## 测试覆盖（275 个用例）
 
 | 文件 | 覆盖内容 |
 |---|---|
@@ -200,7 +200,7 @@ src/
 | `rules/dying.test.ts` | 自救、体力为负需连用多张、双方放弃即死亡、救援不受限制、濒死中禁用打击、能量不足无法自救／救援 |
 | `rules/death.test.ts` | 弃置全部手牌、处理区按归属收尾、终局后拒绝动作 |
 | `skills/transform.test.ts` | 疾影双向、不能转化【回复】、不可冒用、虎/鹿暂时没有转化技、换文档即新增一条转化 |
-| `skills/active.test.ts` | 透支非伤害且不触发夺食、透支濒死后才摸牌、疗愈限一次与目标校验 |
+| `skills/active.test.ts` | 透支非伤害且不触发夺食、透支濒死后才摸牌、疗愈限一次与目标校验；目标选择：`activationTargetChoice` 判定（required / 多候选 / 缺省不合格）、候选逐个提交都成功、`required:true` 必须显式指定目标 |
 | `skills/passive.test.ts` | 怒吼能量上限 +2、威压 need=2、物种名与技能名不重复、物种引用与注册表一一对应、换文档即改数值 |
 | `dsl/validate.test.ts` | 31 个校验用例：版本、未知键/判别式/通道/条件/指令、费用下限、牌区与取牌组合、日志占位符与角色、引用完整性与死文档 |
 | `dsl/registry.test.ts` | 内置文档全部通过校验、物种与牌种顺序不变、withRegistry 注入与还原、问题聚合 |
@@ -208,7 +208,7 @@ src/
 | `dsl/value.test.ts` | 全部数值节点、角色数值、通道基准与聚合、修正值为表达式、通道自引用报错 |
 | `dsl/channels.test.ts` | 六条通道逐条注入修正并断言引擎行为随之改变（摸牌数、手牌上限、费用与下限 1、攻击范围、能量上限、抵消张数）；探针表与 `CHANNELS` 一一对应 |
 | `dsl/condition.test.ts` | 全部条件种类、in-processing/card-transformed/picked-count 等运行时绑定 |
-| `dsl/target.test.ts` | 疗愈候选与缺省目标、打击唯一候选、濒死目标、阵亡者不可选、候选为空即报错、文档 reason 作为报错 |
+| `dsl/target.test.ts` | 疗愈候选与缺省目标、打击唯一候选、濒死目标、阵亡者不可选、候选为空即报错、文档 reason 作为报错、scope 成员集（过滤前） |
 | `dsl/template.test.ts` | 普通/转化使用、濒死救援、技能日志、vars 优先、未知字段报错 |
 | `dsl/effect.test.ts` | 全部效果指令、四种取牌模式、对抗帧与抵消、濒死脱离、after 延迟语义 |
 | `dsl/event.test.ts` | 时机匹配、消耗战规则、触发收集与 when 条件、runTrigger、不可选触发立即执行 |
@@ -216,8 +216,9 @@ src/
 | `dsl/guards.test.ts` | 应用代码零内容 id、白名单不过期、不 import node 内置模块、扫描非空跑 |
 | `dsl/extensibility.test.ts` | 新主动技 / 新攻击牌（含牌组与守恒）/ 改体力上限都只改文档 |
 | `engine.test.ts` | **200 局 AI 自对局**全终局且牌数守恒、能量不变式、8×8 物种组合、完全确定性复现、回归：曾经的死循环组合；私有牌组：开局各 20 张且构成正确、摸牌不影响对手、夺食转移归属后全局仍守恒 |
-| `stores/game.test.ts` | 抽将→选将→对局→终局全链路、只提供合法操作、出牌扣能量、能量见底只能结束阶段、弃牌校验、再来一局不被旧回调污染（固定种子） |
-| `components/render.test.ts` | 界面渲染冒烟：开始游戏→抽将→对局三屏都有内容（视图 Proxy 必须容忍 Vue 的内部键探测，防"只剩背景"回归） |
+| `stores/game.test.ts` | 抽将→选将→对局→终局全链路、只提供合法操作、出牌扣能量、能量见底只能结束阶段、弃牌校验、再来一局不被旧回调污染（固定种子）；目标选择器：按钮可用→进入选择态→候选含文档 reason→选定后提交成功、取消不提交、候选为空不出现按钮 |
+| `components/render.test.ts` | 界面渲染冒烟：开始游戏→抽将→对局三屏都有内容（视图 Proxy 必须容忍 Vue 的内部键探测，防"只剩背景"回归）、目标选择器与错误说明可见 |
+| `ai/index.test.ts` | AI 选目标：自我治疗选自己、`required:true` 会带目标、对敌效果选对手、费用张数由文档决定 |
 
 （用例数由 `npm test` 汇总；上表按文件列出覆盖点。）
 
@@ -236,13 +237,13 @@ src/
 - **所有物种暂时共用同一套牌**：物种文档的 `deck` 都指向 `basic`；按物种分化牌组只需新增/替换牌组 JSON 并改物种文档的 `deck` 字段。
 - **距离恒为 1**：1v1 双方座位距离固定；攻击范围走 `attack-range` 通道（基准 1），`rules/distance.ts` 保留完整接口以便扩展多人。
 - **濒死询问顺序**：从濒死者开始按座次询问（1v1 即濒死者 → 对手），`util.ts` 的 `aliveOrderFrom` 是顺序扩展点。
-- **【疗愈】目标**：可以指定任意已受伤角色（规则上允许治疗对手，AI 永远不会这么做）。
+- **【疗愈】目标**：可以指定任意已受伤角色——主动技需要选目标时（`required`、候选不唯一或缺省目标不合格）界面会弹出目标选择器，因此玩家可以主动治疗对手；AI 仍只在自己受伤时治疗自己。
 - **【狡计】**：从伤害来源手牌中随机获得一张。
 - **AI 是规则式的**：付得起就出【防御】、濒死不救对手、弃牌按「攻击→防御→回复」优先级；进攻时手上有能打出的【防御】就留 1 点能量防守。它不会做长线规划。
 - **AI 不认技能/牌种 id**：用途（治疗、换牌、攻击、防御、回复）由文档结构派生（`cardRole` / `skillKinds`），策略阈值留在 `ai/index.ts`。
 - **内容随应用打包**：`data/dsl/*.json` 由 `import.meta.glob` 静态打包并在启动时校验，**不支持运行时热加载**；注册表与加载是解耦的（`createRegistry` / `withRegistry`），将来要做内容包只需再加一个加载器。
 - **可选发动的触发技能只支持「受到伤害后」**：`optional: true` 目前仅允许 `after-damage`（引擎会 emit 的事件类时机），其余时机只能是非可选效果。
-- **目标选择器**：`TargetSpec.required` 已预留"必须显式指定目标"的语义，但界面还没有目标选择器，因此现有主动技都使用可由文档给出的缺省目标。
+- **目标选择器只覆盖主动技**：`ActivateSpec.target` 已接通（可用性判定、校验、结算与界面共用 `activationTargetChoice`）；但 `Action.use-card` 没有 `target` 字段，卡牌的 `UseVariant.target` 仍走文档缺省目标，因此还写不出"使用时选目标"的牌（多目标牌同样留待后续）。
 
 ### 平衡观察
 
