@@ -85,6 +85,12 @@ export const REWARD_MIN_SCORE = 1.5
  * 回复量只有 1 点，平时不如删掉一张低质量初始牌；只有真的快死了才值得拿它续命。
  */
 export const REWARD_DANGER_HP = 3
+/**
+ * 服务奖励：未升级的初始牌多于这个数就继续「移除」，降到它及以下就改为「升级」。
+ * 用「低质量牌数量」而不是牌组总张数：奖励会不断往手里加牌，总张数几乎不会降下来，
+ * 只看总张数会让 AI 永远在删牌、从不升级。
+ */
+export const REWARD_KEEP_BASE = 8
 
 /**
  * 规则式 AI：读取当前待输入项并返回一个动作。
@@ -640,12 +646,11 @@ function removalTarget(candidates: Card[]): Card {
 }
 
 /**
- * 服务三选一。牌组循环的最优解是把低质量初始牌删掉：牌组越薄，关键牌上手率越高，
- * 因此 AI 在「有未升级的初始牌可删」时优先移除，而不是无脑升级。
+ * 服务三选一：**删牌与升级兼顾**的牌组循环。
  *  - 体力危险（≤ REWARD_DANGER_HP）且回复可用 → 先回复保命；
- *  - 有未升级的初始牌可删 → 移除（具体删哪张交给 pick-card 的 removalTarget）；
- *  - 否则 → 升级（把好牌变强）；
- *  - 再否则 → 有牌就删，最后才是回复。
+ *  - 未升级的初始牌还多（> REWARD_KEEP_BASE）且可移除 → 移除（牌组越薄关键牌上手率越高）；
+ *  - 否则能升级就升级（把留下的牌变强）；
+ *  - 再否则有牌就删，最后才是回复。
  * 每次只提交当前可用的选项，绝不下发一个必被 legality 拒绝的动作。
  */
 function decideServiceReward(state: GameState, p: PlayerIndex): Action {
@@ -658,7 +663,8 @@ function decideServiceReward(state: GameState, p: PlayerIndex): Action {
   if (available.heal && player.hp <= REWARD_DANGER_HP) {
     return { kind: 'pick-reward', service: 'heal' }
   }
-  if (available.remove && removeCandidates(state, p).some(isUnupgraded)) {
+  const lowQuality = removeCandidates(state, p).filter(isUnupgraded).length
+  if (available.remove && lowQuality > REWARD_KEEP_BASE) {
     return { kind: 'pick-reward', service: 'remove' }
   }
   if (available.upgrade) return { kind: 'pick-reward', service: 'upgrade' }

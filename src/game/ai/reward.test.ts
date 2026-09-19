@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeState } from '../testUtils'
 import type { Card, GameState, Prompt } from '../types'
-import { aiDecide, rewardCardScore } from './index'
+import { REWARD_KEEP_BASE, aiDecide, rewardCardScore } from './index'
 
 /**
  * AI 的奖励决策与功能牌策略。
@@ -90,24 +90,24 @@ describe('AI 卡牌三选一', () => {
 })
 
 describe('AI 服务三选一', () => {
-  it('体力低于一半时选择回复', () => {
+  it('体力危险时（≤3）选择回复', () => {
     const state = serviceState({ aiHp: 3 })
     expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'heal' })
   })
 
-  it('攻击牌占比过低时选择移除', () => {
+  it('低质量初始牌降到阈值后改为升级（删牌与升级兼顾）', () => {
     const state = serviceState({ aiHp: 10 })
-    // 把 AI 的手牌与牌区换成清一色防御牌：攻击牌占比为 0
+    // 只剩 REWARD_KEEP_BASE 张未升级的初始牌：不再删牌，改为升级
     state.players[1].deck = []
     state.players[1].discard = []
-    state.players[1].hand = Array.from({ length: 6 }, (_, i) => ({
+    state.players[1].hand = Array.from({ length: REWARD_KEEP_BASE }, (_, i) => ({
       uid: 200 + i,
-      kind: 'defend',
+      kind: 'strike',
     }))
-    expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'remove' })
+    expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'upgrade' })
   })
 
-  it('有未升级的初始牌可删时优先移除（牌组循环：删低质量初始牌）', () => {
+  it('低质量初始牌还多时先移除（牌组循环：先削低质量初始牌）', () => {
     const state = serviceState({ aiHp: 10 })
     expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'remove' })
   })
