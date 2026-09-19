@@ -854,14 +854,18 @@ export interface EffectContext {
 - **伤害与威胁是两个触发点**：`threat` 指令叠加威胁后立刻 emit `after-threat`（【反击】在这里还手）；而伤害要等到承受者自己的回合结束、剩余威胁结算时才由 `dealDamage` emit `after-damage`，随后做濒死检查。因此「先叠的威胁」不会立刻变成伤害，但会立刻触发 `after-threat`。
 - 触发型的其它字段：`on`（必填）、`optional?`（当前只有 `after-damage` / `after-threat` 可为 `true`）、`when?`（非空条件数组）、`effects`（必填）、`after?`。
 - 非可选的时机技能与 `rule` 按注册顺序（`priority`, `id`）依次执行；`trigger` 里可选的技能由引擎询问玩家，玩家应答后再结算其 `effects`。
-- 内置的触发技只有一个：反击型【反击】挂在 `after-threat` 上（`optional: true`，令来源获得 1 点威胁）。`optional: true` 的技能示例——`skills/riposte.json`：
+- 内置的触发技只有一个：反击型【反击】挂在 `after-threat` 上（`optional: true`，令来源获得 1 点威胁）。**「每回合限一次」的写法**是 `when` 里加 `skill-unused`、`effects` 里先 `record-skill-use`——记录在技能拥有者身上，并在**其自己的回合开始时**重置（与主动技的 `oncePerTurn` 同一套语义）。`optional: true` + 限一次的技能示例——`skills/riposte.json`：
 
 ```json
 "trigger": {
   "on": { "at": "after-threat" },
   "optional": true,
-  "when": [{ "kind": "alive", "of": "source" }],
+  "when": [
+    { "kind": "alive", "of": "source" },
+    { "kind": "skill-unused", "skill": "riposte" }
+  ],
   "effects": [
+    { "kind": "record-skill-use", "skill": "riposte" },
     { "kind": "threat", "target": "source", "amount": { "kind": "const", "value": 1 } },
     { "kind": "log", "template": "{self} 发动【反击】，向 {source} 反击" }
   ]
