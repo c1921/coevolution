@@ -200,35 +200,28 @@ function runtimeCycles(): string[][] {
 }
 
 /**
- * 已知的运行时循环依赖（存量债务，随阶段 2 的修复清空）。
+ * 允许存在的运行时循环依赖。**当前为空：应用代码的依赖图是一条 DAG。**
  *
- * 这 5 个文件构成**同一个**强连通分量，根因是一条反了的依赖：
- * `rules/damage.ts` 为了收集「受到伤害后」触发而 import `dsl/event.ts`，
- * event 又 import `dsl/effect.ts`（解释器），解释器反过来 import
- * `rules/damage.ts`（loseHp）与 `rules/internal` → `rules/threat.ts`。
+ * 这里曾经列着 5 个文件构成的强连通分量 ——
+ * `dsl/effect` ⇄ `dsl/event` ⇄ `dsl/internal` ⇄ `rules/damage` ⇄ `rules/threat`。
+ * 根因是 `rules/damage.ts` 为了收集「受到伤害后」触发而 import `dsl/event.ts`，
+ * 而 event 依赖解释器 `dsl/effect.ts`，解释器又反过来 import damage 与 threat。
+ * 修法是把触发收集拆到 `dsl/triggers.ts`（不依赖解释器），
+ * 于是 `damage → triggers` 成为一条指向叶子的边。
  *
- * 修复方向：把触发收集（collectTriggers）搬到一个不依赖解释器的模块，
- * 让 damage → triggers 成为一条指向叶子的边。修完后这份白名单必须清空——
- * 下面的用例与白名单是**深比较**，不删条目就会失败。
+ * 这个常量保留为空数组而不是删掉检查：它是"新环必须显式登记"的闸门。
+ * 真要临时接受一条环，就按同一格式加进来并在结论里说明原因。
  */
-const ALLOWED_CYCLES: string[][] = [
-  [
-    'src/game/dsl/effect.ts',
-    'src/game/dsl/event.ts',
-    'src/game/dsl/internal.ts',
-    'src/game/rules/damage.ts',
-    'src/game/rules/threat.ts',
-  ],
-]
+const ALLOWED_CYCLES: string[][] = []
 
 describe('守卫：运行时依赖图不允许有环', () => {
-  it('非平凡强连通分量与白名单完全一致（修完一处就该删一条白名单）', () => {
+  it('非平凡强连通分量与白名单完全一致（白名单为空即必须是 DAG）', () => {
     const cycles = runtimeCycles()
     const rendered = cycles.map((c) => c.join(' ⇄ ')).join('\n  ')
     expect(
       cycles,
       `运行时循环依赖（import type 不算边）：\n  ${rendered}\n` +
-        '新引入的环必须拆掉；已修复的环必须从 ALLOWED_CYCLES 删除。',
+        '新引入的环必须拆掉；确需保留则显式登记到 ALLOWED_CYCLES 并说明原因。',
     ).toEqual(ALLOWED_CYCLES)
   })
 

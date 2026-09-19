@@ -1,11 +1,11 @@
-import type { DamageCtx, GameState, PlayerIndex, TriggerRef } from '../types'
-import { RuleError } from '../util'
 import { sameTiming } from '../rules/phase'
+import type { GameState, PlayerIndex, TriggerRef } from '../types'
+import { RuleError } from '../util'
 import { evalConditions } from './condition'
 import { runEffectGroup } from './effect'
-import { registry, skillDoc, skillsOf } from './registry'
-import { baseContext } from './runtime'
-import type { EffectContext } from './runtime'
+import { collectTriggers, contextFor } from './triggers'
+import type { EventPayload } from './triggers'
+import { registry, skillDoc } from './registry'
 import type { Timing } from './types'
 
 /**
@@ -16,24 +16,16 @@ import type { Timing } from './types'
  *  - 规则文档没有"归属者"，在 applyTimingRules 里立即执行；
  *  - 技能触发要区分可选/不可选：不可选的立即执行，可选的在 after-damage 上交给
  *    调用方（伤害帧）逐个询问——这样"可选询问"与"未抵消伤害"的顺序由引擎掌控。
+ *
+ * 触发的**收集**（`collectTriggers` / `contextFor` / `EventPayload`）住在 `./triggers`：
+ * 引擎原语 `rules/damage.ts` 需要它，却不能依赖本模块（本模块 import 解释器
+ * `./effect`），否则会形成 `damage → event → effect → damage` 的运行时循环依赖。
+ * 这里把三者原样转出，既有调用点（含 `dsl/event.test.ts`）无需改动。
  */
 
+export { collectTriggers, contextFor }
+export type { EventPayload }
 export { sameTiming }
-
-/** 事件负载（当前只有伤害事件；将来扩展新时机时在这里加字段） */
-export interface EventPayload {
-  damage?: DamageCtx
-}
-
-/** 时机语境：self = 技能归属者（规则效果为当前回合角色） */
-function contextFor(state: GameState, self: PlayerIndex, payload?: EventPayload): EffectContext {
-  return {
-    ...baseContext(state, self),
-    target: payload?.damage?.target,
-    source: payload?.damage?.source,
-    damage: payload?.damage,
-  }
-}
 
 /** 执行挂在某时机上的规则文档（与角色无关，按注册表顺序） */
 export function applyTimingRules(state: GameState, timing: Timing): void {
@@ -44,24 +36,6 @@ export function applyTimingRules(state: GameState, timing: Timing): void {
     if (!evalConditions(env, rule.when)) continue
     runEffectGroup(state, rule, ctx)
   }
-}
-
-/** 收集主体在该时机上的技能触发（按技能优先级顺序，条件已求值） */
-export function collectTriggers(
-  state: GameState,
-  timing: Timing,
-  subject: PlayerIndex,
-  payload?: EventPayload,
-): TriggerRef[] {
-  const refs: TriggerRef[] = []
-  for (const skill of skillsOf(state.players[subject].species)) {
-    const trigger = skill.trigger
-    if (!trigger || !sameTiming(trigger.on, timing)) continue
-    const ctx = contextFor(state, subject, payload)
-    if (!evalConditions({ state, ctx }, trigger.when)) continue
-    refs.push({ owner: subject, skill: skill.id, optional: trigger.optional === true })
-  }
-  return refs
 }
 
 /** 执行一条技能触发 */

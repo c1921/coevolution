@@ -1,5 +1,6 @@
 import { log, playerLabel } from '../log'
-import { collectTriggers } from '../dsl/event'
+// 触发收集住在 dsl/triggers（不依赖解释器）：damage 依赖 dsl/event 会形成循环依赖
+import { collectTriggers } from '../dsl/triggers'
 import type { DamageCtx, GameState, PlayerIndex } from '../types'
 import { pushDying } from './dying'
 
