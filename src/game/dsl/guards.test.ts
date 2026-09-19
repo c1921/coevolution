@@ -108,7 +108,7 @@ describe('守卫：内容 id 不得出现在应用代码里', () => {
   it('守卫本身确实在扫描文件（防止路径写错导致空跑）', () => {
     const files = appFiles()
     expect(files.length).toBeGreaterThan(20)
-    expect(files).toContain(join(SRC, 'game/engine.ts'))
+    expect(files).toContain(join(SRC, 'game/engine/index.ts'))
     // 技能文档里当然有 id；确认内容 id 判定不是空集
     expect(contentIds().length).toBeGreaterThan(10)
     expect(skillDoc('assault').name).toBe('强袭')
@@ -229,12 +229,15 @@ describe('守卫：运行时依赖图不允许有环', () => {
     const files = sourceFiles()
     expect(files.length).toBeGreaterThan(50)
     const known = new Set(files)
-    // 抽查一条已知存在的跨层运行时依赖，确认解析器真的解析出了仓库内路径
-    expect(runtimeDepsOf(join(SRC, 'game/engine.ts'), known)).toContain(
+    // 抽查两条已知存在的依赖，确认解析器真的解析出了仓库内路径
+    expect(runtimeDepsOf(join(SRC, 'game/engine/index.ts'), known)).toContain(
+      join(SRC, 'game/engine/actions.ts'),
+    )
+    expect(runtimeDepsOf(join(SRC, 'game/engine/actions.ts'), known)).toContain(
       join(SRC, 'game/dsl/effect.ts'),
     )
-    // `import type` 必须被跳过：engine.ts 对 types 的引入是 type-only
-    expect(runtimeDepsOf(join(SRC, 'game/engine.ts'), known)).not.toContain(
+    // `import type` 必须被跳过：engine/index.ts 对 types 的引入是 type-only
+    expect(runtimeDepsOf(join(SRC, 'game/engine/index.ts'), known)).not.toContain(
       join(SRC, 'game/types.ts'),
     )
   })
