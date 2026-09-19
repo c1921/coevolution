@@ -131,7 +131,7 @@ describe('转化由文档描述', () => {
       // 端到端：把【回复】当【打击】使用，对手获得 1 点威胁
       submit(state, { kind: 'use-card', card: heal, as: 'strike', via: 'charge' })
       expect(state.players[1].threat).toBe(1)
-      expect(state.players[1].hp).toBe(4)
+      expect(state.players[1].hp).toBe(10)
     })
     assertConservation(state)
   })

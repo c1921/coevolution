@@ -76,7 +76,7 @@ describe('能量系统', () => {
 
     expect(state.players[1].energy).toBe(energyMax(state, 1) - 1)
     expect(state.players[1].threat).toBe(0)
-    expect(state.players[1].hp).toBe(4)
+    expect(state.players[1].hp).toBe(10)
   })
 
   it('【回复】支付 2 点', () => {

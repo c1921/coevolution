@@ -14,7 +14,7 @@ describe('伤害结算', () => {
     dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
     advance(state)
 
-    expect(state.players[1].hp).toBe(3)
+    expect(state.players[1].hp).toBe(9)
     expect(state.lastDamage).toMatchObject({ source: 0, target: 1, amount: 1 })
     expect(state.log.map((e) => e.text).join()).toContain('受到 1 点伤害')
     assertConservation(state)
@@ -48,7 +48,7 @@ describe('伤害结算', () => {
 
     loseHp(state, 1, 1)
 
-    expect(state.players[1].hp).toBe(3)
+    expect(state.players[1].hp).toBe(9)
     expect(state.stack).toHaveLength(0)
     expect(state.log.map((e) => e.text).join()).toContain('失去 1 点体力')
   })

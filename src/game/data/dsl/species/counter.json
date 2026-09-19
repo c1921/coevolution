@@ -5,7 +5,7 @@
   "id": "counter",
   "priority": 20,
   "name": "反击型",
-  "maxHp": 4,
+  "maxHp": 10,
   "skills": ["riposte"],
   "deck": "basic"
 }

@@ -50,9 +50,9 @@ describe('数值表达式', () => {
     const wounded = envOf('counter', 'defensive', { playerHp: 2, playerHand: [{ kind: 'strike' }] })
     wounded.ctx.target = 1
     expect(evalValue(wounded, { kind: 'ref', ref: 'hp' })).toBe(2)
-    expect(evalValue(wounded, { kind: 'ref', ref: 'maxHp' })).toBe(4)
+    expect(evalValue(wounded, { kind: 'ref', ref: 'maxHp' })).toBe(10)
     expect(evalValue(wounded, { kind: 'ref', ref: 'handCount' })).toBe(1)
-    expect(evalValue(wounded, { kind: 'ref', ref: 'hp', of: 'target' })).toBe(4)
+    expect(evalValue(wounded, { kind: 'ref', ref: 'hp', of: 'target' })).toBe(10)
     expect(evalValue(wounded, { kind: 'ref', ref: 'turn' })).toBe(1)
   })
 

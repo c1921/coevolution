@@ -13,6 +13,7 @@ import {
   ATTRITION_STEP,
   discardCount,
   drawCount,
+  HAND_LIMIT_MAX,
   handLimit,
 } from './turn'
 import { cardUseCount, recordCardUse, recordSkillUse, skillUsed } from './usage'
@@ -212,18 +213,31 @@ describe('消耗战（终止规则）', () => {
       aiSpecies: 'defensive',
       phase: 'turn-start',
     })
-    state.turn = ATTRITION_TURN
+    // 用 22 回合避开「卡牌三选一」（21 是 3 的倍数，会多压一个奖励帧）；
+    // 22 回合的消耗战流失量同样是 1 点，语义与 21 回合一致。
+    state.turn = ATTRITION_TURN + 1
     state.active = 0
     state.players[0].hp = 1
 
     expect(advanceTurn(state)).toBe('continue')
     expect(state.players[0].hp).toBe(0)
     expect(state.stack[0]).toMatchObject({ kind: 'dying', dying: 0 })
-    expect(logTexts(state)).toContain('消耗战开始')
+    expect(logTexts(state)).toContain('消耗战：')
 
     // 无人救援 → 死亡 → 终局
     advance(state)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
+
+    // 「消耗战开始」只在进入消耗战的那一回合播报
+    const first = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
+    first.turn = ATTRITION_TURN
+    first.active = 0
+    applyTimingRules(first, { at: 'turn-start' })
+    expect(logTexts(first)).toContain('消耗战开始')
   })
 
   it('消耗战濒死被救活后，同一回合不会重复扣体力', () => {
@@ -234,7 +248,8 @@ describe('消耗战（终止规则）', () => {
       playerHp: 1,
       playerHand: [{ kind: 'heal' }],
     })
-    state.turn = ATTRITION_TURN
+    // 同样用 22 回合避开奖励帧（见上一条用例）
+    state.turn = ATTRITION_TURN + 1
     state.active = 0
 
     advance(state)
@@ -268,7 +283,7 @@ describe('规范额度', () => {
     expect(drawCount(state, 1)).toBe(DRAW_PER_TURN)
   })
 
-  it('手牌上限等于当前体力值，弃牌数是超出的部分', () => {
+  it('手牌上限取 min(当前体力, 6)，弃牌数是超出的部分', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -289,13 +304,31 @@ describe('规范额度', () => {
     expect(handLimit(state, 0)).toBe(0)
   })
 
+  it('体力超过封顶值时手牌上限截断为 HAND_LIMIT_MAX，体力更高不再放宽', () => {
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      playerHp: 10,
+    })
+
+    // 体力 10（上限）时手牌上限仍是 6，不会随体力继续膨胀
+    expect(handLimit(state, 0)).toBe(HAND_LIMIT_MAX)
+    state.players[0].hp = HAND_LIMIT_MAX
+    expect(handLimit(state, 0)).toBe(HAND_LIMIT_MAX)
+
+    // 体力低于封顶值时按体力算
+    state.players[0].hp = HAND_LIMIT_MAX - 2
+    expect(handLimit(state, 0)).toBe(HAND_LIMIT_MAX - 2)
+  })
+
   it('消耗战挂在「回合开始时」时机：先失去体力，再进行摸牌阶段', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       phase: 'turn-start',
     })
-    state.turn = ATTRITION_TURN
+    // 22 回合：只有消耗战，没有奖励帧插队（见前面的用例说明）
+    state.turn = ATTRITION_TURN + 1
 
     advance(state)
 
@@ -304,7 +337,7 @@ describe('规范额度', () => {
     const drawAt = texts.findIndex((t) => t.includes('摸了'))
     expect(attritionAt).toBeGreaterThanOrEqual(0)
     expect(drawAt).toBeGreaterThan(attritionAt)
-    expect(state.players[0].hp).toBe(3)
+    expect(state.players[0].hp).toBe(9)
     assertConservation(state)
   })
 

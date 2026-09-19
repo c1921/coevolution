@@ -136,7 +136,7 @@ describe('进攻型的【强袭】', () => {
 
     // 走同一条威胁机制：不直接扣血，只叠 2 点威胁
     expect(state.players[1].threat).toBe(2)
-    expect(state.players[1].hp).toBe(4)
+    expect(state.players[1].hp).toBe(10)
     expect(state.players[0].discard.map((card) => card.uid)).toContain(fodder.uid)
     expect(state.players[0].usedSkillsThisTurn).toContain('assault')
     expect(state.pending).toMatchObject({ kind: 'play', player: 0 })

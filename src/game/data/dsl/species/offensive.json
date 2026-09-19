@@ -5,7 +5,7 @@
   "id": "offensive",
   "priority": 10,
   "name": "进攻型",
-  "maxHp": 4,
+  "maxHp": 10,
   "skills": ["assault"],
   "deck": "aggressive"
 }

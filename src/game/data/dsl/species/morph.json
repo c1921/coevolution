@@ -5,7 +5,7 @@
   "id": "morph",
   "priority": 40,
   "name": "转化型",
-  "maxHp": 4,
+  "maxHp": 10,
   "skills": ["convert"],
   "deck": "aggressive"
 }

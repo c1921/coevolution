@@ -21,7 +21,7 @@ describe('威胁结算', () => {
 
     advance(state)
 
-    expect(state.players[0].hp).toBe(2)
+    expect(state.players[0].hp).toBe(8)
     expect(state.players[0].threat).toBe(0)
     // 伤害来源按 1v1 的唯一对手记录
     expect(state.lastDamage).toMatchObject({ source: 1, target: 0, amount: 2 })
@@ -39,7 +39,7 @@ describe('威胁结算', () => {
 
     resolveThreatAtTurnEnd(state, 0)
 
-    expect(state.players[0].hp).toBe(4)
+    expect(state.players[0].hp).toBe(10)
     expect(state.lastDamage).toBeNull()
     expect(state.stack).toHaveLength(0)
   })
@@ -57,7 +57,7 @@ describe('威胁结算', () => {
 
     // 结束出牌阶段 → 弃牌阶段（手牌为空）→ 回合结束时结算剩余 2 点
     submit(state, { kind: 'end-phase' })
-    expect(state.players[0].hp).toBe(2)
+    expect(state.players[0].hp).toBe(8)
     expect(state.players[0].threat).toBe(0)
     expect(state.active).toBe(1)
     assertConservation(state)
@@ -108,7 +108,7 @@ describe('威胁结算', () => {
 
     submit(state, { kind: 'end-phase' })
     // 自己的 2 点威胁已经兑现，对手的 2 点仍留到他的回合结束时
-    expect(state.players[0].hp).toBe(2)
+    expect(state.players[0].hp).toBe(8)
     expect(state.players[0].threat).toBe(0)
     expect(state.players[1].threat).toBe(2)
     assertConservation(state)

@@ -5,7 +5,7 @@
   "id": "defensive",
   "priority": 30,
   "name": "防御型",
-  "maxHp": 4,
+  "maxHp": 10,
   "skills": ["charge"],
   "deck": "guarded"
 }

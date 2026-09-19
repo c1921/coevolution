@@ -79,7 +79,7 @@ describe('时机派发', () => {
     state.active = 0
 
     applyTimingRules(state, { at: 'turn-start' })
-    expect(state.players[0].hp).toBe(3)
+    expect(state.players[0].hp).toBe(9)
     expect(state.log.map((entry) => entry.text).join('\n')).toContain('消耗战开始')
 
     // 未到 21 回合时 when 条件不成立
@@ -91,7 +91,8 @@ describe('时机派发', () => {
     early.turn = 20
     applyTimingRules(early, { at: 'turn-start' })
     expect(early.players[early.active].hp).toBe(early.players[early.active].maxHp)
-    expect(early.log).toHaveLength(0)
+    // 20 回合会触发服务三选一（4 的倍数），但消耗战不该出现
+    expect(early.log.map((entry) => entry.text).join('\n')).not.toContain('消耗战')
   })
 
   it('规则文档：只在与自己时机相同时执行', () => {
@@ -201,7 +202,7 @@ describe('时机派发', () => {
     withRegistry(synthetic, () => {
       applyTimingRules(state, { at: 'turn-start' })
     })
-    expect(state.players[0].hp).toBe(3)
+    expect(state.players[0].hp).toBe(9)
     expect(state.log[0]?.text).toBe('附加规则：进攻型 失去 1 点体力')
   })
 })

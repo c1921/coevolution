@@ -86,7 +86,7 @@ describe('日志模板渲染', () => {
       },
     }
     const effect = logOf(variantOf('heal', 'dying').effects)
-    expect(renderLog(env, effect)).toBe('反击型 使用【回复】救援 防御型（体力 1/4）（能量 2/3）')
+    expect(renderLog(env, effect)).toBe('反击型 使用【回复】救援 防御型（体力 1/10）（能量 2/3）')
   })
 
   it('技能日志：{cost} 渲染费用牌', () => {

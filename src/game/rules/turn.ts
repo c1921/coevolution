@@ -63,12 +63,20 @@ export function drawCount(state: GameState, p: PlayerIndex): number {
 }
 
 /**
- * 手牌上限：默认等于当前体力值（体力值按不小于 0 计算），
+ * 手牌上限的封顶值：上限取 `min(当前体力, HAND_LIMIT_MAX)`。
+ * 体力上限提到 10 之后，若不封顶，手牌会随体力一起膨胀到 10 张，
+ * 出牌阶段的能量却远付不起，因此用这个常量把「体力越高手牌越多」截断在 6。
+ */
+export const HAND_LIMIT_MAX = 6
+
+/**
+ * 手牌上限：`min(当前体力, HAND_LIMIT_MAX)`（体力值按不小于 0 计算），
  * `hand-limit` 通道的基准值 0 表示"不改变这条默认规则"，
  * 技能的「手牌上限 +1」以通道修正表达，因此这里叠加修正后再夹到非负。
  */
 export function handLimit(state: GameState, p: PlayerIndex): number {
-  return Math.max(0, state.players[p].hp + channelBonus(state, 'hand-limit', p))
+  const hp = Math.min(state.players[p].hp, HAND_LIMIT_MAX)
+  return Math.max(0, hp + channelBonus(state, 'hand-limit', p))
 }
 
 /** 弃牌阶段需要弃置的张数：手牌数超过手牌上限的部分 */

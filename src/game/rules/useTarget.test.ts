@@ -81,8 +81,8 @@ describe('使用卡牌时的目标', () => {
     submit(state, { kind: 'use-card', card })
     expect(state.players[0].threat).toBe(2)
     expect(state.players[1].threat).toBe(2)
-    expect(state.players[0].hp).toBe(4)
-    expect(state.players[1].hp).toBe(4)
+    expect(state.players[0].hp).toBe(10)
+    expect(state.players[1].hp).toBe(10)
     expect(state.players[0].energy).toBe(1)
   })
 

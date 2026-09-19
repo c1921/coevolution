@@ -24,7 +24,7 @@ describe('【打击】结算', () => {
 
     // 攻击只施加威胁，不产生响应窗口，也不扣体力
     expect(state.players[1].threat).toBe(1)
-    expect(state.players[1].hp).toBe(4)
+    expect(state.players[1].hp).toBe(10)
     expect(state.pending).toEqual({ kind: 'play', player: 0 })
     expect(state.processing).toHaveLength(0)
     expect(state.players[0].discard.map((c) => c.uid)).toEqual([strike.uid])
@@ -45,7 +45,7 @@ describe('【打击】结算', () => {
     expect(cardUseCount(state, 0, 'strike')).toBe(2)
     expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - 2)
     expect(state.players[1].threat).toBe(2)
-    expect(state.players[1].hp).toBe(4)
+    expect(state.players[1].hp).toBe(10)
     assertConservation(state)
   })
 

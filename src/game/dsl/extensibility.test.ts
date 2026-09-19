@@ -158,7 +158,7 @@ describe('扩展性：新增内容不需要改代码', () => {
       submit(state, { kind: 'use-card', card: smite })
       // 新攻击牌走同一条威胁机制：不扣血，只叠威胁
       expect(state.players[1].threat).toBe(3)
-      expect(state.players[1].hp).toBe(4)
+      expect(state.players[1].hp).toBe(10)
       expect(state.pending).toEqual({ kind: 'play', player: 0 })
       assertConservation(state)
     })
@@ -327,13 +327,13 @@ describe('扩展性：新增内容不需要改代码', () => {
       },
     ])
 
-    expect(speciesDef('offensive').maxHp).toBe(4)
+    expect(speciesDef('offensive').maxHp).toBe(10)
     withRegistry(synthetic, () => {
       expect(SPECIES.offensive.maxHp).toBe(6)
       expect(
         makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' }).players[0].maxHp,
       ).toBe(6)
     })
-    expect(speciesDef('offensive').maxHp).toBe(4)
+    expect(speciesDef('offensive').maxHp).toBe(10)
   })
 })

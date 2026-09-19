@@ -62,7 +62,7 @@ describe('效果解释器 · 基础指令', () => {
 
     runEffects(state, [{ kind: 'threat', target: 'target', amount: CONST(2) }], ctx)
     expect(state.players[1].threat).toBe(2)
-    expect(state.players[1].hp).toBe(4)
+    expect(state.players[1].hp).toBe(10)
     // 威胁不是伤害：不压伤害帧、不写 lastDamage
     expect(state.stack).toHaveLength(0)
     expect(state.lastDamage).toBeNull()
@@ -375,8 +375,8 @@ describe('效果解释器 · for-each-target', () => {
       ],
       ctx,
     )
-    expect(state.players[0].hp).toBe(3)
-    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].hp).toBe(9)
+    expect(state.players[1].hp).toBe(9)
     // 多目标下外层不绑定 target，效果必须写在 for-each-target 内
     expect(ctx.target).toBeUndefined()
     expect(state.log.filter((entry) => entry.text.includes('受到测试效果'))).toHaveLength(2)
@@ -395,8 +395,8 @@ describe('效果解释器 · for-each-target', () => {
       ],
       ctx,
     )
-    expect(state.players[0].hp).toBe(4)
-    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].hp).toBe(10)
+    expect(state.players[1].hp).toBe(9)
   })
 
   it('迭代内的上下文写入不会冒泡到外层', () => {
