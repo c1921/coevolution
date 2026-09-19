@@ -4,7 +4,7 @@ import { makeState } from '../testUtils'
 import { assertConservation, moveHandToProcessing } from './cardZones'
 import { dealDamage } from './damage'
 
-/** 打一场必死对局：对 1 点体力的 AI 造成 1 点伤害，双方都不救援 */
+/** 打一场必死对局：对 1 点体力的 AI 造成 1 点伤害；救援已禁用，推进即阵亡 */
 function killAi(aiHand: { kind: 'defend' | 'strike' }[] = []) {
   const state = makeState({
     playerSpecies: 'offensive',
@@ -14,8 +14,6 @@ function killAi(aiHand: { kind: 'defend' | 'strike' }[] = []) {
   })
   dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
   advance(state)
-  submit(state, { kind: 'cancel' })
-  submit(state, { kind: 'cancel' })
   return state
 }
 
@@ -45,8 +43,6 @@ describe('死亡与胜负结算', () => {
 
     dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
     advance(state)
-    submit(state, { kind: 'cancel' })
-    submit(state, { kind: 'cancel' })
 
     expect(state.processing).toHaveLength(0)
     expect(state.players[1].discard.map((c) => c.uid)).toContain(inFlight.uid)

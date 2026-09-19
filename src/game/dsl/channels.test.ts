@@ -157,7 +157,7 @@ const PROBES: Record<Channel, () => void> = {
   },
 
   'hand-limit': () => {
-    // 手牌 4：默认上限 0，手牌全部要弃
+    // 手牌 4：默认上限 0，全部手牌自动弃置（没有可选择的余地，不产生待输入项）
     const options = {
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -168,9 +168,11 @@ const PROBES: Record<Channel, () => void> = {
 
     const base = makeState({ ...options, playerHand: [...options.playerHand] })
     expect(advanceTurn(base)).toBe('pending')
-    expect(base.pending).toEqual({ kind: 'discard', player: 0, count: 4 })
+    expect(base.pending?.kind).not.toBe('discard')
+    expect(base.players[0].hand).toHaveLength(0)
+    expect(base.players[0].discard).toHaveLength(4)
 
-    // 上限 +2 → 只需弃 2 张，弃牌询问的张数随之改变
+    // 上限 +2 → 有可选择的余地：只需弃 2 张，弃牌询问的张数随之改变
     withRegistry(registryWith('hand-limit', 'add', 2), () => {
       const state = makeState({ ...options, playerHand: [...options.playerHand] })
       expect(handLimit(state, 0)).toBe(2)

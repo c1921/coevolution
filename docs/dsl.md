@@ -37,8 +37,8 @@ DSL 只承载**内容**，不承载**结算机器**。判断一段逻辑该不�
 |---|---|
 | 阶段游标与剩余阶段队列 `phase` / `phaseStage` / `phaseQueue` | `src/game/rules/phase.ts` |
 | 结算帧栈 `state.stack` 与待输入项 `state.pending`（`Frame` / `Prompt`） | `src/game/engine/`（`stack.ts` 推动、`actions.ts` 应用）、`src/game/types.ts` |
-| 濒死询问与死亡结算 | `src/game/rules/dying.ts`、`src/game/rules/death.ts` |
-| 手牌上限（`hand-limit` 通道，基准 0） | `src/game/rules/turn.ts` 的 `handLimit` |
+| 濒死帧 → 死亡结算（救援已禁用，不再逐个询问） | `src/game/rules/dying.ts`、`src/game/rules/death.ts` |
+| 手牌上限（`hand-limit` 通道，基准 0；上限 0 时弃牌阶段自动弃光手牌） | `src/game/rules/turn.ts` 的 `handLimit` / `rules/discard.ts` |
 | 牌数守恒不变式 | `src/game/rules/cardZones.ts` 的 `assertConservation` |
 | 能量不变式（`0..上限`） | `src/game/rules/energy.ts` 的 `assertEnergyBounds` |
 | 随机数（种子化 PRNG、洗牌、随机取牌） | `src/game/rng.ts` |
@@ -315,7 +315,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `defend-need-against` | **占位**：对抗机制里抵消一次攻击需要的响应牌张数（1） | 仅 `contest` 帧（`dsl/primitives.ts` `pushContest`）；内置内容没有 `play` 变体，实战不可达 | 绝对值，当前无内置内容使用 |
 | `threat-per-attack` | 每次攻击叠加的威胁点数（1） | `skills/index.ts` `threatPerAttack`（【打击】的 `threat` 效果） | 绝对值；内置内容不改该通道，技能修正可覆盖 |
 | `draw-count` | 摸牌阶段摸几张（5） | `rules/turn.ts` `drawCount` | 偏移量：先手首回合再 −1 |
-| `hand-limit` | 弃牌阶段手牌上限（0） | `rules/turn.ts` `handLimit` | 绝对值：上限 = 通道值（夹到非负），基准 0 即弃光手牌，技能的 `add` 可放宽 |
+| `hand-limit` | 弃牌阶段手牌上限（0） | `rules/turn.ts` `handLimit` | 绝对值：上限 = 通道值（夹到非负）；基准 0 时全部手牌自动弃置、不询问，技能的 `add` 放宽后才会让玩家挑牌 |
 | `card-cost` | 牌面费用的偏移（0） | `rules/energy.ts` `energyCost` | 偏移量：费用 = 牌种费用 + 修正，**最终不低于 1** |
 | `attack-range` | 攻击范围（1） | `rules/distance.ts` `isInRange` | 绝对值，1v1 座位距离恒为 1 |
 
@@ -489,7 +489,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `log` | `template: string`、`vars?: Record<string, Value>` | 渲染一条内容侧战报（见第 11 节） |
 | `threat` | `target: RoleRef`、`amount: Value` | 给目标叠加威胁（**攻击的唯一途径**）；施加者恒为效果归属者 `ctx.self` |
 | `offset-threat` | `target: RoleRef`、`amount: Value` | 抵消目标的威胁，结果夹到 0（【防御】） |
-| `lose-hp` | `target`、`amount` | 失去体力；**不**触发「受到伤害后」技能，但仍会进入濒死 |
+| `lose-hp` | `target`、`amount` | 失去体力；**不**触发「受到伤害后」技能，但降到 0 及以下仍会压入濒死帧（随后死亡，救援已禁用） |
 | `heal` | `target`、`amount` | 回复体力（不超过上限） |
 | `draw` | `target: RoleRef`、`count: Value` | 从目标自己的牌组摸牌（牌组耗尽时洗回自己的弃牌堆） |
 | `move-cards` | `from: ZoneRef`、`to: ZoneRef`、`pick: CardPick` | 牌区之间移动（见下表） |
@@ -659,8 +659,8 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 结算顺序：
 
 1. 立即打印「发动【示例】」；
-2. `lose-hp 1` 扣减体力，若降到 0 及以下则**立即进入濒死**并压入濒死帧；
-3. 濒死链（是否被【回复】救回、或阵亡）先走完；
+2. `lose-hp 1` 扣减体力，若降到 0 及以下则**立即压入濒死帧**；
+3. 濒死帧随即走死亡结算（救援机制已禁用，不询问任何角色）；
 4. 只有**存活**下来，才轮到延迟的 `draw 2` 摸两张牌。
 
 这正是「先安排摸牌帧，再 `loseHp`」的同一语义：摸牌被压在濒死结算之下，濒死被打断/阵亡时不会先摸牌。`src/game/dsl/effect.test.ts` 的「`after` 先压栈，等当前结算链走完才执行（失去体力类技能的语义）」与「`lose-hp`：失去体力且不触发受到伤害后技能」守住了这条行为。
@@ -717,7 +717,7 @@ export interface EffectContext {
 | `self` / `active` | 调用点建立上下文（`baseContext`；规则的 `self` 为回合角色） |
 | `target` | 技能/卡牌的 `TargetSpec` 解析结果 |
 | `source` | 伤害来源 / 卡牌使用者（触发语境里指「谁造成了这次伤害」） |
-| `dying` | 濒死询问 |
+| `dying` | 濒死（仅 `dying` 语境变体使用；救援已禁用，引擎当前不会建立该上下文） |
 | `usedUid` / `usedCard` | 本次使用或打出的牌（含 `via` 转化） |
 | `costCards` | `move-cards` 的 `pick.mode = "cost"` 支付的牌 |
 | `picked` | 最近一次 `move-cards` 实际取到的牌 |
@@ -1128,14 +1128,14 @@ export interface EffectContext {
 | 多目标下 `ctx.target` 不绑定 | 声明了 `count` 的变体必须在 `for-each-target` 内引用 `target`（加载期守卫，`threat` 同样受约束）；迭代内的上下文写入不冒泡到外层 |
 | 威胁来源不逐笔追踪 | 回合结束结算时，伤害来源按 1v1 的**唯一对手**记录（`otherPlayer`），不记录是哪张牌/哪个技能叠的；追责类效果只能拿到这个粗粒度来源 |
 | 威胁不跨回合累积 | 威胁只在「施加者回合 → 承受者回合结束」之间存活一轮：回合结束时剩余威胁结算为等量伤害并立即归零，不做历史累计 |
-| 手牌上限基准 0，与体力无关 | `handLimit` 直接取 `hand-limit` 通道值（夹到非负）；威胁结算在弃牌阶段之后，因此将来若有放宽上限的效果，也按结算前的状态算 |
+| 手牌上限基准 0，与体力无关 | `handLimit` 直接取 `hand-limit` 通道值（夹到非负）；上限为 0 时弃牌阶段自动弃光手牌、不产生待输入项，上限 > 0 才需要玩家挑牌。威胁结算在弃牌阶段之后，因此将来若有放宽上限的效果，也按结算前的状态算 |
 | `contest` / `play` 变体是占位 | 内置内容没有任何卡牌声明 `play` 变体，`contest` / `contest-contribute` 与 `defend-need-against` 通道当前不可达，只保留给后续反制机制 |
 | 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage`（回合结束的威胁结算）与 `after-threat`（每次叠加威胁后）两个事件；声明其它事件时机不会报错，但永远不会触发 |
 | `move-cards` 不能访问 `deck` | 牌组只能通过 `draw` 访问，以免绕过洗回逻辑 |
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
 | 数值递归上限 16 | 表达式/通道递归超过 16 层抛 `RuleError`；这是防自引用与防栈溢出的硬保护 |
 | 没有 native 逃生舱 | 效果必须表达为数据；无法表达的新机制只能扩展指令集（改词表、类型、校验器、解释器、schema），不能绕过校验直接调函数 |
-| 没有回血牌：濒死即阵亡 | 内容层已删除全部回血牌（回复 / 急救及其升级版），没有任何牌声明 `dying` 变体；濒死询问走完「濒死者 → 对手」后必定阵亡。引擎仍支持 `dying` 语境与 `resolve-dying`，加一张带 `dying` 变体的牌即可恢复救援（测试用 `fixtures.ts` 的合成牌 `test-mend` 覆盖这条链路） |
+| 濒死救援已禁用：濒死即阵亡 | `rules/dying.ts` 的 `DYING_RESCUE_ENABLED = false`，`engine/stack.ts` 的 `dying` 帧直接走死亡结算，不询问任何角色；内容层也没有任何牌声明 `dying` 变体。救援链路（`dying` 语境 + `resolve-dying` + 询问队列、合法性与界面分支）全部保留，把开关改回 `true` 即可恢复 |
 | 奖励帧一次抽好双方共享的候选 | `offer-reward` 压帧时抽一次候选，两名玩家从同一组里选；没有「各自重抽」或「刷新候选」的字段，要改就调 `candidates` / `weights` / 周期 |
 | 奖励的交互顺序由帧栈决定 | `offer-reward` 只压帧不立即询问，同一时机上的多份奖励规则「priority 大者先弹」；想要确定的顺序就必须显式写 `priority` |
 | 手牌上限（`hand-limit` 通道，基准 0）、守恒/能量不变式、RNG、距离仍在引擎 | 这些是机器不变量，不属于内容；见第 1 节的边界表 |

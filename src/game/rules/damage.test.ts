@@ -61,10 +61,11 @@ describe('伤害结算', () => {
 
       submit(state, { kind: 'trigger-choice', accept: true })
 
-      // 触发结算完才进入濒死
+      // 触发结算完才做濒死检查；救援已禁用，因此直接阵亡、不再产生濒死待输入项
       expect(state.players[1].threat).toBe(0)
       expect(state.players[0].threat).toBe(1)
-      expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
+      expect(state.players[1].alive).toBe(false)
+      expect(state.result).toEqual({ winner: 0 })
       assertConservation(state)
     })
   })
@@ -79,14 +80,15 @@ describe('伤害结算', () => {
     expect(state.log.map((e) => e.text).join()).toContain('失去 1 点体力')
   })
 
-  it('「失去体力」降到 0 及以下同样进入濒死', () => {
+  it('「失去体力」降到 0 及以下同样直接阵亡', () => {
     const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'counter', aiHp: 1 })
 
     loseHp(state, 1, 2)
     advance(state)
 
     expect(state.players[1].hp).toBe(-1)
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
+    expect(state.players[1].alive).toBe(false)
+    expect(state.result).toEqual({ winner: 0 })
     assertConservation(state)
   })
 })

@@ -225,7 +225,8 @@ export const pendingHint = computed(() => {
         : `${playerLabel(state, pending.dying)} 濒死，你可以用${label}救援（${energy}；对手救你通常是亏的）`
     }
     case 'discard':
-      return `弃牌阶段（手牌上限 0）：请选择 ${pending.count} 张手牌弃置`
+      // 上限为 0 时引擎已自动弃光，不会出现在这里；能走到这里说明上限 > 0，需要玩家挑牌
+      return `弃牌阶段：请选择 ${pending.count} 张手牌弃置`
     case 'trigger':
       return `是否发动【${skillDef(pending.skill).name}】？`
     case 'reward': {

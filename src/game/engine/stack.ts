@@ -3,7 +3,7 @@ import { runTrigger } from '../dsl/event'
 import { log, playerLabel } from '../log'
 import { flushProcessing } from '../rules/cardZones'
 import { killPlayer } from '../rules/death'
-import { pushDying } from '../rules/dying'
+import { pushDying, DYING_RESCUE_ENABLED } from '../rules/dying'
 import { removeCandidates, serviceOptions, upgradeCandidates } from '../rules/reward'
 import { advanceTurn } from '../rules/turn'
 import type { Frame, GameState } from '../types'
@@ -102,6 +102,12 @@ function stepFrame(state: GameState, top: Frame): boolean {
     }
 
     case 'dying': {
+      // 濒死救援已禁用：不询问任何角色，直接死亡结算（帧只用于把死亡排在当前效果之后）
+      if (!DYING_RESCUE_ENABLED) {
+        state.stack.pop()
+        killPlayer(state, top.dying)
+        return false
+      }
       const next = top.ask[0]
       if (next === undefined) {
         // 无人救援：死亡结算

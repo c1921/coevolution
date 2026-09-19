@@ -156,36 +156,90 @@ describe('界面状态与驱动循环', () => {
     expect(JSON.stringify(state.players.map((p) => p.hp))).toBe(before)
   })
 
-  it('弃牌阶段：选够张数才能确认', () => {
+  it('弃牌阶段：手牌上限 0 时自动弃光手牌，不询问玩家', () => {
     const state = loadState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
-      playerHp: 2,
       phase: 'discard',
       playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
-    // 手牌上限基准 0 → 手牌全部要弃
     advance(state)
-    expect(store.humanPending.value).toMatchObject({ kind: 'discard', count: 4 })
-    // 视图派生：选不满时「确认弃置」不可点
-    expect(store.canConfirmDiscard.value).toBe(false)
 
-    // 选不满时拒绝提交
-    store.submitDiscard()
-    expect(store.errorMessage.value).toContain('需要弃置')
-
-    const hand = state.players[0].hand
-    for (const card of hand.slice(0, 2)) store.pickCard(card.uid)
-    expect(store.selectedCards.value).toHaveLength(2)
-    expect(store.canConfirmDiscard.value).toBe(false)
-
-    for (const card of hand.slice(2)) store.pickCard(card.uid)
-    expect(store.selectedCards.value).toHaveLength(4)
-    expect(store.canConfirmDiscard.value).toBe(true)
-
-    store.submitDiscard()
-    expect(store.errorMessage.value).toBeNull()
+    // 没有弃牌待输入项：手牌直接进弃牌堆，轮到对手
+    expect(store.humanPending.value).toBeNull()
     expect(state.players[0].hand).toHaveLength(0)
+    expect(state.players[0].discard).toHaveLength(4)
+  })
+
+  /**
+   * 手牌上限是保留给后续特殊效果的机制：用一个只带 hand-limit 修正的探针技能
+   * 把上限抬到 2，验证「上限 > 0 时仍要玩家挑牌」的界面链路没有退化。
+   */
+  function registryWithHandLimit(value: number) {
+    return contentWith([
+      {
+        path: 'skills/probe.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'probe',
+          name: '探针',
+          text: '测试用：只带一条 hand-limit 修正。',
+          modifiers: [{ channel: 'hand-limit', op: 'add', value: { kind: 'const', value } }],
+        },
+      },
+      {
+        path: 'species/offensive.json',
+        value: {
+          dslVersion: 1,
+          kind: 'species',
+          id: 'offensive',
+          priority: 10,
+          name: '进攻型',
+          maxHp: 10,
+          skills: ['probe'],
+          deck: 'basic',
+        },
+      },
+    ])
+  }
+
+  it('弃牌阶段：上限 > 0 时选够张数才能确认', () => {
+    withRegistry(registryWithHandLimit(2), () => {
+      const state = loadState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        phase: 'discard',
+        playerHand: [
+          { kind: 'strike' },
+          { kind: 'strike' },
+          { kind: 'strike' },
+          { kind: 'strike' },
+        ],
+      })
+      // 手牌上限 2 → 需要弃 2 张，且必须由玩家挑
+      advance(state)
+      expect(store.humanPending.value).toMatchObject({ kind: 'discard', count: 2 })
+      // 视图派生：选不满时「确认弃置」不可点
+      expect(store.canConfirmDiscard.value).toBe(false)
+
+      // 选不满时拒绝提交
+      store.submitDiscard()
+      expect(store.errorMessage.value).toContain('需要弃置')
+
+      const hand = state.players[0].hand
+      store.pickCard(hand[0]!.uid)
+      expect(store.selectedCards.value).toHaveLength(1)
+      expect(store.canConfirmDiscard.value).toBe(false)
+
+      store.pickCard(hand[1]!.uid)
+      expect(store.selectedCards.value).toHaveLength(2)
+      expect(store.canConfirmDiscard.value).toBe(true)
+
+      store.submitDiscard()
+      expect(store.errorMessage.value).toBeNull()
+      expect(state.players[0].hand).toHaveLength(2)
+    })
   })
 
   it('视图派生集中在 store：操作按钮、放弃文案与费用求值', () => {

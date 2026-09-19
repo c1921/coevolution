@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { logTexts, makeState } from '../testUtils'
 import type { GameState } from '../types'
-import { moveHandToDiscard } from './cardZones'
 import { loseHp } from './damage'
 import {
   PHASE_NAME,
@@ -34,14 +33,6 @@ function makeProbe(): { seen: string[]; run: TimingRunner } {
 
 /** 出牌阶段由回合角色自行结束（对应引擎里的 end-phase 动作） */
 function endPlayPhase(state: GameState): void {
-  finishPhaseBody(state)
-  state.pending = null
-}
-
-/** 弃牌阶段由弃牌动作结束（对应引擎里的 discard-cards）；这里把当前手牌全部弃置 */
-function endDiscardPhase(state: GameState): void {
-  const p = state.active
-  for (const card of [...state.players[p].hand]) moveHandToDiscard(state, p, card)
   finishPhaseBody(state)
   state.pending = null
 }
@@ -85,17 +76,12 @@ describe('回合阶段模型', () => {
 
     endPlayPhase(state)
     expect(advanceTurn(state, run)).toBe('pending')
-    // 手牌上限基准 0：弃牌阶段要求弃光手牌（先手首回合只摸了 4 张）
-    expect(state.pending).toEqual({
-      kind: 'discard',
-      player: 0,
-      count: state.players[0].hand.length,
-    })
-
-    endDiscardPhase(state)
-    expect(advanceTurn(state, run)).toBe('pending')
-    // 弃牌阶段之后依次是结束、回合结束时，然后轮到对手
-    expect(seen.slice(10)).toEqual([
+    // 手牌上限 0：弃牌阶段把全部手牌自动弃置，不停下来询问；之后依次是结束、回合结束时
+    expect(state.players[0].hand).toHaveLength(0)
+    expect(state.pending).toEqual({ kind: 'play', player: 1 })
+    expect(seen.slice(8)).toEqual([
+      'end:play',
+      'start:discard',
       'end:discard',
       'start:end',
       'end:end',
@@ -122,17 +108,9 @@ describe('回合阶段模型', () => {
     expect(skipPhase(state, 'play')).toBe(true)
     expect(logTexts(state)).toContain('跳过了出牌阶段')
 
-    // 出牌阶段被跳过后直接进入弃牌阶段，不会产生本回合的出牌待输入项；
-    // 弃光手牌后才轮到对手的出牌阶段
+    // 出牌阶段被跳过后直接进入弃牌阶段并自动弃光手牌，不会产生本回合的出牌待输入项
     expect(advanceTurn(state, run)).toBe('pending')
-    expect(state.pending).toEqual({
-      kind: 'discard',
-      player: 0,
-      count: state.players[0].hand.length,
-    })
-
-    endDiscardPhase(state)
-    expect(advanceTurn(state, run)).toBe('pending')
+    expect(state.players[0].hand).toHaveLength(0)
     expect(state.pending).toEqual({ kind: 'play', player: 1 })
     expect(state.active).toBe(1)
     // 本回合的 start:play 出现在 turn-end 之后，说明它属于对手的回合

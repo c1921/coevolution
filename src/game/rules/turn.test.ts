@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyTimingRules } from '../dsl/event'
 import { assertConservation } from './cardZones'
 import { energyMax } from './energy'
-import { advance, submit } from '../engine'
+import { advance } from '../engine'
 import { makeState, logTexts } from '../testUtils'
 import {
   advanceTurn,
@@ -81,7 +81,7 @@ describe('回合流程', () => {
     expect(state.players[0].energy).toBe(energyMax(state, 0))
   })
 
-  it('弃牌阶段：手牌上限为 0，必须弃光手牌', () => {
+  it('弃牌阶段：手牌上限为 0，全部手牌自动弃置且不询问', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -96,8 +96,12 @@ describe('回合流程', () => {
       ],
     })
 
+    // 上限 0 时没有可选择的余地：直接弃光并推进到对手的出牌阶段
     expect(advanceTurn(state)).toBe('pending')
-    expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 5 })
+    expect(state.players[0].hand).toHaveLength(0)
+    expect(state.players[0].discard).toHaveLength(5)
+    expect(state.pending).toEqual({ kind: 'play', player: 1 })
+    assertConservation(state)
   })
 
   it('手牌为空时跳过弃牌阶段，直接进入下一回合', () => {
@@ -206,7 +210,7 @@ describe('消耗战（终止规则）', () => {
     expect(attritionLoss(ATTRITION_TURN + 10)).toBe(3)
   })
 
-  it('消耗战回合开始时回合角色失去体力，并进入濒死结算', () => {
+  it('消耗战回合开始时回合角色失去体力并直接阵亡', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -223,9 +227,10 @@ describe('消耗战（终止规则）', () => {
     expect(state.stack[0]).toMatchObject({ kind: 'dying', dying: 0 })
     expect(logTexts(state)).toContain('消耗战：')
 
-    // 无人救援 → 死亡 → 终局
+    // 救援已禁用：推进濒死帧即阵亡、终局，不需要任何放弃输入
     advance(state)
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
+    expect(state.players[0].alive).toBe(false)
+    expect(state.result).toEqual({ winner: 1 })
 
     // 「消耗战开始」只在进入消耗战的那一回合播报
     const first = makeState({
@@ -239,7 +244,7 @@ describe('消耗战（终止规则）', () => {
     expect(logTexts(first)).toContain('消耗战开始')
   })
 
-  it('消耗战打进濒死后无人可救：直接阵亡，且同一回合只扣一次体力', () => {
+  it('消耗战打进濒死后直接阵亡，且同一回合只扣一次体力', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -252,13 +257,10 @@ describe('消耗战（终止规则）', () => {
 
     advance(state)
     expect(state.players[0].hp).toBe(0)
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
-
-    // 内置内容没有自救牌：双方放弃即阵亡
-    submit(state, { kind: 'cancel' })
-    submit(state, { kind: 'cancel' })
+    // 救援已禁用：直接阵亡，没有濒死待输入项
     expect(state.players[0].alive).toBe(false)
     expect(state.result).toEqual({ winner: 1 })
+    expect(state.pending).toBeNull()
 
     // 消耗战扣体力只发生了一次
     const losses = state.log.filter((e) => e.text.startsWith('消耗战：'))

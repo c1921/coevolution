@@ -6,8 +6,9 @@ import { cardDoc, skillDoc } from '../dsl/registry'
 import type { EffectContext } from '../dsl/runtime'
 import type { UseContext } from '../dsl/kinds'
 import { resolveTargetChoice, resolveTargetChoices } from '../dsl/target'
-import { log, plainLabel, playerLabel } from '../log'
-import { findInHand, moveHandToDiscard } from '../rules/cardZones'
+import { log, playerLabel } from '../log'
+import { findInHand } from '../rules/cardZones'
+import { discardHandCards } from '../rules/discard'
 import { payEnergy } from '../rules/energy'
 import {
   checkActivate,
@@ -216,13 +217,9 @@ function applyDiscard(state: GameState, action: Extract<Action, { kind: 'discard
   const p = pending.player
   ensure(checkDiscard(state, p, action.cards))
 
-  const names: string[] = []
-  for (const card of action.cards) {
-    const real = requireInHand(state, p, card)
-    moveHandToDiscard(state, p, real)
-    names.push(plainLabel(real))
-  }
-  log(state, `${playerLabel(state, p)} 弃置了 ${action.cards.length} 张手牌：${names.join('、')}`)
+  // 先全部解析成真实牌再落库：任何一张不合法都不会留下"弃了一半"的状态
+  const cards = action.cards.map((card) => requireInHand(state, p, card))
+  discardHandCards(state, p, cards)
   // 弃牌阶段的效果已完成，交回回合循环执行「阶段结束时」
   finishPhaseBody(state)
 }

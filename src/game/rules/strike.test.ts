@@ -160,7 +160,7 @@ describe('【打击】结算', () => {
     expect(state).toEqual(before)
   })
 
-  it('结束出牌阶段后进入弃牌阶段', () => {
+  it('结束出牌阶段后自动弃光手牌并轮到对手', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -168,7 +168,9 @@ describe('【打击】结算', () => {
       playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
     submit(state, { kind: 'end-phase' })
-    // 手牌上限基准 0：手牌全部要弃
-    expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 4 })
+    // 手牌上限基准 0：全部手牌自动弃置，不停下来询问
+    expect(state.players[0].hand).toHaveLength(0)
+    expect(state.players[0].discard).toHaveLength(4)
+    expect(state.pending).toEqual({ kind: 'play', player: 1 })
   })
 })

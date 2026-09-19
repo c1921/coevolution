@@ -108,7 +108,7 @@ describe('威胁结算', () => {
     assertConservation(state)
   })
 
-  it('威胁致死会进入濒死结算', () => {
+  it('威胁致死会直接阵亡（救援已禁用）', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -120,7 +120,8 @@ describe('威胁结算', () => {
     advance(state)
 
     expect(state.players[0].hp).toBe(-1)
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
+    expect(state.players[0].alive).toBe(false)
+    expect(state.result).toEqual({ winner: 1 })
   })
 
   it('【风暴】对自己造成的威胁在自己的回合结束时结算', () => {

@@ -5,6 +5,7 @@ import { log, playerLabel } from '../log'
 import type { GameState, PlayerIndex, TurnPhase } from '../types'
 import { otherPlayer } from '../util'
 import { drawCards } from './cardZones'
+import { discardHandCards } from './discard'
 import { energyTag, refillEnergy } from './energy'
 import { buildTurnPlan, finishPhaseBody, takeNextPhase } from './phase'
 import { resolveThreatAtTurnEnd } from './threat'
@@ -237,6 +238,13 @@ function runPhaseBody(state: GameState, phase: TurnPhase): 'pending' | 'done' {
     case 'discard': {
       const p = state.active
       const count = discardCount(state, p)
+      // 手牌上限为 0（或更低）时全部手牌都要弃，没有可选择的余地：直接自动弃置，不询问。
+      // 上限 > 0 时才需要玩家/ AI 挑出要弃的那几张。
+      if (count > 0 && count === state.players[p].hand.length) {
+        discardHandCards(state, p, [...state.players[p].hand])
+        finishPhaseBody(state)
+        return 'done'
+      }
       if (count > 0) {
         state.pending = { kind: 'discard', player: p, count }
         return 'pending'
