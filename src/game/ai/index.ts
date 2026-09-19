@@ -1,16 +1,19 @@
-import { cardRole, effectsInclude, skillDoc } from '../dsl/registry'
+import { cardRole, cardSelfHarm, effectsInclude, skillDoc } from '../dsl/registry'
 import type { CardRole } from '../dsl/registry'
 import type { Effect } from '../dsl/types'
+import type { UseContext } from '../dsl/kinds'
 import { canPayEnergy, energyCost } from '../rules/energy'
 import {
   activationCostCards,
   activationTargetChoice,
   activeOptions,
+  cardTargetChoice,
   playOptions,
   useOptions,
+  useVariantOf,
 } from '../skills'
 import type { CardOption } from '../skills'
-import type { Action, Card, GameState, PlayerIndex, SkillId } from '../types'
+import type { Action, Card, CardKind, GameState, PlayerIndex, SkillId } from '../types'
 import { otherPlayer, RuleError } from '../util'
 
 /** AI 思考延迟（毫秒）：只影响界面节奏，引擎与单测不受影响 */
@@ -29,12 +32,18 @@ export const DEFENSE_RESERVE = 1
 
 /** 体力告急到多少就用【回复】 */
 export const HEAL_MAX_HP = 2
-/** 换牌类主动技：体力至少这么高才敢失血换牌 */
-export const CYCLE_MIN_HP = 3
+/**
+ * 换牌类主动技：体力至少这么高才敢失血换牌。
+ * 出牌数量的真正闸门是能量（上限 3），多摸的牌常常打不出去，
+ * 因此只在满血附近才值得为摸牌付体力——否则 AI 会一路失血自杀（牛曾因此垫底）。
+ */
+export const CYCLE_MIN_HP = 4
 /** 换牌类主动技：手牌少到这个数才值得换 */
 export const CYCLE_MAX_HAND = 2
 /** 发动需要弃牌的技能时至少留下的手牌数 */
 export const HAND_RESERVE = 1
+/** 发动进攻型主动技（如【猛扑】）后至少留下的手牌数：不把最后的牌全押在一次进攻上 */
+export const OFFENSE_RESERVE = 3
 
 /**
  * 规则式 AI：读取当前待输入项并返回一个动作。
@@ -63,8 +72,8 @@ export function aiDecide(state: GameState): Action {
   }
 }
 
-/** 主动技的用途：含 heal 效果 = 自我治疗，含 draw 效果 = 换牌 */
-type ActivationRole = 'self-heal' | 'card-cycle'
+/** 主动技的用途：含 heal 效果 = 自我治疗，含 draw 效果 = 换牌，伤害选定目标 = 进攻 */
+type ActivationRole = 'self-heal' | 'card-cycle' | 'offense'
 
 interface Activation {
   skill: SkillId
@@ -77,6 +86,8 @@ function activationRole(skill: SkillId): ActivationRole | undefined {
   const effects = [...activate.effects, ...(activate.after ?? [])]
   if (effectsInclude(effects, 'heal')) return 'self-heal'
   if (effectsInclude(effects, 'draw')) return 'card-cycle'
+  // 对选定目标造成伤害 / 失去体力 / 扣能量 = 进攻型主动技（如虎的【猛扑】）
+  if (hasHarm(effects)) return 'offense'
   return undefined
 }
 
@@ -118,6 +129,55 @@ function harmsChosenTarget(skill: SkillId): boolean {
   return hasHarm([...activate.effects, ...(activate.after ?? [])])
 }
 
+/**
+ * 卡牌使用时的目标选择：完全由文档结构派生。
+ *  - `count.mode = all` 不需要指定（引擎作用于全部合法候选）；
+ *  - 单选且不需要选择时返回空数组（交给引擎使用文档缺省目标）；
+ *  - 需要选择时：有害效果优先选对手，其余优先选自己，再按候选顺序补齐。
+ */
+export function chooseCardTargets(
+  state: GameState,
+  p: PlayerIndex,
+  kind: CardKind,
+  context: UseContext,
+): PlayerIndex[] {
+  const choice = cardTargetChoice(state, p, kind, context)
+  if (!choice?.spec) return []
+  if (choice.spec.count?.mode === 'all') return []
+  if (!choice.mustChoose) return []
+
+  const harm = cardHarmsChosenTarget(kind, context)
+  const rank = (index: PlayerIndex): number =>
+    harm ? (index === p ? 1 : 0) : index === p ? 0 : 1
+  const ranked = [...choice.candidates].sort((a, b) => rank(a) - rank(b) || a - b)
+  const size = choice.multi ? choice.size : 1
+  return ranked.slice(0, size)
+}
+
+/** 卡牌是否以「伤害选定的目标」为目的 */
+function cardHarmsChosenTarget(kind: CardKind, context: UseContext): boolean {
+  const variant = useVariantOf(kind, context)
+  if (!variant) return false
+  return hasHarm([...variant.effects, ...(variant.after ?? [])])
+}
+
+/** 该牌面现在是否连目标都凑不出来（AI 据此跳过，绝不提交必失败的牌） */
+function canTarget(state: GameState, p: PlayerIndex, kind: CardKind, context: UseContext): boolean {
+  const choice = cardTargetChoice(state, p, kind, context)
+  if (choice === null) return false
+  if (!choice.spec) return true
+  return !choice.multi || choice.candidates.length >= choice.size
+}
+
+/** 自伤牌是否构成终结：对手体力 ≤ 自伤点数，且自己扛得住 */
+function selfHarmFinishes(state: GameState, p: PlayerIndex, kind: CardKind): boolean {
+  const harm = cardSelfHarm(kind)
+  if (harm <= 0) return true
+  const self = state.players[p]
+  const opponent = state.players[otherPlayer(p)]
+  return opponent.hp <= harm && self.hp > harm
+}
+
 function hasHarm(effects: readonly Effect[]): boolean {
   for (const effect of effects) {
     if (
@@ -133,6 +193,9 @@ function hasHarm(effects: readonly Effect[]): boolean {
       effect.kind === 'contest' &&
       (hasHarm(effect.onUnmet ?? []) || hasHarm(effect.onMet ?? []))
     ) {
+      return true
+    }
+    if (effect.kind === 'for-each-target' && hasHarm(effect.effects)) {
       return true
     }
   }
@@ -155,10 +218,11 @@ function findDirect(
   p: PlayerIndex,
   role: CardRole,
   context: 'use' | 'respond',
+  skip: (option: CardOption) => boolean = () => false,
 ): { card: Card; option: CardOption } | undefined {
   for (const card of state.players[p].hand) {
     const option = optionsOf(state, p, card, context).find(
-      (item) => item.via === undefined && cardRole(item.as) === role,
+      (item) => item.via === undefined && cardRole(item.as) === role && !skip(item),
     )
     if (option && canPayEnergy(state, p, option.as)) return { card, option }
   }
@@ -171,24 +235,40 @@ function findTransformed(
   p: PlayerIndex,
   role: CardRole,
   context: 'use' | 'respond',
+  skip: (option: CardOption) => boolean = () => false,
 ): { card: Card; option: CardOption } | undefined {
   for (const card of [...state.players[p].hand].reverse()) {
     const option = optionsOf(state, p, card, context).find(
-      (item) => item.via !== undefined && cardRole(item.as) === role,
+      (item) => item.via !== undefined && cardRole(item.as) === role && !skip(item),
     )
     if (option && canPayEnergy(state, p, option.as)) return { card, option }
   }
   return undefined
 }
 
+/**
+ * 把「手牌 + 牌面」变成动作。
+ *  - respond：打出响应牌，不带目标；
+ *  - dying：濒死使用，目标由结算决定（濒死者），不带目标；
+ *  - use：出牌阶段使用，按文档结构补上需要选择的目标。
+ */
 function asAction(
-  context: 'use' | 'respond',
+  state: GameState,
+  p: PlayerIndex,
   found: { card: Card; option: CardOption },
+  mode: 'use' | 'respond' | 'dying',
 ): Action {
-  if (context === 'respond') {
+  if (mode === 'respond') {
     return { kind: 'play-card', card: found.card, as: found.option.as, via: found.option.via }
   }
-  return { kind: 'use-card', card: found.card, as: found.option.as, via: found.option.via }
+  const targets = mode === 'dying' ? [] : chooseCardTargets(state, p, found.option.as, 'play')
+  return {
+    kind: 'use-card',
+    card: found.card,
+    as: found.option.as,
+    ...(found.option.via !== undefined ? { via: found.option.via } : {}),
+    ...(targets.length > 0 ? { targets } : {}),
+  }
 }
 
 /**
@@ -228,10 +308,12 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     }
   }
 
-  // 2. 体力告急就用【回复】（要付得起能量）
+  // 2. 体力告急就用【回复】（要付得起能量，且目标要凑得出来）
   if (player.hp <= HEAL_MAX_HP && player.hp < player.maxHp) {
-    const heal = findDirect(state, p, 'recovery', 'use')
-    if (heal) return asAction('use', heal)
+    const heal = findDirect(state, p, 'recovery', 'use', (option) =>
+      !canTarget(state, p, option.as, 'play'),
+    )
+    if (heal) return asAction(state, p, heal, 'use')
   }
 
   // 3. 换牌类主动技：体力充裕但手牌太少时换牌
@@ -243,7 +325,23 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
       : { kind: 'activate', skill: cycle.skill, target }
   }
 
-  // 4. 进攻
+  // 4. 进攻型主动技：弃得起且留出余量时发动（如虎的【猛扑】）
+  const offense = activations.find((item) => item.role === 'offense')
+  if (offense) {
+    const cost = activationCostCards(state, p, offense.skill)
+    const target = chooseActivationTarget(state, p, offense.skill)
+    if (player.hand.length >= cost + OFFENSE_RESERVE && target !== undefined) {
+      const action: Extract<Action, { kind: 'activate' }> = {
+        kind: 'activate',
+        skill: offense.skill,
+      }
+      if (cost > 0) action.cards = worstCards(player.hand, cost)
+      action.target = target
+      return action
+    }
+  }
+
+  // 5. 进攻
   const attack = bestAttack(state, p)
   if (attack) return attack
 
@@ -260,36 +358,39 @@ function holdsDefense(state: GameState, p: PlayerIndex): boolean {
 /**
  * 找出可用于进攻的最佳方案，优先真牌，其次技能转化。
  * 攻击没有次数限制，唯一的门槛是能量：除了这一张的费用，还要留出防御余量。
+ * 会伤到自己的牌（对称的多目标牌）只在能直接终结对手时才打。
  */
 function bestAttack(state: GameState, p: PlayerIndex): Action | null {
   const player = state.players[p]
   if (!state.players[otherPlayer(p)].alive) return null
 
   const reserve = holdsDefense(state, p) ? DEFENSE_RESERVE : 0
+  const skip = (option: CardOption): boolean =>
+    !canTarget(state, p, option.as, 'play') || !selfHarmFinishes(state, p, option.as)
 
-  const direct = findDirect(state, p, 'attack', 'use')
+  const direct = findDirect(state, p, 'attack', 'use', skip)
   if (direct) {
     if (player.energy - energyCost(state, p, direct.option.as) < reserve) return null
-    return asAction('use', direct)
+    return asAction(state, p, direct, 'use')
   }
 
   // 转化攻击：只在同用途的牌还有富余时（否则会把唯一的防御牌打光）
-  const transformed = findTransformed(state, p, 'attack', 'use')
+  const transformed = findTransformed(state, p, 'attack', 'use', skip)
   if (!transformed) return null
   if (player.energy - energyCost(state, p, transformed.option.as) < reserve) return null
   const role = cardRole(transformed.card.kind)
   const sameRole = player.hand.filter((card) => cardRole(card.kind) === role).length
   if (sameRole < 2) return null
-  return asAction('use', transformed)
+  return asAction(state, p, transformed, 'use')
 }
 
 /** 响应【打击】：付得起就抵消（优先真【防御】，其次技能转化），否则承受伤害 */
 function decideRespond(state: GameState, p: PlayerIndex): Action {
   const direct = findDirect(state, p, 'defense', 'respond')
-  if (direct) return asAction('respond', direct)
+  if (direct) return asAction(state, p, direct, 'respond')
 
   const transformed = findTransformed(state, p, 'defense', 'respond')
-  if (transformed) return asAction('respond', transformed)
+  if (transformed) return asAction(state, p, transformed, 'respond')
 
   return { kind: 'cancel' }
 }
@@ -299,8 +400,15 @@ function decideDying(state: GameState, p: PlayerIndex, dying: PlayerIndex): Acti
   if (p !== dying) return { kind: 'cancel' }
   if (state.players[p].hp > 0) return { kind: 'cancel' }
 
-  const heal = findDirect(state, p, 'recovery', 'use')
-  return heal ? asAction('use', heal) : { kind: 'cancel' }
+  // 只有文档里声明了 dying 语境的牌面才能用于自救（如【回复】；【急救】不能）
+  const heal = findDirect(
+    state,
+    p,
+    'recovery',
+    'use',
+    (option) => useVariantOf(option.as, 'dying') === undefined,
+  )
+  return heal ? asAction(state, p, heal, 'dying') : { kind: 'cancel' }
 }
 
 /**

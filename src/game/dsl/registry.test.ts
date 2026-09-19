@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   DslLoadError,
   cardIds,
+  cardRole,
+  cardSelfHarm,
   createRegistry,
   registry,
   skillDoc,
@@ -101,9 +103,9 @@ function mutate(
 describe('内置内容文档', () => {
   it('全部通过校验（导入注册表即校验）', () => {
     expect(registry.species).toHaveLength(8)
-    expect(registry.skills).toHaveLength(7)
-    expect(registry.cards).toHaveLength(3)
-    expect(registry.decks).toHaveLength(1)
+    expect(registry.skills).toHaveLength(8)
+    expect(registry.cards).toHaveLength(5)
+    expect(registry.decks).toHaveLength(3)
     expect(registry.rules).toHaveLength(1)
     expect(registry.ruleset.id).toBe('base')
   })
@@ -121,23 +123,51 @@ describe('内置内容文档', () => {
     ])
   })
 
-  it('牌种顺序与牌组构成保持 打击 11 / 防御 6 / 回复 3', () => {
-    expect(cardIds()).toEqual(['strike', 'defend', 'heal'])
+  it('牌种顺序按 priority，三套牌组各自自洽', () => {
+    expect(cardIds()).toEqual(['strike', 'defend', 'heal', 'first-aid', 'storm'])
+    // 首个牌组（basic）仍是打击 11 / 防御 6 / 回复 3
     expect(registry.decks[0]?.cards).toEqual([
       { kind: 'strike', count: 11 },
       { kind: 'defend', count: 6 },
       { kind: 'heal', count: 3 },
     ])
+    const byId = (id: string) => registry.decks.find((deck) => deck.id === id)?.cards
+    expect(byId('aggressive')).toEqual([
+      { kind: 'strike', count: 11 },
+      { kind: 'defend', count: 5 },
+      { kind: 'heal', count: 2 },
+      { kind: 'first-aid', count: 1 },
+      { kind: 'storm', count: 1 },
+    ])
+    expect(byId('guarded')).toEqual([
+      { kind: 'strike', count: 10 },
+      { kind: 'defend', count: 7 },
+      { kind: 'heal', count: 3 },
+    ])
   })
 
   it('技能查询按 priority 排序，且只返回该物种的技能', () => {
-    expect(skillsOf('tiger')).toHaveLength(0)
+    expect(skillsOf('tiger').map((skill) => skill.id)).toEqual(['pounce'])
     expect(skillsOf('deer').map((skill) => skill.id)).toEqual(['mend'])
     expect(skillDoc('menace').modifiers?.[0]).toMatchObject({
       channel: 'defend-need-against',
       op: 'set',
     })
     expect(speciesDoc('wolf').skills).toEqual(['snatch'])
+  })
+
+  it('牌面用途与自伤点数由文档结构派生（含 for-each-target 内的效果）', () => {
+    expect(cardRole('strike')).toBe('attack')
+    expect(cardRole('defend')).toBe('defense')
+    expect(cardRole('heal')).toBe('recovery')
+    expect(cardRole('first-aid')).toBe('recovery')
+    // 伤害写在 for-each-target 里也要被识别为攻击牌
+    expect(cardRole('storm')).toBe('attack')
+
+    // 对称伤害在 1v1 里必然打到自己，因此自伤点数为 1
+    expect(cardSelfHarm('storm')).toBe(1)
+    expect(cardSelfHarm('strike')).toBe(0)
+    expect(cardSelfHarm('first-aid')).toBe(0)
   })
 })
 

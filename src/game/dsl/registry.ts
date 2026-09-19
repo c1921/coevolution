@@ -9,7 +9,7 @@ import type {
   SpeciesDoc,
 } from './types'
 import type { Channel, SkillKind } from './kinds'
-import type { Effect } from './types'
+import type { Effect, TargetSpec, Value } from './types'
 import { validateDocs } from './validate'
 import type { Issue } from './validate'
 
@@ -221,7 +221,7 @@ export function registryToDocs(): { path: string; value: unknown }[] {
  */
 export type CardRole = 'attack' | 'defense' | 'recovery' | 'utility'
 
-/** 递归判断效果列表（含 if 分支）里是否出现某指令 */
+/** 递归判断效果列表（含 if / contest / for-each-target 分支）里是否出现某指令 */
 export function effectsInclude(effects: readonly Effect[] | undefined, kind: string): boolean {
   for (const effect of effects ?? []) {
     if (effect.kind === kind) return true
@@ -233,6 +233,7 @@ export function effectsInclude(effects: readonly Effect[] | undefined, kind: str
       if (effectsInclude(effect.onUnmet, kind)) return true
       if (effectsInclude(effect.onMet, kind)) return true
     }
+    if (effect.kind === 'for-each-target' && effectsInclude(effect.effects, kind)) return true
   }
   return false
 }
@@ -244,6 +245,57 @@ export function cardRole(kind: string): CardRole {
   if (effectsInclude(effects, 'contest') || effectsInclude(effects, 'damage')) return 'attack'
   if (effectsInclude(effects, 'heal')) return 'recovery'
   return 'utility'
+}
+
+/** 目标规格是否可能把自己的角色算进目标 */
+function mayTargetSelf(spec: TargetSpec | undefined): boolean {
+  if (!spec) return false
+  return spec.scope === 'any' || spec.scope === 'self'
+}
+
+/** 数值表达式取常量值（非 const 时保守按 1 计） */
+function constOr(value: Value, fallback: number): number {
+  if (value.kind === 'const') return value.value
+  return fallback
+}
+
+/** 递归累计效果对自己造成的伤害（用于 AI 判断"这张牌会不会伤到自己"） */
+function selfHarmOf(effects: readonly Effect[] | undefined, mayHitSelfTarget: boolean): number {
+  let total = 0
+  for (const effect of effects ?? []) {
+    if (effect.kind === 'damage' || effect.kind === 'lose-hp') {
+      if (effect.target === 'self') total += constOr(effect.amount, 1)
+      else if (effect.target === 'target' && mayHitSelfTarget) total += constOr(effect.amount, 1)
+    }
+    if (effect.kind === 'for-each-target') {
+      total += selfHarmOf(effect.effects, mayHitSelfTarget)
+    }
+    if (effect.kind === 'if') {
+      const thenHarm = selfHarmOf(effect.then, mayHitSelfTarget)
+      const elseHarm = selfHarmOf(effect.else, mayHitSelfTarget)
+      total += Math.max(thenHarm, elseHarm)
+    }
+    if (effect.kind === 'contest') {
+      total += Math.max(
+        selfHarmOf(effect.onMet, mayHitSelfTarget),
+        selfHarmOf(effect.onUnmet, mayHitSelfTarget),
+      )
+    }
+  }
+  return total
+}
+
+/**
+ * 卡牌对自己造成的伤害点数（由文档结构派生，AI 用它决定"这张牌能不能打"）。
+ * 0 表示不会伤到自己。对称伤害（如多目标牌）在 1v1 里必然包含自己，故计入。
+ */
+export function cardSelfHarm(kind: string): number {
+  const doc = cardDoc(kind)
+  let harm = 0
+  for (const variant of doc.use ?? []) {
+    harm = Math.max(harm, selfHarmOf(variant.effects, mayTargetSelf(variant.target)))
+  }
+  return harm
 }
 
 export type { Doc }

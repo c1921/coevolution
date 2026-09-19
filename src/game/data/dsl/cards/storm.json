@@ -1,0 +1,37 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "storm",
+  "priority": 50,
+  "name": "风暴",
+  "short": "对每名角色造成 1 点伤害",
+  "text": "消耗 2 点能量：对每名角色（包括你自己）造成 1 点伤害，不能被【防御】抵消。",
+  "cost": { "kind": "const", "value": 2 },
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "any", "alive": true, "count": { "mode": "all" } },
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "record-card-use", "of": "self", "cardKind": "storm" },
+        {
+          "kind": "log",
+          "template": "{self} 使用{usedAs}，风暴席卷全场{self.energyTag}"
+        },
+        {
+          "kind": "for-each-target",
+          "effects": [
+            { "kind": "log", "template": "{target} 受到 1 点伤害" },
+            { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+          ]
+        }
+      ]
+    }
+  ]
+}

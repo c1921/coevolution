@@ -1,0 +1,30 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "skill",
+  "id": "pounce",
+  "priority": 15,
+  "name": "猛扑",
+  "text": "出牌阶段限一次：弃置一张手牌，对对方造成 1 点伤害（不能被【防御】抵消）。",
+  "activate": {
+    "timing": "play",
+    "oncePerTurn": true,
+    "costCards": { "count": { "kind": "const", "value": 1 } },
+    "target": { "scope": "opponent", "required": false, "alive": true },
+    "effects": [
+      {
+        "kind": "move-cards",
+        "from": { "zone": "hand", "of": "self" },
+        "to": { "zone": "discard", "of": "self" },
+        "pick": { "mode": "cost" }
+      },
+      { "kind": "record-skill-use", "skill": "pounce" },
+      {
+        "kind": "log",
+        "template": "{self} 发动【猛扑】，弃置{cost}，扑向 {target}"
+      },
+      { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+    ],
+    "ui": { "buttonLabel": "发动【猛扑】（先点选一张手牌）" }
+  }
+}

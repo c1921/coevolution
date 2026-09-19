@@ -6,7 +6,7 @@
   "priority": 60,
   "name": "狮",
   "emoji": "🦁",
-  "maxHp": 4,
+  "maxHp": 3,
   "skills": ["menace"],
-  "deck": "basic"
+  "deck": "aggressive"
 }

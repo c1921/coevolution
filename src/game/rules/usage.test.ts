@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
 import { makeState } from '../testUtils'
+import { cardIds } from '../dsl/registry'
 import {
   cardUseCount,
   newCardUseRecord,
@@ -13,7 +14,10 @@ import {
 describe('使用次数记录', () => {
   it('按角色、按牌名分别计数', () => {
     const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
-    expect(newCardUseRecord()).toEqual({ strike: 0, defend: 0, heal: 0 })
+    // 记录表按当前牌种派生（新增牌种自动计入，不需要改这里）
+    expect(newCardUseRecord()).toEqual(
+      Object.fromEntries(cardIds().map((id) => [id, 0])),
+    )
 
     recordCardUse(state, 0, 'strike')
     recordCardUse(state, 0, 'heal')

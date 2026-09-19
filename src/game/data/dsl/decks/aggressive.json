@@ -1,0 +1,14 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "deck",
+  "id": "aggressive",
+  "priority": 20,
+  "cards": [
+    { "kind": "strike", "count": 11 },
+    { "kind": "defend", "count": 5 },
+    { "kind": "heal", "count": 2 },
+    { "kind": "first-aid", "count": 1 },
+    { "kind": "storm", "count": 1 }
+  ]
+}

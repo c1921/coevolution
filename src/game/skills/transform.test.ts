@@ -87,8 +87,8 @@ describe('转化型技能', () => {
     expect(state).toEqual(before)
   })
 
-  it('虎与鹿暂时没有转化技（猛扑 / 灵草因卡牌移除花色而移除）', () => {
-    expect(SPECIES.tiger.skills).toHaveLength(0)
+  it('虎不带转化技（【猛扑】是主动技），鹿只有【疗愈】', () => {
+    expect(SPECIES.tiger.skills.map((s) => s.id)).toEqual(['pounce'])
     expect(SPECIES.deer.skills.map((s) => s.id)).toEqual(['mend'])
 
     // 虎拿着【防御】也只有「打出【防御】」这一种用法，没有当【打击】的转化

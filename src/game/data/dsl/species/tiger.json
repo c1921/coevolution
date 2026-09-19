@@ -7,6 +7,6 @@
   "name": "虎",
   "emoji": "🐯",
   "maxHp": 4,
-  "skills": [],
-  "deck": "basic"
+  "skills": ["pounce"],
+  "deck": "aggressive"
 }

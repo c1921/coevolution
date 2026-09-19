@@ -365,3 +365,54 @@ describe('主动技的目标选择', () => {
     })
   })
 })
+
+describe('虎的【猛扑】', () => {
+  it('弃一张手牌，对对手造成不可被【防御】抵消的伤害，且每回合限一次', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'strike' }, { kind: 'defend' }],
+    })
+    expect(activeOptions(state, 0)).toContain('pounce')
+    const fodder = state.players[0].hand[0]!
+
+    submit(state, { kind: 'activate', skill: 'pounce', cards: [fodder] })
+
+    // 直接造成伤害：没有对抗窗口，对手无法用【防御】抵消
+    expect(state.players[1].hp).toBe(3)
+    expect(state.players[0].discard.map((card) => card.uid)).toContain(fodder.uid)
+    expect(state.players[0].usedSkillsThisTurn).toContain('pounce')
+    expect(state.pending).toMatchObject({ kind: 'play', player: 0 })
+    // 限一次：本回合不再出现在可用主动技里
+    expect(activeOptions(state, 0)).not.toContain('pounce')
+    assertConservation(state)
+  })
+
+  it('必须弃一张手牌才能发动', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'strike' }],
+    })
+    const before = snapshot(state)
+    expect(() => submit(state, { kind: 'activate', skill: 'pounce' })).toThrow(
+      '【猛扑】需要弃置 1 张手牌',
+    )
+    expect(state).toEqual(before)
+
+    // 手牌不足时按钮根本不出现
+    const empty = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    expect(activeOptions(empty, 0)).not.toContain('pounce')
+  })
+
+  it('不消耗能量（技能不属于「使用或打出卡牌」）', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'strike' }],
+    })
+    const before = state.players[0].energy
+    submit(state, { kind: 'activate', skill: 'pounce', cards: [state.players[0].hand[0]!] })
+    expect(state.players[0].energy).toBe(before)
+  })
+})

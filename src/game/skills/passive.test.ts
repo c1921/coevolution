@@ -72,9 +72,13 @@ describe('常驻型技能', () => {
     }
   })
 
-  it('暂时：虎没有技能（【猛扑】依赖花色，已随花色一起移除）', () => {
-    expect(SPECIES.tiger.skills).toHaveLength(0)
+  it('每个物种都至少有一个技能（虎的【猛扑】已补齐）', () => {
+    for (const id of SPECIES_IDS) {
+      expect(SPECIES[id].skills.length, `${id} 没有技能`).toBeGreaterThan(0)
+    }
+    expect(SPECIES.tiger.skills.map((s) => s.id)).toEqual(['pounce'])
     expect(SPECIES.deer.skills.map((s) => s.id)).toEqual(['mend'])
+    expect(hasSkill('tiger', 'pounce')).toBe(true)
     expect(hasSkill('tiger', 'roar')).toBe(false)
   })
 
