@@ -7,8 +7,8 @@ import { dealDamage } from './damage'
 describe('濒死结算', () => {
   it('濒死时使用【回复】自救成功', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       aiHand: [{ kind: 'heal' }],
       aiHp: 1,
     })
@@ -28,8 +28,8 @@ describe('濒死结算', () => {
 
   it('体力为负时需要连续使用多张【回复】才能脱离濒死', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       aiHand: [{ kind: 'heal' }, { kind: 'heal' }],
       aiHp: 2,
     })
@@ -54,8 +54,8 @@ describe('濒死结算', () => {
 
   it('自己与对手都放弃救援则死亡', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       aiHp: 1,
     })
 
@@ -75,8 +75,8 @@ describe('濒死结算', () => {
 
   it('濒死救援不受「仅自己 / 已受伤 / 出牌阶段」限制，可以救对手', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'heal' }],
       aiHp: 1,
     })
@@ -97,8 +97,8 @@ describe('濒死结算', () => {
 
   it('濒死结算中不能使用【打击】', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }],
       aiHp: 1,
     })
@@ -116,8 +116,8 @@ describe('濒死结算', () => {
 
   it('能量不足时无法自救，只能放弃并阵亡', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       active: 1,
       playerHp: 1,
       playerHand: [{ kind: 'heal' }],
@@ -142,8 +142,8 @@ describe('濒死结算', () => {
 
   it('能量不足时无法救援对手', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'heal' }],
       // 能量见底，救不了人
       playerEnergy: 0,

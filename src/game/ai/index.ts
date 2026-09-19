@@ -29,14 +29,14 @@ export const HEAL_MAX_HP = 2
 /**
  * 换牌类主动技：体力至少这么高才敢失血换牌。
  * 出牌数量的真正闸门是能量（上限 3），多摸的牌常常打不出去，
- * 因此只在满血附近才值得为摸牌付体力——否则 AI 会一路失血自杀（牛曾因此垫底）。
+ * 因此只在满血附近才值得为摸牌付体力——否则 AI 会一路失血自杀（换牌型主动技曾因此垫底）。
  */
 export const CYCLE_MIN_HP = 4
 /** 换牌类主动技：手牌少到这个数才值得换 */
 export const CYCLE_MAX_HAND = 2
 /** 发动需要弃牌的技能时至少留下的手牌数 */
 export const HAND_RESERVE = 1
-/** 发动进攻型主动技（如【猛扑】）后至少留下的手牌数：不把最后的牌全押在一次进攻上 */
+/** 发动进攻型主动技（如【强袭】）后至少留下的手牌数：不把最后的牌全押在一次进攻上 */
 export const OFFENSE_RESERVE = 3
 
 /**
@@ -80,7 +80,7 @@ function activationRole(skill: SkillId): ActivationRole | undefined {
   const effects = [...activate.effects, ...(activate.after ?? [])]
   if (effectsInclude(effects, 'heal')) return 'self-heal'
   if (effectsInclude(effects, 'draw')) return 'card-cycle'
-  // 对选定目标造成伤害 / 失去体力 / 扣能量 = 进攻型主动技（如虎的【猛扑】）
+  // 对选定目标造成伤害 / 失去体力 / 扣能量 = 进攻型主动技（如进攻型的【强袭】）
   if (hasHarm(effects)) return 'offense'
   return undefined
 }
@@ -327,7 +327,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
       : { kind: 'activate', skill: cycle.skill, target }
   }
 
-  // 5. 进攻型主动技：弃得起且留出余量时发动（如虎的【猛扑】）
+  // 5. 进攻型主动技：弃得起且留出余量时发动（如进攻型的【强袭】）
   const offense = activations.find((item) => item.role === 'offense')
   if (offense) {
     const cost = activationCostCards(state, p, offense.skill)
@@ -351,7 +351,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
 }
 
 /**
- * 抵消自己的威胁：有威胁时才行动，优先真【防御】，其次技能转化（如疾影）。
+ * 抵消自己的威胁：有威胁时才行动，优先真【防御】，其次技能转化（如转换）。
  * 威胁足以致命时不保留同类牌；否则沿用「同用途牌还有富余」的守卫。
  */
 function findDefensePlay(state: GameState, p: PlayerIndex): Action | null {

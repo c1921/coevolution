@@ -155,7 +155,7 @@ export const opponent = computed(() => gameState.value?.players[AI_PLAYER] ?? nu
 export const over = computed(() => (gameState.value ? isOver(gameState.value) : false))
 export const isHumanTurn = computed(() => gameState.value?.active === HUMAN)
 
-/** 人类的能量与上限（上限可能被技能修正，如熊的怒吼） */
+/** 人类的能量与上限（上限可能被技能修正，如防御型的【蓄能】） */
 export const humanEnergy = computed(() => gameState.value?.players[HUMAN].energy ?? 0)
 export const humanEnergyMax = computed(() =>
   gameState.value ? energyMax(gameState.value, HUMAN) : 0,

@@ -10,9 +10,9 @@ const emit = defineEmits<{ pick: [species: SpeciesId] }>()
 <template>
   <div class="mx-auto flex min-h-dvh max-w-4xl flex-col justify-center gap-6 p-4">
     <header class="text-center">
-      <h1 class="text-3xl font-bold text-ink-100">选择你的物种</h1>
+      <h1 class="text-3xl font-bold text-ink-100">选择出战代号</h1>
       <p class="mt-2 text-sm text-ink-300">
-        从随机抽取的 3 个物种中选 1 个出战；AI 会从其余物种中随机选 1 个。
+        从随机抽取的 3 个代号中选 1 个出战；AI 会从其余代号中随机选 1 个。
       </p>    </header>
 
     <div class="grid gap-4 sm:grid-cols-3">
@@ -21,8 +21,7 @@ const emit = defineEmits<{ pick: [species: SpeciesId] }>()
         :key="id"
         class="flex flex-col rounded-xl border border-table-600 bg-table-800 p-4 text-center"
       >
-        <span class="text-5xl">{{ SPECIES[id].emoji }}</span>
-        <h2 class="mt-2 text-lg font-semibold text-ink-100">
+        <h2 class="text-lg font-semibold text-ink-100">
           {{ SPECIES[id].name }}
         </h2>
 
@@ -40,7 +39,7 @@ const emit = defineEmits<{ pick: [species: SpeciesId] }>()
             <p class="text-sm font-semibold text-jade-400">{{ skill.name }}</p>
             <p class="text-xs leading-snug text-ink-300">{{ skill.text }}</p>
           </div>
-          <!-- 暂时没有技能的物种（如虎）：原来的技能依赖卡牌花色，已被移除 -->
+          <!-- 暂未配置技能的代号：保留占位，待内容补齐 -->
           <p v-if="SPECIES[id].skills.length === 0" class="text-xs text-ink-500">
             暂无技能（待重新设计）
           </p>

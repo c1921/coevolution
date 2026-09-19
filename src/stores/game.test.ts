@@ -143,8 +143,8 @@ describe('界面状态与驱动循环', () => {
 
   it('非法操作给出中文提示且状态不变', () => {
     const state = loadState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
     })
     const before = JSON.stringify(state.players.map((p) => p.hp))
@@ -158,8 +158,8 @@ describe('界面状态与驱动循环', () => {
 
   it('弃牌阶段：选够张数才能确认', () => {
     const state = loadState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       phase: 'discard',
       playerHand: [
@@ -211,107 +211,148 @@ describe('界面状态与驱动循环', () => {
     expect(store.human.value).toBeNull()
   })
 
-  it('只有对手受伤时，界面提供「治疗对手」并提交成功', () => {
-    const state = loadState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHp: 3,
-      aiHp: 2,
-      playerHand: [{ kind: 'strike' }],
-    })
-
-    // 按钮出现（技能可用），点击后进入目标选择态而不是直接报错
-    expect(store.humanSkills.value).toContain('mend')
-    store.pickCard(state.players[0].hand[0]!.uid)
-    store.submitActivate('mend')
-
-    expect(store.errorMessage.value).toBeNull()
-    expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'mend' })
-    expect(state.players[1].hp).toBe(2) // 还没结算
-
-    const options = store.pendingTargetOptions.value
-    expect(options.map((option) => option.index)).toEqual([0, 1])
-    expect(options.find((option) => option.index === 1)).toMatchObject({ selectable: true })
-    // 不可选的候选带上文档里的 reason
-    expect(options.find((option) => option.index === 0)).toMatchObject({
-      selectable: false,
-      reason: '目标角色体力已满，无法回复',
-    })
-
-    store.chooseTarget(1)
-
-    expect(store.errorMessage.value).toBeNull()
-    expect(store.pendingTarget.value).toBeNull()
-    expect(state.players[1].hp).toBe(3)
-    expect(state.players[0].hp).toBe(3)
-  })
-
-  it('双方都受伤时，界面让玩家选，可以主动治疗对手', () => {
-    const state = loadState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHp: 2,
-      aiHp: 2,
-      playerHand: [{ kind: 'strike' }],
-    })
-
-    store.pickCard(state.players[0].hand[0]!.uid)
-    store.submitActivate('mend')
-    expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'mend' })
-    expect(
-      store.pendingTargetOptions.value.map((option) => [option.index, option.selectable]),
-    ).toEqual([
-      [0, true],
-      [1, true],
+  /**
+   * 内置主动技只剩【强袭】（目标固定是对手，不需要选择），
+   * 因此用一份合成技能验证界面层的「主动技选目标」链路。
+   */
+  function registryWithHeal() {
+    return contentWith([
+      {
+        path: 'skills/restore.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'restore',
+          name: '复原',
+          text: '出牌阶段：弃一张手牌，令一名已受伤的角色回复 1 点体力。',
+          activate: {
+            timing: 'play',
+            costCards: { count: { kind: 'const', value: 1 } },
+            target: {
+              scope: 'any',
+              required: false,
+              default: 'self',
+              alive: true,
+              conditions: [
+                {
+                  kind: 'compare',
+                  op: 'lt',
+                  left: { kind: 'ref', ref: 'hp', of: 'target' },
+                  right: { kind: 'ref', ref: 'maxHp', of: 'target' },
+                  reason: '目标角色体力已满，无法回复',
+                },
+              ],
+            },
+            effects: [
+              {
+                kind: 'move-cards',
+                from: { zone: 'hand', of: 'self' },
+                to: { zone: 'discard', of: 'self' },
+                pick: { mode: 'cost' },
+              },
+              { kind: 'heal', target: 'target', amount: { kind: 'const', value: 1 } },
+            ],
+          },
+        },
+      },
+      {
+        path: 'species/probe.json',
+        value: {
+          dslVersion: 1,
+          kind: 'species',
+          id: 'probe',
+          priority: 50,
+          name: '试验型',
+          maxHp: 4,
+          skills: ['restore'],
+          deck: 'basic',
+        },
+      },
     ])
+  }
 
-    store.chooseTarget(1)
+  it('只有对手受伤时，界面提供「治疗对手」并提交成功', () => {
+    withRegistry(registryWithHeal(), () => {
+      const state = loadState({
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
+        playerHp: 4,
+        aiHp: 2,
+        playerHand: [{ kind: 'strike' }],
+      })
 
-    expect(state.players[1].hp).toBe(3)
-    expect(state.players[0].hp).toBe(2) // 没有治疗自己
+      // 按钮出现（技能可用），点击后进入目标选择态而不是直接报错
+      expect(store.humanSkills.value).toContain('restore')
+      store.pickCard(state.players[0].hand[0]!.uid)
+      store.submitActivate('restore')
+
+      expect(store.errorMessage.value).toBeNull()
+      expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'restore' })
+      expect(state.players[1].hp).toBe(2) // 还没结算
+
+      const options = store.pendingTargetOptions.value
+      expect(options.map((option) => option.index)).toEqual([0, 1])
+      expect(options.find((option) => option.index === 1)).toMatchObject({ selectable: true })
+      // 不可选的候选带上文档里的 reason
+      expect(options.find((option) => option.index === 0)).toMatchObject({
+        selectable: false,
+        reason: '目标角色体力已满，无法回复',
+      })
+
+      store.chooseTarget(1)
+
+      expect(store.errorMessage.value).toBeNull()
+      expect(store.pendingTarget.value).toBeNull()
+      expect(state.players[1].hp).toBe(3)
+      expect(state.players[0].hp).toBe(4)
+    })
   })
 
   it('候选为空时主动技按钮不出现，也不会进入目标选择态', () => {
-    const state = loadState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHand: [{ kind: 'strike' }],
+    withRegistry(registryWithHeal(), () => {
+      const state = loadState({
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
+        playerHand: [{ kind: 'strike' }],
+      })
+
+      expect(store.humanSkills.value).not.toContain('restore')
+
+      store.pickCard(state.players[0].hand[0]!.uid)
+      store.submitActivate('restore')
+
+      expect(store.pendingTarget.value).toBeNull()
+      expect(store.errorMessage.value).toContain('当前无法发动')
     })
-
-    expect(store.humanSkills.value).not.toContain('mend')
-
-    store.pickCard(state.players[0].hand[0]!.uid)
-    store.submitActivate('mend')
-
-    expect(store.pendingTarget.value).toBeNull()
-    expect(store.errorMessage.value).toContain('当前无法发动')
   })
 
   it('取消目标选择不提交，已选手牌保留', () => {
-    const state = loadState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHp: 3,
-      aiHp: 2,
-      playerHand: [{ kind: 'strike' }],
+    withRegistry(registryWithHeal(), () => {
+      const state = loadState({
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
+        playerHp: 4,
+        aiHp: 2,
+        playerHand: [{ kind: 'strike' }],
+      })
+
+      store.pickCard(state.players[0].hand[0]!.uid)
+      store.submitActivate('restore')
+      expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'restore' })
+
+      store.cancelTarget()
+
+      expect(store.pendingTarget.value).toBeNull()
+      expect(state.players[1].hp).toBe(2)
+      expect(state.players[0].hand).toHaveLength(1)
+      expect(store.selectedCards.value).toHaveLength(1)
     })
-
-    store.pickCard(state.players[0].hand[0]!.uid)
-    store.submitActivate('mend')
-    expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'mend' })
-
-    store.cancelTarget()
-
-    expect(store.pendingTarget.value).toBeNull()
-    expect(state.players[1].hp).toBe(2)
-    expect(state.players[0].hand).toHaveLength(1)
-    expect(store.selectedCards.value).toHaveLength(1)
   })
 
   it('使用卡牌需要选目标时先进入选择态，选中后才结算', () => {
     const state = loadState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }],
@@ -403,8 +444,8 @@ describe('界面状态与驱动循环', () => {
 
     withRegistry(synthetic, () => {
       const state = loadState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHp: 4,
         aiHp: 4,
         playerHand: [{ kind: 'dual' }],

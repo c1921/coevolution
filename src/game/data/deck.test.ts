@@ -29,25 +29,25 @@ describe('私有牌组', () => {
   })
 
   it('三套牌组的构成：基础 11/6/3、攻击 11/5/2/1/1、防守 10/7/3', () => {
-    // 基础：打击 11 / 防御 6 / 回复 3（鹿、狼、狐）
-    expect(compositionOf('deer')).toEqual({ strike: 11, defend: 6, heal: 3 })
-    // 攻击：少一张防御与回复，换入【急救】与【风暴】（虎、豹、狮）
-    expect(compositionOf('tiger')).toEqual({
+    // 基础：打击 11 / 防御 6 / 回复 3（反击型）
+    expect(compositionOf('counter')).toEqual({ strike: 11, defend: 6, heal: 3 })
+    // 攻击：少一张防御与回复，换入【急救】与【风暴】（进攻型、转化型）
+    expect(compositionOf('offensive')).toEqual({
       strike: 11,
       defend: 5,
       heal: 2,
       'first-aid': 1,
       storm: 1,
     })
-    // 防守：更多【防御】（熊、牛）
-    expect(compositionOf('bear')).toEqual({ strike: 10, defend: 7, heal: 3 })
+    // 防守：更多【防御】（防御型）
+    expect(compositionOf('defensive')).toEqual({ strike: 10, defend: 7, heal: 3 })
   })
 
   it('物种按设定分到各自的牌组（改物种文档的 deck 字段即可改配牌）', () => {
     const mapping: Record<string, SpeciesId[]> = {
-      basic: ['deer', 'wolf', 'fox'],
-      aggressive: ['tiger', 'leopard', 'lion'],
-      guarded: ['bear', 'ox'],
+      basic: ['counter'],
+      aggressive: ['offensive', 'morph'],
+      guarded: ['defensive'],
     }
     for (const id of SPECIES_IDS) {
       const expected = Object.entries(mapping).find(([, list]) => list.includes(id))?.[0]
@@ -56,36 +56,35 @@ describe('私有牌组', () => {
   })
 
   it('同牌组的物种共用同一份牌组文档', () => {
-    expect(speciesDeck('tiger')).toEqual(speciesDeck('lion'))
-    expect(speciesDeck('bear')).toEqual(speciesDeck('ox'))
-    expect(speciesDeck('deer')).not.toEqual(speciesDeck('tiger'))
+    expect(speciesDeck('offensive')).toEqual(speciesDeck('morph'))
+    expect(speciesDeck('counter')).not.toEqual(speciesDeck('offensive'))
   })
 
   it('卡牌只有 uid 与牌种：没有花色、没有点数', () => {
-    for (const card of buildDeck('tiger')) {
+    for (const card of buildDeck('offensive')) {
       expect(Object.keys(card).sort()).toEqual(['kind', 'uid'])
       expect(card.kind.length).toBeGreaterThan(0)
     }
   })
 
   it('uid 从 uidBase 起连续分配', () => {
-    const base = buildDeck('tiger', 0)
+    const base = buildDeck('offensive', 0)
     expect(base.map((c) => c.uid)).toEqual(Array.from({ length: 20 }, (_, i) => i))
 
-    const offset = buildDeck('bear', 20)
+    const offset = buildDeck('defensive', 20)
     expect(offset.map((c) => c.uid)).toEqual(Array.from({ length: 20 }, (_, i) => i + 20))
   })
 
   it('双方牌组的 uid 不重叠（处理区是共享的，uid 必须全局唯一）', () => {
-    const p0 = buildDeck('tiger', 0)
-    const p1 = buildDeck('bear', p0.length)
+    const p0 = buildDeck('offensive', 0)
+    const p1 = buildDeck('defensive', p0.length)
     const uids = [...p0, ...p1].map((c) => c.uid)
     expect(new Set(uids).size).toBe(40)
-    expect(totalDeckSize('tiger', 'bear')).toBe(40)
+    expect(totalDeckSize('offensive', 'defensive')).toBe(40)
   })
 
   it('洗牌不增删牌，且同种子结果一致、异种子结果不同', () => {
-    const deck = buildDeck('tiger')
+    const deck = buildDeck('offensive')
     const a = shuffle(deck, 12345)
     const b = shuffle(deck, 12345)
     const c = shuffle(deck, 999)

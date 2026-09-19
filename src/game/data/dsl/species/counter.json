@@ -2,11 +2,10 @@
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "species",
-  "id": "wolf",
-  "priority": 40,
-  "name": "狼",
-  "emoji": "🐺",
+  "id": "counter",
+  "priority": 20,
+  "name": "反击型",
   "maxHp": 4,
-  "skills": ["retaliate"],
+  "skills": ["riposte"],
   "deck": "basic"
 }

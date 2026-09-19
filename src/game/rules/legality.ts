@@ -177,7 +177,7 @@ export function checkPlayCardAsDefend(
 
 /**
  * 发动主动技。技能不是「使用一张牌」，因此不消耗能量；
- * 需要先弃置手牌的技能（疗愈）走 costCards，目标与前置条件全部来自文档。
+ * 需要先弃置手牌的技能（如强袭）走 costCards，目标与前置条件全部来自文档。
  */
 export function checkActivate(
   state: GameState,

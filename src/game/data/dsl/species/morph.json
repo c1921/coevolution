@@ -2,11 +2,10 @@
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "species",
-  "id": "leopard",
-  "priority": 30,
-  "name": "豹",
-  "emoji": "🐆",
+  "id": "morph",
+  "priority": 40,
+  "name": "转化型",
   "maxHp": 4,
-  "skills": ["flicker"],
+  "skills": ["convert"],
   "deck": "aggressive"
 }

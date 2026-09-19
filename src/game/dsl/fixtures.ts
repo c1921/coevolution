@@ -61,12 +61,12 @@ export function baseDocs(): RawFixtureDoc[] {
       },
     },
     {
-      path: 'skills/roar.json',
+      path: 'skills/charge.json',
       value: {
         dslVersion: 1,
         kind: 'skill',
-        id: 'roar',
-        name: '怒吼',
+        id: 'charge',
+        name: '蓄能',
         text: '能量上限 +2。',
         modifiers: [
           { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } },
@@ -74,15 +74,14 @@ export function baseDocs(): RawFixtureDoc[] {
       },
     },
     {
-      path: 'species/tiger.json',
+      path: 'species/offensive.json',
       value: {
         dslVersion: 1,
         kind: 'species',
-        id: 'tiger',
-        name: '虎',
-        emoji: '🐯',
+        id: 'offensive',
+        name: '进攻型',
         maxHp: 4,
-        skills: ['roar'],
+        skills: ['charge'],
         deck: 'basic',
       },
     },

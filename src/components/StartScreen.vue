@@ -7,7 +7,7 @@ import { BTN_PRIMARY, PANEL } from './ui'
   <div class="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center gap-5 p-4">
     <header class="text-center">
       <h1 class="text-4xl font-bold text-ink-100">协同进化</h1>
-      <p class="mt-2 text-ink-300">1v1 物种对决 · 三张基本牌 · 完备结算</p>
+      <p class="mt-2 text-ink-300">1v1 代号对决 · 三张基本牌 · 完备结算</p>
     </header>
 
     <section :class="PANEL" class="text-sm text-ink-300">
@@ -28,7 +28,7 @@ import { BTN_PRIMARY, PANEL } from './ui'
           <b>能量</b>：每回合开始时回复至上限（默认 3 点）。使用与<b>打出</b>卡牌都要支付能量，
           响应【防御】、濒死【回复】同样消耗 —— 留多少能量给防守，是你的取舍。
         </li>
-        <li><b>打击</b>不再限制每回合张数，只要能量够就能连续使用（可被【防御】抵消，【威压】需两张）。</li>
+        <li><b>打击</b>不再限制每回合张数，只要能量够就能连续使用（可被【防御】抵消）。</li>
         <li>体力降到 0 即濒死，可用<b>回复</b>自救（需 2 点能量，留不住就只能阵亡）。</li>
         <li>主动技与弃牌不消耗能量。</li>
         <li>弃牌阶段手牌上限 = 当前体力值。</li>

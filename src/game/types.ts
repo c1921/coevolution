@@ -27,7 +27,7 @@ export interface Card {
 }
 
 /**
- * 转化后的"虚拟牌"。疾影等转化型技能产生的牌统一用它表示，
+ * 转化后的"虚拟牌"。转换等转化型技能产生的牌统一用它表示，
  * 响应、伤害、日志、弃牌全部只认 VirtualCard，避免结算与展示分叉。
  */
 export interface VirtualCard {
@@ -39,10 +39,10 @@ export interface VirtualCard {
   via?: SkillId
 }
 
-/** 物种 id（如 tiger / bear），内容见 data/dsl/species/*.json */
+/** 物种 id（如 offensive / defensive），内容见 data/dsl/species/*.json */
 export type SpeciesId = string
 
-/** 技能 id（如 roar / mend），内容见 data/dsl/skills/*.json */
+/** 技能 id（如 charge / mend），内容见 data/dsl/skills/*.json */
 export type SkillId = string
 
 /**
@@ -62,9 +62,8 @@ export interface SkillDef {
 
 export interface SpeciesDef {
   id: SpeciesId
-  /** 物种名，如「虎」 */
+  /** 物种代号，如「进攻型」 */
   name: string
-  emoji: string
   maxHp: number
   skills: SkillDef[]
 }
@@ -101,7 +100,7 @@ export interface PlayerState {
    * 这份记录只作统计与战报用，不再构成任何上限。
    */
   usedCardsThisTurn: Record<string, number>
-  /** 本回合已发动过的「出牌阶段限一次」技能（如疗愈） */
+  /** 本回合已发动过的「出牌阶段限一次」技能（如强袭） */
   usedSkillsThisTurn: SkillId[]
 }
 
@@ -126,7 +125,7 @@ export interface DamageCtx {
   source: PlayerIndex
   target: PlayerIndex
   amount: number
-  /** 造成伤害的牌（透支"失去体力"时为 null） */
+  /** 造成伤害的牌（主动技「失去体力」时为 null） */
   card: VirtualCard | null
 }
 
@@ -138,7 +137,7 @@ export type Prompt =
       player: PlayerIndex
       /** 需要打出的牌种（对抗窗口由开启它的卡牌决定） */
       expected: CardKind
-      /** 需要打出的张数（威压为 2） */
+      /** 需要打出的张数（需要多张响应时为 2） */
       need: number
       /** 已打出的张数 */
       got: number
@@ -159,9 +158,9 @@ export type Action =
   | { kind: 'use-card'; card: Card; as?: CardKind; via?: SkillId; targets?: PlayerIndex[] }
   /** 打出一张牌（响应【打击】时打出【防御】） */
   | { kind: 'play-card'; card: Card; as?: CardKind; via?: SkillId }
-  /** 发动主动技：透支 / 疗愈（疗愈需指定目标，缺省为自己） */
+  /** 发动主动技：如强袭（需要选目标的技能由文档给出目标） */
   | { kind: 'activate'; skill: SkillId; cards?: Card[]; target?: PlayerIndex }
-  /** 可选发动技能（夺食 / 狡计）的应答 */
+  /** 可选发动技能（可选触发）的应答 */
   | { kind: 'trigger-choice'; accept: boolean }
   /** 弃牌阶段弃置若干手牌 */
   | { kind: 'discard-cards'; cards: Card[] }
@@ -192,7 +191,7 @@ export interface ProcessingCard {
 export type Frame =
   /**
    * 对抗结算：等待响应者打出 `expected` 牌抵消。
-   * 开启对抗的牌由 `card` 记录（夺食据此取回造成伤害的牌），
+   * 开启对抗的牌由 `card` 记录（据此取回造成伤害的牌），
    * 未抵消时执行 `onUnmet`（通常造成伤害），由 DSL 的 contest 指令提供。
    */
   | {
@@ -204,7 +203,7 @@ export type Frame =
       openedBy: CardKind
       /** 需要打出的牌种 */
       expected: CardKind
-      /** 需要打出的张数（威压为 2） */
+      /** 需要打出的张数（需要多张响应时为 2） */
       need: number
       got: number
       /** 本次结算消耗的牌（攻击牌 + 已打出的响应牌），收尾时各自进自己的弃牌堆 */
@@ -217,7 +216,7 @@ export type Frame =
   | { kind: 'damage'; ctx: DamageCtx; triggers: TriggerRef[] }
   /** 濒死询问队列：按顺序逐个询问是否使用【回复】 */
   | { kind: 'dying'; dying: PlayerIndex; ask: PlayerIndex[] }
-  /** 结算收尾：把仍在处理区的牌按归属移入各自的弃牌堆（已被夺食取走的牌自动跳过） */
+  /** 结算收尾：把仍在处理区的牌按归属移入各自的弃牌堆（已被取走的牌自动跳过） */
   | { kind: 'flush'; cards: ProcessingCard[] }
   /** 延迟效果帧（DSL 效果的 after 列表）：当前结算链走完后按 LIFO 执行 */
   | { kind: 'effects'; effects: Effect[]; ctx: EffectContext }
@@ -233,7 +232,7 @@ export interface GameState {
   seed: number
   /** PRNG 内部状态，随状态一起序列化，保证可复现 */
   rngState: number
-  /** 处理区（双方共享）：结算中的牌暂存于此，结算完全结束后才进各自的弃牌堆（夺食即从此处取回） */
+  /** 处理区（双方共享）：结算中的牌暂存于此，结算完全结束后才进各自的弃牌堆（可从处理区取回） */
   processing: ProcessingCard[]
   players: [PlayerState, PlayerState]
   active: PlayerIndex

@@ -7,11 +7,11 @@ export function log(s: GameState, text: string): void {
   s.log.push({ turn: s.turn, text })
 }
 
-/** 「🐯 虎」 */
+/** 「进攻型」 */
 export function playerLabel(s: GameState, p: PlayerIndex): string {
   const player = s.players[p]
   const species = SPECIES[player.species]
-  return `${species.emoji} ${species.name}`
+  return species.name
 }
 
 /** 「【防御】」 */

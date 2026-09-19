@@ -22,7 +22,7 @@ function envOf(
 
 describe('条件求值', () => {
   it('always / not / all / any', () => {
-    const env = envOf('tiger', 'bear')
+    const env = envOf('offensive', 'defensive')
     expect(evalCondition(env, { kind: 'always' })).toBe(true)
     expect(evalCondition(env, { kind: 'not', of: { kind: 'always' } })).toBe(false)
     expect(evalCondition(env, { kind: 'all', of: [{ kind: 'always' }] })).toBe(true)
@@ -35,8 +35,8 @@ describe('条件求值', () => {
   })
 
   it('compare：体力是否已受伤', () => {
-    const wounded = envOf('deer', 'bear', { playerHp: 2 })
-    const full = envOf('deer', 'bear')
+    const wounded = envOf('counter', 'defensive', { playerHp: 2 })
+    const full = envOf('counter', 'defensive')
     const spec: Condition = {
       kind: 'compare',
       op: 'lt',
@@ -64,7 +64,7 @@ describe('条件求值', () => {
   })
 
   it('alive / has-cards / card-kind-count', () => {
-    const env = envOf('tiger', 'bear', {
+    const env = envOf('offensive', 'defensive', {
       playerHand: [{ kind: 'strike' }, { kind: 'defend' }],
     })
     expect(evalCondition(env, { kind: 'alive', of: 'self' })).toBe(true)
@@ -99,7 +99,7 @@ describe('条件求值', () => {
   })
 
   it('in-processing：指向造成伤害的牌', () => {
-    const env = envOf('wolf', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const env = envOf('counter', 'defensive', { playerHand: [{ kind: 'strike' }] })
     const card = env.state.players[0].hand[0]!
     const spec: Condition = { kind: 'in-processing', card: 'event-card' }
     // 还没进处理区
@@ -110,10 +110,10 @@ describe('条件求值', () => {
   })
 
   it('card-transformed / picked-count', () => {
-    const env = envOf('leopard', 'bear', { playerHand: [{ kind: 'defend' }] })
+    const env = envOf('morph', 'defensive', { playerHand: [{ kind: 'defend' }] })
     const card = env.state.players[0].hand[0]!
     expect(evalCondition(env, { kind: 'card-transformed' })).toBe(false)
-    env.ctx.usedCard = { as: 'strike', source: card, via: 'flicker' }
+    env.ctx.usedCard = { as: 'strike', source: card, via: 'convert' }
     expect(evalCondition(env, { kind: 'card-transformed' })).toBe(true)
 
     expect(
@@ -125,10 +125,10 @@ describe('条件求值', () => {
   })
 
   it('skill-unused / is-active / phase-is', () => {
-    const env = envOf('deer', 'bear')
-    expect(evalCondition(env, { kind: 'skill-unused', skill: 'mend' })).toBe(true)
-    env.state.players[0].usedSkillsThisTurn.push('mend')
-    expect(evalCondition(env, { kind: 'skill-unused', skill: 'mend' })).toBe(false)
+    const env = envOf('counter', 'defensive')
+    expect(evalCondition(env, { kind: 'skill-unused', skill: 'assault' })).toBe(true)
+    env.state.players[0].usedSkillsThisTurn.push('assault')
+    expect(evalCondition(env, { kind: 'skill-unused', skill: 'assault' })).toBe(false)
 
     expect(evalCondition(env, { kind: 'is-active' })).toBe(true)
     env.state.active = 1

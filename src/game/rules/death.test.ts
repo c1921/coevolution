@@ -7,8 +7,8 @@ import { dealDamage } from './damage'
 /** 打一场必死对局：对 1 点体力的 AI 造成 1 点伤害，双方都不救援 */
 function killAi(aiHand: { kind: 'defend' | 'heal' | 'strike' }[] = []) {
   const state = makeState({
-    playerSpecies: 'tiger',
-    aiSpecies: 'bear',
+    playerSpecies: 'offensive',
+    aiSpecies: 'defensive',
     aiHand,
     aiHp: 1,
   })
@@ -35,8 +35,8 @@ describe('死亡与胜负结算', () => {
 
   it('阵亡时处理区残留的牌会进入弃牌堆', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       aiHand: [{ kind: 'defend' }],
       aiHp: 1,
     })

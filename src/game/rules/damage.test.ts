@@ -10,7 +10,7 @@ import { dealDamage, loseHp } from './damage'
  */
 describe('伤害结算', () => {
   it('造成伤害会扣减体力并写入战报', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
     advance(state)
 
@@ -22,17 +22,17 @@ describe('伤害结算', () => {
 
   it('时机顺序：扣减体力 → 受到伤害后技能 → 濒死检查', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'wolf',
+      playerSpecies: 'offensive',
+      aiSpecies: 'counter',
       aiHp: 1,
     })
 
     dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
     advance(state)
 
-    // 先询问狼的【反扑】，此时体力已经扣到 0
+    // 先询问反击型的【反击】，此时体力已经扣到 0
     expect(state.players[1].hp).toBe(0)
-    expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'retaliate' })
+    expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'riposte' })
 
     submit(state, { kind: 'trigger-choice', accept: true })
 
@@ -44,7 +44,7 @@ describe('伤害结算', () => {
   })
 
   it('「失去体力」不触发受到伤害后技能，也不压入伤害帧', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'wolf' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'counter' })
 
     loseHp(state, 1, 1)
 
@@ -54,7 +54,7 @@ describe('伤害结算', () => {
   })
 
   it('「失去体力」降到 0 及以下同样进入濒死', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'wolf', aiHp: 1 })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'counter', aiHp: 1 })
 
     loseHp(state, 1, 2)
     advance(state)

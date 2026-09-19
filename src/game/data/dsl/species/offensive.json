@@ -2,11 +2,10 @@
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "species",
-  "id": "tiger",
+  "id": "offensive",
   "priority": 10,
-  "name": "虎",
-  "emoji": "🐯",
+  "name": "进攻型",
   "maxHp": 4,
-  "skills": ["pounce"],
+  "skills": ["assault"],
   "deck": "aggressive"
 }

@@ -2,9 +2,9 @@
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "skill",
-  "id": "retaliate",
+  "id": "riposte",
   "priority": 40,
-  "name": "反扑",
+  "name": "反击",
   "text": "当你受到伤害后，你可以令伤害来源获得 1 点威胁。",
   "trigger": {
     "on": { "at": "after-damage" },
@@ -12,7 +12,7 @@
     "when": [{ "kind": "alive", "of": "source" }],
     "effects": [
       { "kind": "threat", "target": "source", "amount": { "kind": "const", "value": 1 } },
-      { "kind": "log", "template": "{self} 发动【反扑】，向 {source} 反扑" }
+      { "kind": "log", "template": "{self} 发动【反击】，向 {source} 反击" }
     ]
   }
 }

@@ -7,34 +7,31 @@ import { energyMaxBonus, threatPerAttack } from '../skills'
 import { makeState } from '../testUtils'
 
 describe('常驻型技能', () => {
-  it('怒吼：能量上限 +2', () => {
-    const bear = makeState({ playerSpecies: 'bear', aiSpecies: 'tiger' })
-    const tiger = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+  it('蓄能：能量上限 +2', () => {
+    const defensive = makeState({ playerSpecies: 'defensive', aiSpecies: 'offensive' })
+    const offensive = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
 
-    expect(energyMaxBonus(bear, 0)).toBe(2)
-    expect(energyMaxBonus(tiger, 0)).toBe(0)
-    expect(energyMax(bear, 0)).toBe(BASE_ENERGY_MAX + 2)
-    expect(energyMax(tiger, 0)).toBe(BASE_ENERGY_MAX)
+    expect(energyMaxBonus(defensive, 0)).toBe(2)
+    expect(energyMaxBonus(offensive, 0)).toBe(0)
+    expect(energyMax(defensive, 0)).toBe(BASE_ENERGY_MAX + 2)
+    expect(energyMax(offensive, 0)).toBe(BASE_ENERGY_MAX)
   })
 
-  it('威压：使每张【打击】造成 2 点威胁', () => {
-    const lion = makeState({ playerSpecies: 'lion', aiSpecies: 'tiger' })
-    const tiger = makeState({ playerSpecies: 'tiger', aiSpecies: 'lion' })
-
-    expect(threatPerAttack(lion, 0)).toBe(2)
-    expect(threatPerAttack(tiger, 0)).toBe(1)
+  it('threat-per-attack 基准值：没有技能修正时每张【打击】1 点威胁', () => {
+    const offensive = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
+    expect(threatPerAttack(offensive, 0)).toBe(1)
   })
 
   it('修正通道：换一份技能文档即可改变能量上限，引擎代码不用动', () => {
     const synthetic = createRegistry([
-      ...baseDocs().filter((doc) => doc.path !== 'skills/roar.json'),
+      ...baseDocs().filter((doc) => doc.path !== 'skills/charge.json'),
       {
-        path: 'skills/roar.json',
+        path: 'skills/charge.json',
         value: {
           dslVersion: 1,
           kind: 'skill',
-          id: 'roar',
-          name: '怒吼',
+          id: 'charge',
+          name: '蓄能',
           text: '你每回合的能量上限 +1。',
           modifiers: [
             { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 1 } },
@@ -42,8 +39,8 @@ describe('常驻型技能', () => {
         },
       },
     ])
-    // 虎本来没有技能；同一个 state 换一份技能文档后，上限随之改变
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    // 真实注册表里进攻型是【强袭】，没有能量修正；换成合成文档后上限随之改变
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX)
     expect(withRegistry(synthetic, () => energyMax(state, 0))).toBe(BASE_ENERGY_MAX + 1)
     expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX)
@@ -59,12 +56,11 @@ describe('常驻型技能', () => {
     expect(new Set(registry.skills.map((doc) => doc.id))).toEqual(fromSpecies)
   })
 
-  it('每个物种都有名称、头像与体力上限', () => {
-    expect(SPECIES_IDS).toHaveLength(8)
+  it('每个物种都有代号与体力上限', () => {
+    expect(SPECIES_IDS).toHaveLength(4)
     for (const id of SPECIES_IDS) {
       const species = SPECIES[id]
       expect(species.name.length).toBeGreaterThan(0)
-      expect(species.emoji.length).toBeGreaterThan(0)
       expect(species.maxHp).toBeGreaterThanOrEqual(3)
       for (const skill of species.skills) {
         expect(skill.text.length).toBeGreaterThan(0)
@@ -72,19 +68,23 @@ describe('常驻型技能', () => {
     }
   })
 
-  it('每个物种都至少有一个技能（虎的【猛扑】已补齐）', () => {
+  it('每个物种都恰好有一个技能', () => {
     for (const id of SPECIES_IDS) {
       expect(SPECIES[id].skills.length, `${id} 没有技能`).toBeGreaterThan(0)
     }
-    expect(SPECIES.tiger.skills.map((s) => s.id)).toEqual(['pounce'])
-    expect(SPECIES.deer.skills.map((s) => s.id)).toEqual(['mend'])
-    expect(hasSkill('tiger', 'pounce')).toBe(true)
-    expect(hasSkill('tiger', 'roar')).toBe(false)
+    expect(SPECIES.offensive.skills.map((s) => s.id)).toEqual(['assault'])
+    expect(SPECIES.counter.skills.map((s) => s.id)).toEqual(['riposte'])
+    expect(SPECIES.defensive.skills.map((s) => s.id)).toEqual(['charge'])
+    expect(SPECIES.morph.skills.map((s) => s.id)).toEqual(['convert'])
+    expect(hasSkill('offensive', 'assault')).toBe(true)
+    expect(hasSkill('offensive', 'charge')).toBe(false)
   })
 
-  it('物种名与技能名都不重复', () => {
+  it('物种代号与技能名都不重复，且不再保留动物名', () => {
     const names = SPECIES_IDS.map((id) => SPECIES[id].name)
     expect(new Set(names).size).toBe(names.length)
+    // 代号统一以「型」结尾，形象图标字段已移除
+    for (const name of names) expect(name.endsWith('型')).toBe(true)
 
     const skillNames = SPECIES_IDS.flatMap((id) => SPECIES[id].skills.map((s) => s.name))
     expect(new Set(skillNames).size).toBe(skillNames.length)

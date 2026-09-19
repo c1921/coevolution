@@ -40,7 +40,7 @@ export function moveHandToDiscard(state: GameState, p: PlayerIndex, card: Card):
   state.players[p].discard.push(card)
 }
 
-/** 从处理区取走一张牌；不在处理区则返回 undefined（夺食可能已经取走过） */
+/** 从处理区取走一张牌；不在处理区则返回 undefined（可能已被取走） */
 export function takeFromProcessing(
   state: GameState,
   uid: number,
@@ -109,7 +109,7 @@ export function allCards(state: GameState): Card[] {
  * 每张牌恰好属于一个牌区，且 uid 全局唯一（处理区由双方共享）。
  * 任何结算漏牌 / 重复放牌都会在这里被立刻发现。
  *
- * 注意：不要求「每方恒为 20 张」——【夺食】会把对手的牌拿进自己手里，
+ * 注意：不要求「每方恒为 20 张」——技能可以把对手的牌拿进自己手里，
  * 之后再弃置就归获得者的弃牌堆，因此双方池子的张数可能此消彼长，但全局总数不变。
  */
 export function assertConservation(state: GameState): void {

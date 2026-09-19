@@ -102,6 +102,6 @@ describe('守卫：内容 id 不得出现在应用代码里', () => {
     expect(files).toContain(join(SRC, 'game/engine.ts'))
     // 技能文档里当然有 id；确认内容 id 判定不是空集
     expect(contentIds().length).toBeGreaterThan(10)
-    expect(skillDoc('mend').name).toBe('疗愈')
+    expect(skillDoc('assault').name).toBe('强袭')
   })
 })

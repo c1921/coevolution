@@ -13,20 +13,19 @@ import { aiDecide, chooseActivationTarget, chooseCardTargets } from './index'
  * 都要能从技能文档推出来；测试用合成技能（withRegistry）验证这条约定。
  */
 
-/** 用一份合成技能替换鹿的技能表（技能与物种文档必须同时替换，否则是死文档） */
-function deerWith(skill: Record<string, unknown> & { id: string }): Registry {
+/** 用一份合成技能替换试验型的技能表（技能与物种文档必须同时替换，否则是死文档） */
+function probeWith(skill: Record<string, unknown> & { id: string }): Registry {
   return contentWith([
     { path: `skills/${skill.id}.json`, value: skill },
     {
-      path: 'species/deer.json',
+      path: 'species/probe.json',
       value: {
         dslVersion: 1,
         kind: 'species',
-        id: 'deer',
+        id: 'probe',
         priority: 50,
-        name: '鹿',
-        emoji: '🦌',
-        maxHp: 3,
+        name: '试验型',
+        maxHp: 4,
         skills: [skill.id],
         deck: 'basic',
       },
@@ -74,23 +73,25 @@ function healSkill(id: string, extra: Record<string, unknown> = {}): Record<stri
 
 describe('AI 选目标', () => {
   it('自我治疗类主动技：受伤时选自己，并把 target 交给引擎', () => {
-    const state = makeState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHp: 2,
-      playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
-    })
+    withRegistry(probeWith(healSkill('restore', { costCards: { count: { kind: 'const', value: 1 } } })), () => {
+      const state = makeState({
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
+        playerHp: 2,
+        playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
+      })
 
-    const action = activationOf(aiDecide(state))
-    expect(action).toMatchObject({ skill: 'mend', target: 0 })
-    expect(action.cards).toHaveLength(1)
+      const action = activationOf(aiDecide(state))
+      expect(action).toMatchObject({ skill: 'restore', target: 0 })
+      expect(action.cards).toHaveLength(1)
+    })
   })
 
   it('required:true 的技能：AI 会带上显式目标', () => {
-    withRegistry(deerWith(healSkill('setbone')), () => {
+    withRegistry(probeWith(healSkill('setbone')), () => {
       const state = makeState({
-        playerSpecies: 'deer',
-        aiSpecies: 'bear',
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
         playerHp: 2,
         aiHp: 2,
         playerHand: [{ kind: 'strike' }],
@@ -115,10 +116,10 @@ describe('AI 选目标', () => {
       },
     }
 
-    withRegistry(deerWith(venom), () => {
+    withRegistry(probeWith(venom), () => {
       const state = makeState({
-        playerSpecies: 'deer',
-        aiSpecies: 'bear',
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
         playerHp: 2,
         aiHp: 2,
       })
@@ -132,10 +133,10 @@ describe('AI 选目标', () => {
       costCards: { count: { kind: 'const', value: 2 } },
     })
 
-    withRegistry(deerWith(rites), () => {
+    withRegistry(probeWith(rites), () => {
       const state = makeState({
-        playerSpecies: 'deer',
-        aiSpecies: 'bear',
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
         playerHp: 2,
         playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
       })
@@ -150,8 +151,8 @@ describe('AI 选目标', () => {
 describe('AI 使用卡牌时的目标', () => {
   it('急救：优先治疗自己；只有对手受伤时治疗对手', () => {
     const bothWounded = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }],
@@ -159,8 +160,8 @@ describe('AI 使用卡牌时的目标', () => {
     expect(chooseCardTargets(bothWounded, 0, 'first-aid', 'play')).toEqual([0])
 
     const onlyOpponent = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }],
     })
@@ -169,17 +170,17 @@ describe('AI 使用卡牌时的目标', () => {
 
   it('风暴：all 模式不传目标（由引擎作用于全部合法候选）', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'storm' }],
     })
     expect(chooseCardTargets(state, 0, 'storm', 'play')).toEqual([])
   })
 
-  it('进攻型主动技【猛扑】：手牌有余量时发动，并带上目标与费用牌', () => {
+  it('进攻型主动技【强袭】：手牌有余量时发动，并带上目标与费用牌', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [
         { kind: 'strike' },
         { kind: 'strike' },
@@ -188,14 +189,14 @@ describe('AI 使用卡牌时的目标', () => {
       ],
     })
     const action = activationOf(aiDecide(state))
-    expect(action).toMatchObject({ skill: 'pounce', target: 1 })
+    expect(action).toMatchObject({ skill: 'assault', target: 1 })
     expect(action.cards).toHaveLength(1)
   })
 
   it('身上有威胁时先打出【防御】抵消（威胁会在回合结束时变成伤害）', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerThreat: 2,
       playerHand: [{ kind: 'strike' }, { kind: 'defend' }, { kind: 'defend' }],
     })
@@ -205,8 +206,8 @@ describe('AI 使用卡牌时的目标', () => {
   it('会伤到自己的牌只在能直接终结对手时使用', () => {
     // 对手满血：风暴会连自己一起打，AI 选择结束阶段
     const healthy = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       aiHp: 4,
       playerHand: [{ kind: 'storm' }],
     })
@@ -214,8 +215,8 @@ describe('AI 使用卡牌时的目标', () => {
 
     // 对手只剩 1 点体力、自己扛得住：风暴成为终结技
     const finish = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 3,
       aiHp: 1,
       playerHand: [{ kind: 'storm' }],
@@ -225,8 +226,8 @@ describe('AI 使用卡牌时的目标', () => {
 
   it('AI 打出的牌都带齐目标或明确不带（不会提交必失败的牌）', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }, { kind: 'strike' }],

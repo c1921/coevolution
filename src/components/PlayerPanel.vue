@@ -5,7 +5,7 @@ import HealthBar from './HealthBar.vue'
 
 const props = defineProps<{
   player: PlayerState
-  /** 能量上限（可能被技能修正，如熊的怒吼），由上层按引擎规则计算 */
+  /** 能量上限（可能被技能修正，如防御型的【蓄能】），由上层按引擎规则计算 */
   energyMax: number
   active: boolean
   human: boolean
@@ -22,8 +22,6 @@ const species = () => SPECIES[props.player.species]
     :class="active ? 'border-jade-400 bg-table-800' : 'border-table-700 bg-table-900'"
   >
     <div class="flex items-center gap-3">
-      <span class="text-4xl" :class="player.alive ? '' : 'grayscale'">{{ species().emoji }}</span>
-
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <span class="font-semibold text-ink-100">

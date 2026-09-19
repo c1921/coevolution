@@ -31,7 +31,7 @@ import { targetCandidates } from './target'
 
 const PROBE_SKILL = 'probe'
 
-/** 以完整内容集为底，把虎的技能换成一条只带指定通道修正的探针技能 */
+/** 以完整内容集为底，把进攻型的技能换成一条只带指定通道修正的探针技能 */
 function registryWith(channel: Channel, op: ModifierOp, value: number) {
   return contentWith([
     {
@@ -46,14 +46,13 @@ function registryWith(channel: Channel, op: ModifierOp, value: number) {
       },
     },
     {
-      path: 'species/tiger.json',
+      path: 'species/offensive.json',
       value: {
         dslVersion: 1,
         kind: 'species',
-        id: 'tiger',
+        id: 'offensive',
         priority: 10,
-        name: '虎',
-        emoji: '🐯',
+        name: '进攻型',
         maxHp: 4,
         skills: [PROBE_SKILL],
         deck: 'basic',
@@ -92,14 +91,13 @@ function registryWithContest(channel: Channel, op: ModifierOp, value: number) {
       },
     },
     {
-      path: 'species/tiger.json',
+      path: 'species/offensive.json',
       value: {
         dslVersion: 1,
         kind: 'species',
-        id: 'tiger',
+        id: 'offensive',
         priority: 10,
-        name: '虎',
-        emoji: '🐯',
+        name: '进攻型',
         maxHp: 4,
         skills: [PROBE_SKILL],
         deck: 'basic',
@@ -112,14 +110,14 @@ function registryWithContest(channel: Channel, op: ModifierOp, value: number) {
 const PROBES: Record<Channel, () => void> = {
   'energy-max': () => {
     withRegistry(registryWith('energy-max', 'add', 1), () => {
-      const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+      const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
       expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX + 1)
     })
   },
 
   'defend-need-against': () => {
     withRegistry(registryWithContest('defend-need-against', 'set', 3), () => {
-      const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+      const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
 
       submit(state, { kind: 'activate', skill: PROBE_SKILL })
       expect(state.pending).toMatchObject({ kind: 'respond', player: 1, need: 3 })
@@ -129,8 +127,8 @@ const PROBES: Record<Channel, () => void> = {
   'threat-per-attack': () => {
     withRegistry(registryWith('threat-per-attack', 'set', 3), () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'strike' }],
       })
       expect(threatPerAttack(state, 0)).toBe(3)
@@ -144,8 +142,8 @@ const PROBES: Record<Channel, () => void> = {
   'draw-count': () => {
     withRegistry(registryWith('draw-count', 'add', 1), () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         phase: 'draw',
         playerHand: [{ kind: 'heal' }],
       })
@@ -161,8 +159,8 @@ const PROBES: Record<Channel, () => void> = {
   'hand-limit': () => {
     // 体力 3、手牌 4：默认上限 3 需要弃 1 张
     const options = {
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 3,
       phase: 'discard',
       playerHand: [
@@ -191,8 +189,8 @@ const PROBES: Record<Channel, () => void> = {
   'card-cost': () => {
     withRegistry(registryWith('card-cost', 'add', 1), () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'strike' }],
         playerEnergy: 1,
       })
@@ -206,8 +204,8 @@ const PROBES: Record<Channel, () => void> = {
     // 反向：修正把费用压到 0 甚至负数，也必须夹在 1（0 费 + 无次数限制 = 无限连击）
     withRegistry(registryWith('card-cost', 'add', -99), () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'strike' }],
         playerEnergy: 1,
       })
@@ -223,8 +221,8 @@ const PROBES: Record<Channel, () => void> = {
 
     withRegistry(registryWith('attack-range', 'set', 0), () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'strike' }],
       })
       const env = { state, ctx: baseContext(state, 0) }
@@ -236,8 +234,8 @@ const PROBES: Record<Channel, () => void> = {
 
     // 基准范围 1：1v1 的对手在范围内
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }],
     })
     const env = { state, ctx: baseContext(state, 0) }
@@ -259,8 +257,8 @@ describe('通道接线：每条声明的修正通道都被引擎消费', () => {
 
   it('测试用物种替换后注册表仍然自洽（守卫的前提成立）', () => {
     withRegistry(registryWith('energy-max', 'add', 1), () => {
-      const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
-      expect(state.players[0].species).toBe('tiger')
+      const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
+      expect(state.players[0].species).toBe('offensive')
     })
   })
 

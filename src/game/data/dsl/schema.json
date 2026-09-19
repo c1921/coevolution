@@ -669,9 +669,6 @@
         "name": {
           "type": "string"
         },
-        "emoji": {
-          "type": "string"
-        },
         "maxHp": {
           "type": "integer"
         },
@@ -694,7 +691,6 @@
         "dslVersion",
         "id",
         "name",
-        "emoji",
         "maxHp",
         "skills",
         "deck",

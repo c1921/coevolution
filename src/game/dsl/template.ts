@@ -54,7 +54,7 @@ export function renderLog(
     const p = requireRole(env, root as RoleRef)
     const player = env.state.players[p]
     const species = speciesDoc(player.species)
-    const label = `${species.emoji} ${species.name}`
+    const label = species.name
     if (field === undefined) return label
 
     switch (field) {

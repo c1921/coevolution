@@ -54,7 +54,7 @@ describe('回合阶段模型', () => {
 
   it('一个回合按顺序经过六个阶段，并在阶段前后触发时机', () => {
     const { seen, run } = makeProbe()
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'turn-start' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
 
     expect(advanceTurn(state, run)).toBe('pending')
     expect(state.pending).toEqual({ kind: 'play', player: 0 })
@@ -97,7 +97,7 @@ describe('回合阶段模型', () => {
   it('跳过阶段：跳过出牌阶段后，本回合不再产生该阶段的待输入项', () => {
     const { seen, run } = makeProbe()
     // 设想一个在判定阶段结算的「跳过出牌阶段」效果
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'judge' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'judge' })
 
     expect(skipPhase(state, 'play')).toBe(true)
     expect(logTexts(state)).toContain('跳过了出牌阶段')
@@ -111,7 +111,7 @@ describe('回合阶段模型', () => {
   })
 
   it('跳过阶段：进行中的阶段不能被跳过，同一个阶段也只能跳过一次', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'play' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'play' })
 
     expect(skipPhase(state, 'play')).toBe(false)
     expect(skipPhase(state, 'discard')).toBe(true)
@@ -120,7 +120,7 @@ describe('回合阶段模型', () => {
   })
 
   it('跳过阶段：回合开始时重新生成本回合的计划', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'turn-start' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
     skipPhase(state, 'play')
 
     advanceTurn(state)
@@ -131,7 +131,7 @@ describe('回合阶段模型', () => {
 
   it('额外的阶段：插入额外的出牌阶段后，本回合可以再次进入出牌阶段', () => {
     const { seen, run } = makeProbe()
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', phase: 'play' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'play' })
 
     // 在出牌阶段获得一个额外的出牌阶段
     addExtraPhase(state, 'play')
@@ -158,8 +158,8 @@ describe('回合阶段模型', () => {
       loseHp(state, 0, 5) // 体力降到 0 以下 → 压入濒死结算帧
     }
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       phase: 'turn-start',
       playerHp: 1,
     })

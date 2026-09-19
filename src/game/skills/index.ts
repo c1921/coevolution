@@ -18,7 +18,7 @@ export interface CardOption {
   via?: SkillId
 }
 
-/** 按钮文案：「使用【打击】（猛扑）」 */
+/** 按钮文案：「使用【打击】（强袭）」 */
 export function optionLabel(
   option: CardOption,
   verb: '使用' | '打出' | '当',
@@ -261,7 +261,7 @@ export function activeOptions(state: GameState, p: PlayerIndex): SkillId[] {
 
 /**
  * 【打击】每次给目标叠加多少点威胁。
- * 数值来自 threat-per-attack 通道：基准值在 rules/base.json（1），威压以 set 覆盖为 2。
+ * 数值来自 threat-per-attack 通道：基准值在 rules/base.json（1），技能可用 set 覆盖基准值。
  * subject 是"打击的使用者"。
  */
 export function threatPerAttack(state: GameState, source: PlayerIndex): number {
@@ -270,10 +270,10 @@ export function threatPerAttack(state: GameState, source: PlayerIndex): number {
 
 /**
  * 能量上限的技能修正（基础值见 rules/energy.ts 的 BASE_ENERGY_MAX）。
- * 数值来自 energy-max 通道：基准值 3，怒吼以 add +2 抬到 5。
+ * 数值来自 energy-max 通道：基准值 3，蓄能以 add +2 抬到 5。
  *
  * 【打击】的次数限制已从规则层面整体去除，所以原来的「无次数限制」不再是效果；
- * 【怒吼】改为「更多能量」，让熊依然打得更凶，同时避开另一条死路：
+ * 【蓄能】改为「更多能量」，让防御型依然打得更凶，同时避开另一条死路：
  * 任何把【打击】降成 0 费的效果都会与「无次数限制」组合成无限连击。
  */
 export function energyMaxBonus(state: GameState, p: PlayerIndex): number {

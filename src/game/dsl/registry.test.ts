@@ -61,12 +61,12 @@ export function baseDocs(): { path: string; value: unknown }[] {
       },
     },
     {
-      path: 'skills/roar.json',
+      path: 'skills/charge.json',
       value: {
         dslVersion: 1,
         kind: 'skill',
-        id: 'roar',
-        name: '怒吼',
+        id: 'charge',
+        name: '蓄能',
         text: '能量上限 +2。',
         modifiers: [
           { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } },
@@ -74,15 +74,14 @@ export function baseDocs(): { path: string; value: unknown }[] {
       },
     },
     {
-      path: 'species/tiger.json',
+      path: 'species/offensive.json',
       value: {
         dslVersion: 1,
         kind: 'species',
-        id: 'tiger',
-        name: '虎',
-        emoji: '🐯',
+        id: 'offensive',
+        name: '进攻型',
         maxHp: 4,
-        skills: ['roar'],
+        skills: ['charge'],
         deck: 'basic',
       },
     },
@@ -103,8 +102,8 @@ function mutate(
 
 describe('内置内容文档', () => {
   it('全部通过校验（导入注册表即校验）', () => {
-    expect(registry.species).toHaveLength(8)
-    expect(registry.skills).toHaveLength(8)
+    expect(registry.species).toHaveLength(4)
+    expect(registry.skills).toHaveLength(4)
     expect(registry.cards).toHaveLength(5)
     expect(registry.decks).toHaveLength(3)
     expect(registry.rules).toHaveLength(1)
@@ -112,16 +111,7 @@ describe('内置内容文档', () => {
   })
 
   it('物种顺序与原 SPECIES_IDS 完全一致（保证固定种子抽将结果不变）', () => {
-    expect(speciesIds()).toEqual([
-      'tiger',
-      'bear',
-      'leopard',
-      'wolf',
-      'deer',
-      'lion',
-      'ox',
-      'fox',
-    ])
+    expect(speciesIds()).toEqual(['offensive', 'counter', 'defensive', 'morph'])
   })
 
   it('牌种顺序按 priority，三套牌组各自自洽', () => {
@@ -148,14 +138,15 @@ describe('内置内容文档', () => {
   })
 
   it('技能查询按 priority 排序，且只返回该物种的技能', () => {
-    expect(skillsOf('tiger').map((skill) => skill.id)).toEqual(['pounce'])
-    expect(skillsOf('deer').map((skill) => skill.id)).toEqual(['mend'])
-    expect(skillDoc('menace').modifiers?.[0]).toMatchObject({
-      channel: 'threat-per-attack',
-      op: 'set',
+    expect(skillsOf('offensive').map((skill) => skill.id)).toEqual(['assault'])
+    expect(skillsOf('counter').map((skill) => skill.id)).toEqual(['riposte'])
+    expect(skillsOf('defensive').map((skill) => skill.id)).toEqual(['charge'])
+    expect(skillsOf('morph').map((skill) => skill.id)).toEqual(['convert'])
+    expect(skillDoc('charge').modifiers?.[0]).toMatchObject({
+      channel: 'energy-max',
+      op: 'add',
     })
-    expect(speciesDoc('wolf').skills).toEqual(['retaliate'])
-    expect(speciesDoc('fox').skills).toEqual(['cunning'])
+    expect(speciesDoc('counter').skills).toEqual(['riposte'])
   })
 
   it('牌面用途与自伤威胁由文档结构派生（含 for-each-target 内的效果）', () => {
@@ -175,7 +166,7 @@ describe('内置内容文档', () => {
 
 describe('校验器', () => {
   it('非法文档会抛出 DslLoadError 并携带全部问题', () => {
-    const docs = mutate('species/tiger.json', (doc) => {
+    const docs = mutate('species/offensive.json', (doc) => {
       doc.skills = ['not-a-skill']
     })
     let caught: unknown
@@ -190,18 +181,18 @@ describe('校验器', () => {
     expect(issues).toHaveLength(2)
     expect(issues.map((issue) => issue.code).sort()).toEqual(['dead-doc', 'unknown-ref'])
     expect(issues.find((issue) => issue.code === 'unknown-ref')).toMatchObject({
-      path: 'species/tiger.json#/skills/0',
+      path: 'species/offensive.json#/skills/0',
     })
   })
 
   it('问题按路径排序，便于快照与定位', () => {
     const docs = [
-      ...mutate('species/tiger.json', (doc) => {
+      ...mutate('species/offensive.json', (doc) => {
         doc.deck = 'missing'
       }),
-      ...mutate('skills/roar.json', (doc) => {
+      ...mutate('skills/charge.json', (doc) => {
         doc.name = ''
-      }).filter((doc) => doc.path === 'skills/roar.json'),
+      }).filter((doc) => doc.path === 'skills/charge.json'),
     ]
     const issues = (() => {
       try {
@@ -213,8 +204,8 @@ describe('校验器', () => {
     })()
     const paths = issues.map((issue) => issue.path)
     expect(paths).toEqual([...paths].sort())
-    expect(paths).toContain('skills/roar.json#/name')
-    expect(paths).toContain('species/tiger.json#/deck')
+    expect(paths).toContain('skills/charge.json#/name')
+    expect(paths).toContain('species/offensive.json#/deck')
   })
 })
 
@@ -223,15 +214,14 @@ describe('withRegistry', () => {
     const synthetic = createRegistry([
       ...baseDocs().filter((doc) => !doc.path.startsWith('species/')),
       {
-        path: 'species/fox.json',
+        path: 'species/probe.json',
         value: {
           dslVersion: 1,
           kind: 'species',
-          id: 'fox',
-          name: '狐',
-          emoji: '🦊',
+          id: 'probe',
+          name: '试验型',
           maxHp: 3,
-          skills: ['roar'],
+          skills: ['charge'],
           deck: 'basic',
         },
       },
@@ -239,7 +229,7 @@ describe('withRegistry', () => {
 
     const before = registry
     const inside = withRegistry(synthetic, () => speciesIds())
-    expect(inside).toEqual(['fox'])
+    expect(inside).toEqual(['probe'])
     expect(registry).toBe(before)
   })
 

@@ -38,7 +38,7 @@ function ruleLog(id: string): LogEffect {
 
 describe('日志模板渲染', () => {
   it('普通使用：{self} 对 {target} 使用{usedAs}', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     const card = state.players[0].deck[0]!
     const env: EvalEnv = {
       state,
@@ -50,11 +50,11 @@ describe('日志模板渲染', () => {
       },
     }
     const effect = logOf(variantOf('strike', 'play').effects, 'else')
-    expect(renderLog(env, effect)).toBe('🐯 虎 对 🐻 熊 使用【打击】（能量 3/3）')
+    expect(renderLog(env, effect)).toBe('进攻型 对 防御型 使用【打击】（能量 3/3）')
   })
 
   it('转化使用：{via} / {usedRaw} / {usedAs}', () => {
-    const state = makeState({ playerSpecies: 'leopard', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'morph', aiSpecies: 'defensive' })
     const defend = state.players[0].deck.find((card) => card.kind === 'defend')!
     const env: EvalEnv = {
       state,
@@ -62,17 +62,17 @@ describe('日志模板渲染', () => {
         ...baseContext(state, 0),
         target: 1,
         usedUid: defend.uid,
-        usedCard: { as: 'strike', source: defend, via: 'flicker' },
+        usedCard: { as: 'strike', source: defend, via: 'convert' },
       },
     }
     const effect = logOf(variantOf('strike', 'play').effects, 'then')
     expect(renderLog(env, effect)).toBe(
-      '🐆 豹 发动【疾影】，将【防御】当【打击】对 🐻 熊 使用（能量 3/3）',
+      '转化型 发动【转换】，将【防御】当【打击】对 防御型 使用（能量 3/3）',
     )
   })
 
   it('濒死救援：{target} 的体力与能量标签', () => {
-    const state = makeState({ playerSpecies: 'deer', aiSpecies: 'bear', playerEnergy: 2 })
+    const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive', playerEnergy: 2 })
     const heal = state.players[0].deck.find((card) => card.kind === 'heal')!
     state.players[1].hp = 1
     const env: EvalEnv = {
@@ -86,40 +86,39 @@ describe('日志模板渲染', () => {
       },
     }
     const effect = logOf(variantOf('heal', 'dying').effects)
-    expect(renderLog(env, effect)).toBe('🦌 鹿 使用【回复】救援 🐻 熊（体力 1/4）（能量 2/3）')
+    expect(renderLog(env, effect)).toBe('反击型 使用【回复】救援 防御型（体力 1/4）（能量 2/3）')
   })
 
   it('技能日志：{cost} 渲染费用牌', () => {
-    const state = makeState({ playerSpecies: 'deer', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     const hand = state.players[0].deck.find((card) => card.kind === 'strike')!
     state.players[0].hand = [hand]
     const env: EvalEnv = {
       state,
-      ctx: { ...baseContext(state, 0), target: 0, costCards: [hand.uid] },
+      ctx: { ...baseContext(state, 0), target: 1, costCards: [hand.uid] },
     }
     expect(
       renderLog(env, {
-        template:
-          '{self} 发动【疗愈】，弃置{cost}，令 {target} 回复 1 点体力（体力 {target.hp}/{target.maxHp}）',
+        template: '{self} 发动【强袭】，弃置{cost}，强攻 {target}',
       }),
-    ).toBe('🦌 鹿 发动【疗愈】，弃置【打击】，令 🦌 鹿 回复 1 点体力（体力 3/3）')
+    ).toBe('进攻型 发动【强袭】，弃置【打击】，强攻 防御型')
   })
 
   it('vars 绑定优先于自动绑定（消耗战的流失量）', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', active: 1 })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', active: 1 })
     state.turn = 26
     const env: EvalEnv = { state, ctx: baseContext(state, 1) }
-    expect(renderLog(env, ruleLog('attrition'))).toBe('消耗战：🐻 熊 失去 2 点体力')
+    expect(renderLog(env, ruleLog('attrition'))).toBe('消耗战：防御型 失去 2 点体力')
   })
 
-  it('怒吼的能量标签反映修正后的上限', () => {
-    const state = makeState({ playerSpecies: 'bear', aiSpecies: 'tiger' })
+  it('蓄能的能量标签反映修正后的上限', () => {
+    const state = makeState({ playerSpecies: 'defensive', aiSpecies: 'offensive' })
     const env: EvalEnv = { state, ctx: baseContext(state, 0) }
-    expect(renderLog(env, { template: '{self}{self.energyTag}' })).toBe('🐻 熊（能量 5/5）')
+    expect(renderLog(env, { template: '{self}{self.energyTag}' })).toBe('防御型（能量 5/5）')
   })
 
   it('未定义的字段会抛错而不是渲染出 undefined', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     const env: EvalEnv = { state, ctx: baseContext(state, 0) }
     expect(() => renderLog(env, { template: '{self.nope}' })).toThrow(/字段无法解析/)
   })

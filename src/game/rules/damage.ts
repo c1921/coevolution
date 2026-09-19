@@ -31,7 +31,7 @@ export function dealDamage(state: GameState, ctx: DamageCtx): void {
 }
 
 /**
- * 失去体力：与「受到伤害」不同，不会触发夺食 / 狡计等受到伤害后技能，
+ * 失去体力：与「受到伤害」不同，不会触发「受到伤害后」技能，
  * 但同样会在体力降到 0 及以下时进入濒死。
  */
 export function loseHp(state: GameState, p: PlayerIndex, amount: number): void {

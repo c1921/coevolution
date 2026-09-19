@@ -27,17 +27,17 @@ describe('DSL 校验器 · 信封', () => {
 
   it('dslVersion 必须匹配', () => {
     const issue = expectSingle(
-      mutateDoc('species/tiger.json', (doc) => {
+      mutateDoc('species/offensive.json', (doc) => {
         doc.dslVersion = 99
       }),
       'version',
     )
-    expect(issue.path).toBe('species/tiger.json#/dslVersion')
+    expect(issue.path).toBe('species/offensive.json#/dslVersion')
   })
 
   it('未知文档种类直接拒绝', () => {
     expectSingle(
-      mutateDoc('species/tiger.json', (doc) => {
+      mutateDoc('species/offensive.json', (doc) => {
         doc.kind = 'monster'
       }),
       'unknown-kind',
@@ -46,12 +46,12 @@ describe('DSL 校验器 · 信封', () => {
 
   it('严格字段：多余键（拼写错误）会报错', () => {
     const issue = expectSingle(
-      mutateDoc('species/tiger.json', (doc) => {
+      mutateDoc('species/offensive.json', (doc) => {
         doc.Kind = 'species'
       }),
       'unknown-key',
     )
-    expect(issue.path).toBe('species/tiger.json#/Kind')
+    expect(issue.path).toBe('species/offensive.json#/Kind')
   })
 
   it('缺少必填字段会报错', () => {
@@ -66,15 +66,14 @@ describe('DSL 校验器 · 信封', () => {
   it('id 全局唯一', () => {
     const docs = baseDocs()
     docs.push({
-      path: 'species/fox.json',
+      path: 'species/dupe.json',
       value: {
         dslVersion: 1,
         kind: 'species',
-        id: 'tiger',
-        name: '狐',
-        emoji: '🦊',
+        id: 'offensive',
+        name: '试验型',
         maxHp: 3,
-        skills: ['roar'],
+        skills: ['charge'],
         deck: 'basic',
       },
     })
@@ -85,7 +84,7 @@ describe('DSL 校验器 · 信封', () => {
 describe('DSL 校验器 · 数值与条件', () => {
   it('未知数值节点种类', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         doc.modifiers = [{ channel: 'energy-max', op: 'add', value: { kind: 'power', value: 2 } }]
       }),
       'unknown-instruction',
@@ -94,7 +93,7 @@ describe('DSL 校验器 · 数值与条件', () => {
 
   it('未知通道', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         doc.modifiers = [{ channel: 'mana-max', op: 'add', value: { kind: 'const', value: 2 } }]
       }),
       'unknown-channel',
@@ -276,13 +275,13 @@ describe('DSL 校验器 · 日志模板', () => {
 describe('DSL 校验器 · 引用与死文档', () => {
   it('技能引用必须可解析', () => {
     const issue = expectSingle(
-      mutateDoc('species/tiger.json', (doc) => {
+      mutateDoc('species/offensive.json', (doc) => {
         doc.skills = ['nope']
       }),
       'unknown-ref',
     )
-    // 悬空引用同时使 roar 变成死文档，因此这里只断言引用问题本身
-    expect(issue.path).toBe('species/tiger.json#/skills/0')
+    // 悬空引用同时使 charge 变成死文档，因此这里只断言引用问题本身
+    expect(issue.path).toBe('species/offensive.json#/skills/0')
   })
 
   it('牌组引用的牌种必须存在', () => {
@@ -337,7 +336,7 @@ describe('DSL 校验器 · 引用与死文档', () => {
 describe('DSL 校验器 · 技能与卡牌结构', () => {
   it('技能必须至少声明一种效果', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
       }),
       'bad-combination',
@@ -355,7 +354,7 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
 
   it('可选发动的触发技能目前只支持 after-damage', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
         doc.trigger = {
           on: { at: 'turn-start' },
@@ -369,7 +368,7 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
 
   it('转化的语境必须是 use / play', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
         doc.transforms = [{ from: 'strike', to: 'strike', contexts: ['discard'] }]
       }),
@@ -380,7 +379,7 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
   it('转化的 to 端必须在该语境真的有用法', () => {
     // strike 没有 play 变体（只能被使用，不能被"打出"），把它当作打出目标毫无意义
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
         doc.transforms = [{ from: 'strike', to: 'strike', contexts: ['play'] }]
       }),
@@ -390,7 +389,7 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
 
   it('主动技的 timing 目前只支持 play', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
         doc.activate = {
           timing: 'draw',
@@ -491,7 +490,7 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
 
   it('主动技暂不支持多目标', () => {
     expectSingle(
-      mutateDoc('skills/roar.json', (doc) => {
+      mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
         doc.activate = {
           timing: 'play',

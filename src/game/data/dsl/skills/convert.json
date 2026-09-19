@@ -2,9 +2,9 @@
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "skill",
-  "id": "flicker",
+  "id": "convert",
   "priority": 50,
-  "name": "疾影",
+  "name": "转换",
   "text": "你可以将【打击】当【防御】、【防御】当【打击】使用。",
   "transforms": [
     { "from": "defend", "to": "strike", "contexts": ["use"] },

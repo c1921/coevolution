@@ -13,8 +13,8 @@ import { assertThreatBounds, resolveThreatAtTurnEnd } from './threat'
 describe('威胁结算', () => {
   it('回合结束时：剩余威胁结算为等量伤害并归零', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerThreat: 2,
       phase: 'turn-end',
     })
@@ -32,8 +32,8 @@ describe('威胁结算', () => {
 
   it('威胁为 0 时不结算、不产生伤害帧', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       phase: 'turn-end',
     })
 
@@ -46,8 +46,8 @@ describe('威胁结算', () => {
 
   it('先在出牌阶段抵消，回合结束时只结算剩余的威胁', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
       playerThreat: 3,
     })
@@ -63,44 +63,27 @@ describe('威胁结算', () => {
     assertConservation(state)
   })
 
-  it('受到伤害后会询问可选技能：【反扑】把威胁还给伤害来源', () => {
+  it('受到伤害后会询问可选技能：【反击】把威胁还给伤害来源', () => {
     const state = makeState({
-      playerSpecies: 'wolf',
-      aiSpecies: 'bear',
+      playerSpecies: 'counter',
+      aiSpecies: 'defensive',
       playerThreat: 1,
       phase: 'turn-end',
     })
 
     advance(state)
 
-    // 伤害来源是唯一对手，狼可以令其获得 1 点威胁
-    expect(state.pending).toMatchObject({ kind: 'trigger', player: 0, skill: 'retaliate' })
+    // 伤害来源是唯一对手，反击型可以令其获得 1 点威胁
+    expect(state.pending).toMatchObject({ kind: 'trigger', player: 0, skill: 'riposte' })
     submit(state, { kind: 'trigger-choice', accept: true })
     expect(state.players[1].threat).toBe(1)
     assertConservation(state)
   })
 
-  it('受到伤害后会询问可选技能：【狡黠】摸一张牌', () => {
-    const state = makeState({
-      playerSpecies: 'fox',
-      aiSpecies: 'bear',
-      playerThreat: 1,
-      phase: 'turn-end',
-    })
-    const before = state.players[0].hand.length
-
-    advance(state)
-    expect(state.pending).toMatchObject({ kind: 'trigger', player: 0, skill: 'cunning' })
-
-    submit(state, { kind: 'trigger-choice', accept: true })
-    expect(state.players[0].hand).toHaveLength(before + 1)
-    assertConservation(state)
-  })
-
   it('威胁致死会进入濒死结算', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 1,
       playerThreat: 2,
       phase: 'turn-end',
@@ -114,8 +97,8 @@ describe('威胁结算', () => {
 
   it('【风暴】对自己造成的威胁在自己的回合结束时结算', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'storm' }],
     })
 
@@ -132,7 +115,7 @@ describe('威胁结算', () => {
   })
 
   it('威胁不变式：非负整数', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     state.players[0].threat = -1
     expect(() => assertThreatBounds(state)).toThrow('威胁越界')
   })

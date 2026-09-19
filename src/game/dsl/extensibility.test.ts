@@ -56,16 +56,15 @@ describe('扩展性：新增内容不需要改代码', () => {
             },
           },
         },
-      // 鹿改用新技能
+      // 试验型改用新技能
       {
-        path: 'species/deer.json',
+        path: 'species/probe.json',
           value: {
             dslVersion: 1,
             kind: 'species',
-            id: 'deer',
+            id: 'probe',
             priority: 50,
-            name: '鹿',
-            emoji: '🦌',
+            name: '试验型',
             maxHp: 3,
             skills: ['bloom'],
             deck: 'basic',
@@ -76,8 +75,8 @@ describe('扩展性：新增内容不需要改代码', () => {
     // 牌组与技能都取自当前注册表，因此状态也要在同一份注册表下构造
     withRegistry(synthetic, () => {
       const state = makeState({
-        playerSpecies: 'deer',
-        aiSpecies: 'bear',
+        playerSpecies: 'probe',
+        aiSpecies: 'defensive',
         playerHp: 1,
         playerHand: [{ kind: 'strike' }, { kind: 'defend' }],
       })
@@ -149,10 +148,10 @@ describe('扩展性：新增内容不需要改代码', () => {
     withRegistry(synthetic, () => {
       expect(CARD_DEFS.smite?.name).toBe('重击')
       expect(CARD_DEFS.smite?.cost).toBe(1)
-      // 牌组按新构成构建（虎用 aggressive），守恒校验也按新构成计算
+      // 牌组按新构成构建（进攻型用 aggressive），守恒校验也按新构成计算
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'smite' }],
       })
       const smite = state.players[0].hand[0]!
@@ -222,8 +221,8 @@ describe('扩展性：新增内容不需要改代码', () => {
 
     withRegistry(synthetic, () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'provoke' }],
         aiHand: [{ kind: 'strike' }],
       })
@@ -297,8 +296,8 @@ describe('扩展性：新增内容不需要改代码', () => {
 
     withRegistry(synthetic, () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'quake' }],
       })
       const card = state.players[0].hand[0]!
@@ -314,14 +313,13 @@ describe('扩展性：新增内容不需要改代码', () => {
   it('改一份物种文档就能改体力上限（视图是实时的）', () => {
     const synthetic = contentWith([
       {
-        path: 'species/tiger.json',
+        path: 'species/offensive.json',
           value: {
             dslVersion: 1,
             kind: 'species',
-            id: 'tiger',
+            id: 'offensive',
             priority: 10,
-            name: '虎',
-            emoji: '🐯',
+            name: '进攻型',
             maxHp: 6,
             skills: [],
             deck: 'basic',
@@ -329,11 +327,11 @@ describe('扩展性：新增内容不需要改代码', () => {
         },
     ])
 
-    expect(speciesDef('tiger').maxHp).toBe(4)
+    expect(speciesDef('offensive').maxHp).toBe(4)
     withRegistry(synthetic, () => {
-      expect(SPECIES.tiger.maxHp).toBe(6)
-      expect(makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' }).players[0].maxHp).toBe(6)
+      expect(SPECIES.offensive.maxHp).toBe(6)
+      expect(makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' }).players[0].maxHp).toBe(6)
     })
-    expect(speciesDef('tiger').maxHp).toBe(4)
+    expect(speciesDef('offensive').maxHp).toBe(4)
   })
 })

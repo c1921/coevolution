@@ -20,7 +20,7 @@ const ALL_KINDS: CardKind[] = ['strike', 'defend', 'heal']
 
 describe('能量系统', () => {
   it('费用按牌种固定：打击 1 / 防御 1 / 回复 2，且与牌面说明一致', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     expect(energyCost(state, 0, 'strike')).toBe(1)
     expect(energyCost(state, 0, 'defend')).toBe(1)
     expect(energyCost(state, 0, 'heal')).toBe(2)
@@ -32,19 +32,19 @@ describe('能量系统', () => {
   })
 
   it('任何牌面的费用都至少 1 点（0 费 + 无次数限制 = 无限连击）', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     for (const kind of ALL_KINDS) {
       expect(energyCost(state, 0, kind)).toBeGreaterThanOrEqual(1)
     }
   })
 
-  it('能量上限：基础 3 点，怒吼的熊为 5 点', () => {
-    const tiger = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
-    const bear = makeState({ playerSpecies: 'bear', aiSpecies: 'tiger' })
+  it('能量上限：基础 3 点，蓄能的防御型为 5 点', () => {
+    const offensive = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
+    const defensive = makeState({ playerSpecies: 'defensive', aiSpecies: 'offensive' })
 
-    expect(energyMax(tiger, 0)).toBe(BASE_ENERGY_MAX)
-    expect(energyMax(tiger, 1)).toBe(BASE_ENERGY_MAX + 2)
-    expect(energyMax(bear, 1)).toBe(BASE_ENERGY_MAX)
+    expect(energyMax(offensive, 0)).toBe(BASE_ENERGY_MAX)
+    expect(energyMax(offensive, 1)).toBe(BASE_ENERGY_MAX + 2)
+    expect(energyMax(defensive, 1)).toBe(BASE_ENERGY_MAX)
   })
 
   it('开局双方能量回满', () => {
@@ -59,8 +59,8 @@ describe('能量系统', () => {
 
   it('使用【打击】支付 1 点，自己回合打出【防御】抵消威胁也支付 1 点', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }],
       aiHand: [{ kind: 'defend' }],
     })
@@ -81,8 +81,8 @@ describe('能量系统', () => {
 
   it('【回复】支付 2 点', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'heal' }],
       playerHp: 2,
     })
@@ -92,10 +92,10 @@ describe('能量系统', () => {
     expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - 2)
   })
 
-  it('转化牌按「当作的牌面」付费：疾影把【防御】当【打击】仍按【打击】收费', () => {
+  it('转化牌按「当作的牌面」付费：转换把【防御】当【打击】仍按【打击】收费', () => {
     const state = makeState({
-      playerSpecies: 'leopard',
-      aiSpecies: 'bear',
+      playerSpecies: 'morph',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
     })
 
@@ -103,7 +103,7 @@ describe('能量系统', () => {
       kind: 'use-card',
       card: state.players[0].hand[0]!,
       as: 'strike',
-      via: 'flicker',
+      via: 'convert',
     })
 
     expect(state.players[0].energy).toBe(BASE_ENERGY_MAX - energyCost(state, 0, 'strike'))
@@ -113,8 +113,8 @@ describe('能量系统', () => {
 
   it('能量不足时拒绝使用且状态完全不变', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'heal' }],
       playerHp: 2,
       playerEnergy: 1,
@@ -129,8 +129,8 @@ describe('能量系统', () => {
 
   it('能量为 0 时没有任何可用的牌面', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerEnergy: 0,
       playerHp: 2,
       playerHand: [{ kind: 'strike' }, { kind: 'defend' }, { kind: 'heal' }],
@@ -145,35 +145,27 @@ describe('能量系统', () => {
     }
   })
 
-  it('主动技不消耗能量：透支 / 疗愈', () => {
-    const ox = makeState({
-      playerSpecies: 'ox',
-      aiSpecies: 'bear',
+  it('主动技不消耗能量：强袭', () => {
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }],
     })
-    submit(ox, { kind: 'activate', skill: 'overexert' })
-    expect(ox.players[0].hp).toBe(3)
-    expect(ox.players[0].energy).toBe(BASE_ENERGY_MAX)
-
-    const deer = makeState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHp: 2,
-      playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
-    })
-    submit(deer, {
+    const before = state.players[0].energy
+    submit(state, {
       kind: 'activate',
-      skill: 'mend',
-      cards: [deer.players[0].hand[0]!],
+      skill: 'assault',
+      cards: [state.players[0].hand[0]!],
     })
-    expect(deer.players[0].hp).toBe(3)
-    expect(deer.players[0].energy).toBe(BASE_ENERGY_MAX)
+    // 技能不属于「使用或打出卡牌」：能量不变，只按文档结算威胁
+    expect(state.players[0].energy).toBe(before)
+    expect(state.players[1].threat).toBe(2)
   })
 
   it('回合开始时回满，且只有回合角色回满', () => {
     const start = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'tiger',
+      playerSpecies: 'offensive',
+      aiSpecies: 'offensive',
       phase: 'turn-start',
       playerEnergy: 0,
     })
@@ -182,8 +174,8 @@ describe('能量系统', () => {
 
     // 结束出牌阶段后轮到对手：玩家不回满，对手回满
     const handover = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'tiger',
+      playerSpecies: 'offensive',
+      aiSpecies: 'offensive',
       playerEnergy: 0,
       aiEnergy: 0,
     })
@@ -194,7 +186,7 @@ describe('能量系统', () => {
   })
 
   it('payEnergy 在能量不足时抛错且不扣减', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear', playerEnergy: 1 })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', playerEnergy: 1 })
     expect(() => payEnergy(state, 0, 'heal')).toThrow('能量不足')
     expect(state.players[0].energy).toBe(1)
 

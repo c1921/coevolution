@@ -14,8 +14,8 @@ import { cardUseCount } from './usage'
 describe('【打击】结算', () => {
   it('给对手叠加 1 点威胁：对手不掉血，打击牌进自己的弃牌堆', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }],
     })
     const strike = state.players[0].hand[0]!
@@ -34,8 +34,8 @@ describe('【打击】结算', () => {
 
   it('【打击】没有次数限制：能量足够就能连续使用，威胁逐张叠加', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
     })
 
@@ -51,8 +51,8 @@ describe('【打击】结算', () => {
 
   it('能量耗尽后无法再使用【打击】', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [
         { kind: 'strike' },
         { kind: 'strike' },
@@ -77,10 +77,10 @@ describe('【打击】结算', () => {
     assertConservation(state)
   })
 
-  it('怒吼：能量上限 +2，同一回合可以打出更多【打击】', () => {
+  it('蓄能：能量上限 +2，同一回合可以打出更多【打击】', () => {
     const state = makeState({
-      playerSpecies: 'bear',
-      aiSpecies: 'tiger',
+      playerSpecies: 'defensive',
+      aiSpecies: 'offensive',
       playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
 
@@ -88,7 +88,7 @@ describe('【打击】结算', () => {
       submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'strike' })
     }
 
-    // 熊的上限是 5（怒吼 +2），打完三张还剩 2 点（虎的上限只有 3）
+    // 防御型的上限是 5（蓄能 +2），打完三张还剩 2 点（进攻型的上限只有 3）
     expect(cardUseCount(state, 0, 'strike')).toBe(3)
     expect(energyMax(state, 0)).toBe(BASE_ENERGY_MAX + 2)
     expect(state.players[0].energy).toBe(energyMax(state, 0) - 3)
@@ -96,24 +96,10 @@ describe('【打击】结算', () => {
     assertConservation(state)
   })
 
-  it('威压：每张【打击】造成 2 点威胁', () => {
-    const state = makeState({
-      playerSpecies: 'lion',
-      aiSpecies: 'tiger',
-      playerHand: [{ kind: 'strike' }],
-    })
-
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })
-
-    expect(state.players[1].threat).toBe(2)
-    expect(state.pending).toEqual({ kind: 'play', player: 0 })
-    assertConservation(state)
-  })
-
   it('【防御】：在自己的出牌阶段抵消自己 1 点威胁并支付 1 点能量', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
       playerThreat: 2,
     })
@@ -130,8 +116,8 @@ describe('【打击】结算', () => {
 
   it('没有威胁时不能使用【防御】（文档 reason 直接作为报错）', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
     })
     const before = snapshot(state)
@@ -143,8 +129,8 @@ describe('【打击】结算', () => {
 
   it('【防御】只能作用于自己，指定对手为目标会被拒绝', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
       playerThreat: 1,
     })
@@ -157,8 +143,8 @@ describe('【打击】结算', () => {
 
   it('满血时不能使用【回复】', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'heal' }],
     })
     const before = snapshot(state)
@@ -170,8 +156,8 @@ describe('【打击】结算', () => {
 
   it('已受伤时使用【回复】回复 1 点体力', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'heal' }],
       playerHp: 2,
     })
@@ -183,7 +169,7 @@ describe('【打击】结算', () => {
   })
 
   it('使用不在手牌中的牌会被拒绝且状态不变', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     const before = snapshot(state)
     expect(() =>
       submit(state, {
@@ -196,8 +182,8 @@ describe('【打击】结算', () => {
 
   it('不是自己的出牌阶段时无法使用牌', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'strike' }],
       active: 1,
     })
@@ -210,8 +196,8 @@ describe('【打击】结算', () => {
 
   it('结束出牌阶段后进入弃牌阶段', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       playerHand: [
         { kind: 'strike' },

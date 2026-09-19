@@ -15,7 +15,6 @@ import {
   legalOptions,
   pickCard,
   screen,
-  submitActivate,
   submitOption,
 } from '../stores/game'
 
@@ -52,7 +51,7 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     expect(draftOptions.value.length).toBeGreaterThan(0)
 
     const html = await renderApp()
-    expect(html).toContain('选择你的物种')
+    expect(html).toContain('选择出战代号')
     for (const id of draftOptions.value) expect(html).toContain(SPECIES[id].name)
   })
 
@@ -72,8 +71,8 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
   it('面板显示双方的威胁点数', async () => {
     backToStart()
     gameState.value = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerThreat: 2,
       aiThreat: 1,
     })
@@ -89,33 +88,11 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     backToStart()
   })
 
-  it('需要选目标时弹出目标选择器，并列出不可选的原因', async () => {
-    backToStart()
-    gameState.value = makeState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
-      playerHp: 3,
-      aiHp: 2,
-      playerHand: [{ kind: 'strike' }],
-    })
-    screen.value = 'battle'
-
-    pickCard(gameState.value.players[0].hand[0]!.uid)
-    submitActivate('mend')
-
-    const html = await renderApp()
-    expect(html).toContain('选择目标')
-    expect(html).toContain(SPECIES.bear.name)
-    expect(html).toContain('目标角色体力已满，无法回复')
-
-    backToStart()
-  })
-
   it('使用卡牌需要选目标时同样弹出目标选择器（牌名与提示可见）', async () => {
     backToStart()
     gameState.value = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }],
@@ -129,7 +106,7 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     const html = await renderApp()
     expect(html).toContain(`使用【${CARD_NAME['first-aid']}】`)
     expect(html).toContain('选择目标')
-    expect(html).toContain(SPECIES.bear.name)
+    expect(html).toContain(SPECIES.defensive.name)
 
     backToStart()
   })
@@ -137,8 +114,8 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
   it('非法操作的中文说明会显示在界面上（不再静默失败）', async () => {
     backToStart()
     gameState.value = makeState({
-      playerSpecies: 'deer',
-      aiSpecies: 'bear',
+      playerSpecies: 'counter',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'defend' }],
     })
     screen.value = 'battle'

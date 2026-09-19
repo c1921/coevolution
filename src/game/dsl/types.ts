@@ -184,7 +184,7 @@ export interface TriggerSpec {
 export interface ActivateSpec {
   timing: 'play'
   oncePerTurn?: boolean
-  /** 需要先选定并弃置的手牌（疗愈） */
+  /** 需要先选定并弃置的手牌（如强袭） */
   costCards?: { count: Value; cardKind?: string }
   requires?: Condition[]
   target?: TargetSpec
@@ -221,7 +221,6 @@ export interface DocBase {
 export interface SpeciesDoc extends DocBase {
   kind: 'species'
   name: string
-  emoji: string
   maxHp: number
   skills: string[]
   deck: string

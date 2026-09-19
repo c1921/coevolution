@@ -83,7 +83,7 @@ const targetHint = computed(() => {
     </div>
   </div>
 
-  <!-- 受到伤害后的可选发动技能（夺食 / 狡计） -->
+  <!-- 受到伤害后的可选发动技能 -->
   <div
     v-if="humanPending?.kind === 'trigger'"
     class="fixed inset-0 z-20 grid place-items-center bg-black/60 p-4"

@@ -139,8 +139,8 @@ export const DOC_FIELDS = {
   transform: { allowed: ['from', 'to', 'contexts'], required: ['from', 'to', 'contexts'] },
   timing: { allowed: ['at', 'phase'], required: ['at'] },
   species: {
-    allowed: [...BASE_KEYS, 'name', 'emoji', 'maxHp', 'skills', 'deck'],
-    required: ['name', 'emoji', 'maxHp', 'skills', 'deck'],
+    allowed: [...BASE_KEYS, 'name', 'maxHp', 'skills', 'deck'],
+    required: ['name', 'maxHp', 'skills', 'deck'],
   },
   skill: {
     allowed: [...BASE_KEYS, 'name', 'text', 'modifiers', 'transforms', 'trigger', 'activate'],
@@ -1085,7 +1085,7 @@ function checkDoc(raw: RawDoc, issues: Issue[], refs: Ref[], seenIds: Set<string
 
 function checkSpecies(node: Obj, path: string, issues: Issue[], refs: Ref[]): void {
   checkKeys(node, path, DOC_FIELDS.species.allowed, DOC_FIELDS.species.required, issues)
-  for (const key of ['name', 'emoji'] as const) checkText(node, key, path, issues)
+  checkText(node, 'name', path, issues)
   checkCount(node, 'maxHp', path, issues, 1)
   const skills = asArray(node.skills)
   if (!skills) {

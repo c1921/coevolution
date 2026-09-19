@@ -235,7 +235,6 @@ const NODE_SPECS: Record<DefName, { kind?: readonly string[]; fields: Record<str
       id: STRING,
       priority: INTEGER,
       name: STRING,
-      emoji: STRING,
       maxHp: INTEGER,
       skills: { t: 'array', of: STRING },
       deck: STRING,

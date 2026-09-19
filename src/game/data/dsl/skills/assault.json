@@ -2,9 +2,9 @@
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "skill",
-  "id": "pounce",
+  "id": "assault",
   "priority": 15,
-  "name": "猛扑",
+  "name": "强袭",
   "text": "出牌阶段限一次：弃置一张手牌，令对方获得 2 点威胁。",
   "activate": {
     "timing": "play",
@@ -18,13 +18,13 @@
         "to": { "zone": "discard", "of": "self" },
         "pick": { "mode": "cost" }
       },
-      { "kind": "record-skill-use", "skill": "pounce" },
+      { "kind": "record-skill-use", "skill": "assault" },
       {
         "kind": "log",
-        "template": "{self} 发动【猛扑】，弃置{cost}，扑向 {target}"
+        "template": "{self} 发动【强袭】，弃置{cost}，强攻 {target}"
       },
       { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 2 } }
     ],
-    "ui": { "buttonLabel": "发动【猛扑】（先点选一张手牌）" }
+    "ui": { "buttonLabel": "发动【强袭】（先点选一张手牌）" }
   }
 }

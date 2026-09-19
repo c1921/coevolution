@@ -30,13 +30,13 @@ function lastLog(state: GameState): string {
 
 describe('效果解释器 · 基础指令', () => {
   it('log：按模板渲染战报', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     runEffects(state, [{ kind: 'log', template: '{self} 做了一个测试' }], ctx)
-    expect(lastLog(state)).toBe('🐯 虎 做了一个测试')
+    expect(lastLog(state)).toBe('进攻型 做了一个测试')
   })
 
   it('lose-hp：失去体力且不触发受到伤害后技能', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHp: 3 })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHp: 3 })
     runEffects(state, [{ kind: 'lose-hp', target: 'self', amount: CONST(1) }], ctx)
     expect(state.players[0].hp).toBe(2)
     expect(state.lastDamage).toBeNull()
@@ -46,7 +46,7 @@ describe('效果解释器 · 基础指令', () => {
   })
 
   it('heal：回复体力且不超过上限', () => {
-    const { state, ctx } = scenario('deer', 'bear', { playerHp: 1 })
+    const { state, ctx } = scenario('counter', 'defensive', { playerHp: 1 })
     runEffects(state, [{ kind: 'heal', target: 'self', amount: CONST(1) }], ctx)
     expect(state.players[0].hp).toBe(2)
     // 满血时回复不会溢出上限
@@ -56,7 +56,7 @@ describe('效果解释器 · 基础指令', () => {
   })
 
   it('threat / offset-threat：叠加与抵消威胁，都不直接扣血', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     ctx.target = 1
     ctx.source = 0
 
@@ -76,14 +76,14 @@ describe('效果解释器 · 基础指令', () => {
   })
 
   it('draw：摸牌并记战报，count 为延迟表达式也支持', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [] })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHand: [] })
     runEffects(state, [{ kind: 'draw', target: 'self', count: CONST(2) }], ctx)
     expect(state.players[0].hand).toHaveLength(2)
     expect(lastLog(state)).toContain('摸了 2 张牌')
   })
 
   it('pay-energy / gain-energy：能量增减，不足时抛错', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     runEffects(state, [{ kind: 'pay-energy', target: 'self', amount: CONST(2) }], ctx)
     expect(state.players[0].energy).toBe(1)
     runEffects(state, [{ kind: 'gain-energy', target: 'self', amount: CONST(1) }], ctx)
@@ -94,21 +94,21 @@ describe('效果解释器 · 基础指令', () => {
   })
 
   it('record-card-use / record-skill-use：写入使用记录', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     runEffects(
       state,
       [
         { kind: 'record-card-use', of: 'self', cardKind: 'strike' },
-        { kind: 'record-skill-use', skill: 'mend' },
+        { kind: 'record-skill-use', skill: 'assault' },
       ],
       ctx,
     )
     expect(state.players[0].usedCardsThisTurn.strike).toBe(1)
-    expect(state.players[0].usedSkillsThisTurn).toContain('mend')
+    expect(state.players[0].usedSkillsThisTurn).toContain('assault')
   })
 
   it('skip-phase / extra-phase：操纵本回合阶段计划', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { phase: 'prepare' })
+    const { state, ctx } = scenario('offensive', 'defensive', { phase: 'prepare' })
     runEffects(state, [{ kind: 'skip-phase', phase: 'play' }], ctx)
     expect(state.phaseQueue).not.toContain('play')
     runEffects(state, [{ kind: 'extra-phase', phase: 'draw', position: 'next' }], ctx)
@@ -116,7 +116,7 @@ describe('效果解释器 · 基础指令', () => {
   })
 
   it('if：按条件选择分支', () => {
-    const { state, ctx } = scenario('leopard', 'bear', { playerHand: [{ kind: 'defend' }] })
+    const { state, ctx } = scenario('morph', 'defensive', { playerHand: [{ kind: 'defend' }] })
     const card = state.players[0].hand[0]!
     const effect: Effect = {
       kind: 'if',
@@ -126,7 +126,7 @@ describe('效果解释器 · 基础指令', () => {
     }
     runEffects(state, [effect], ctx)
     expect(lastLog(state)).toBe('没转化')
-    ctx.usedCard = { as: 'strike', source: card, via: 'flicker' }
+    ctx.usedCard = { as: 'strike', source: card, via: 'convert' }
     runEffects(state, [effect], ctx)
     expect(lastLog(state)).toBe('转化了')
   })
@@ -134,7 +134,7 @@ describe('效果解释器 · 基础指令', () => {
 
 describe('效果解释器 · move-cards', () => {
   it('played：把已使用的牌从手牌移入处理区', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHand: [{ kind: 'strike' }] })
     const card = state.players[0].hand[0]!
     ctx.usedUid = card.uid
     runEffects(
@@ -155,7 +155,7 @@ describe('效果解释器 · move-cards', () => {
   })
 
   it('played：没有使用上下文时报错', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHand: [{ kind: 'strike' }] })
     expect(() =>
       runEffects(
         state,
@@ -173,7 +173,7 @@ describe('效果解释器 · move-cards', () => {
   })
 
   it('cost：按 ctx.costCards 弃置费用牌', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHand: [{ kind: 'strike' }] })
     const card = state.players[0].hand[0]!
     ctx.costCards = [card.uid]
     runEffects(
@@ -193,7 +193,7 @@ describe('效果解释器 · move-cards', () => {
   })
 
   it('random：只消耗一次 nextInt，并在双方手牌之间转移', () => {
-    const { state, ctx } = scenario('fox', 'bear', {
+    const { state, ctx } = scenario('counter', 'defensive', {
       aiHand: [{ kind: 'strike' }, { kind: 'defend' }, { kind: 'heal' }],
     })
     const before = state.rngState
@@ -219,7 +219,7 @@ describe('效果解释器 · move-cards', () => {
   })
 
   it('specific：从处理区取回造成伤害的牌；牌不在处理区时静默跳过', () => {
-    const { state, ctx } = scenario('wolf', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const { state, ctx } = scenario('counter', 'defensive', { playerHand: [{ kind: 'strike' }] })
     const card = state.players[0].hand[0]!
     const effect: Effect = {
       kind: 'move-cards',
@@ -240,7 +240,7 @@ describe('效果解释器 · move-cards', () => {
   })
 
   it('all：整片牌区迁移（可用于"弃置全部手牌"类效果）', () => {
-    const { state, ctx } = scenario('tiger', 'bear', {
+    const { state, ctx } = scenario('offensive', 'defensive', {
       playerHand: [{ kind: 'strike' }, { kind: 'defend' }],
     })
     runEffects(
@@ -262,7 +262,7 @@ describe('效果解释器 · move-cards', () => {
 
 describe('效果解释器 · 帧与延迟', () => {
   it('contest：按通道读取 need 并等待响应（占位机制，当前无内容使用）', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHand: [{ kind: 'strike' }] })
     const card = state.players[0].hand[0]!
     ctx.usedUid = card.uid
     ctx.usedCard = { as: 'strike', source: card }
@@ -293,7 +293,7 @@ describe('效果解释器 · 帧与延迟', () => {
   })
 
   it('contest-contribute：必须有对抗帧，之后累加抵消进度', () => {
-    const { state, ctx } = scenario('tiger', 'bear', { playerHand: [{ kind: 'strike' }] })
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHand: [{ kind: 'strike' }] })
     const card = state.players[0].hand[0]!
     state.processing.push({ card, owner: 0 })
     ctx.usedCard = { as: 'strike', source: card }
@@ -320,7 +320,7 @@ describe('效果解释器 · 帧与延迟', () => {
   })
 
   it('resolve-dying：体力回到 0 以上时弹出濒死帧', () => {
-    const { state, ctx } = scenario('deer', 'bear', { playerHp: 0 })
+    const { state, ctx } = scenario('counter', 'defensive', { playerHp: 0 })
     state.stack.push({ kind: 'dying', dying: 0, ask: [0, 1] })
     runEffects(state, [{ kind: 'heal', target: 'self', amount: CONST(1) }], ctx)
     runEffects(state, [{ kind: 'resolve-dying', of: 'self' }], ctx)
@@ -328,8 +328,8 @@ describe('效果解释器 · 帧与延迟', () => {
     expect(lastLog(state)).toContain('脱离濒死状态')
   })
 
-  it('runEffectGroup：after 先压栈，等当前结算链走完才执行（透支的语义）', () => {
-    const { state, ctx } = scenario('ox', 'bear', { playerHp: 1 })
+  it('runEffectGroup：after 先压栈，等当前结算链走完才执行（失去体力类技能的语义）', () => {
+    const { state, ctx } = scenario('offensive', 'defensive', { playerHp: 1 })
     runEffectGroup(
       state,
       {
@@ -352,7 +352,7 @@ describe('效果解释器 · 帧与延迟', () => {
   })
 
   it('runEffect：单条指令入口可用', () => {
-    const { state, env } = scenario('tiger', 'bear')
+    const { state, env } = scenario('offensive', 'defensive')
     runEffect(env, { kind: 'log', template: '{turn}' })
     expect(lastLog(state)).toBe('1')
   })
@@ -360,7 +360,7 @@ describe('效果解释器 · 帧与延迟', () => {
 
 describe('效果解释器 · for-each-target', () => {
   it('对每个选定目标各执行一次，并逐目标绑定 target', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     ctx.targets = [0, 1]
     runEffects(
       state,
@@ -383,7 +383,7 @@ describe('效果解释器 · for-each-target', () => {
   })
 
   it('单目标语境退化为执行一次', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     ctx.target = 1
     runEffects(
       state,
@@ -400,7 +400,7 @@ describe('效果解释器 · for-each-target', () => {
   })
 
   it('迭代内的上下文写入不会冒泡到外层', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     ctx.targets = [0, 1]
     runEffects(
       state,
@@ -418,7 +418,7 @@ describe('效果解释器 · for-each-target', () => {
   })
 
   it('没有绑定任何目标时抛错（文档与调用点不匹配）', () => {
-    const { state, ctx } = scenario('tiger', 'bear')
+    const { state, ctx } = scenario('offensive', 'defensive')
     expect(() =>
       runEffects(
         state,

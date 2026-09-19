@@ -83,7 +83,7 @@ function refValue(env: EvalEnv, ref: ValueRefName, role: RoleRef, depth: number)
 
 /**
  * 修正通道聚合：基准值 + Σ add，再按技能顺序应用 set / min / max。
- * subject 是"该数值属于谁"——怒吼看自己，威压看打击使用者，都由调用方给出。
+ * subject 是"该数值属于谁"——蓄能看自己，攻击修正看打击使用者，都由调用方给出。
  */
 export function channelValue(
   state: GameState,

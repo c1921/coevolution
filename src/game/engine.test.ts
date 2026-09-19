@@ -75,7 +75,7 @@ describe('引擎不变式（AI 自对局）', () => {
     expect(maxSteps).toBeLessThan(SANE_STEPS)
   })
 
-  it('8 × 8 全部物种组合都能打完', () => {
+  it('4 × 4 全部代号组合都能打完', () => {
     for (const a of SPECIES_IDS) {
       for (const b of SPECIES_IDS) {
         const { state } = playOutPair(a, b)
@@ -88,9 +88,9 @@ describe('引擎不变式（AI 自对局）', () => {
   it('曾经的死循环组合必定终局（回归测试）', () => {
     // 这三组在引入消耗战之前会无限循环：双方互相抵消 / 无限自救，牌堆无限洗回
     const pairs: [SpeciesId, SpeciesId][] = [
-      ['deer', 'deer'],
-      ['leopard', 'leopard'],
-      ['deer', 'ox'],
+      ['counter', 'counter'],
+      ['morph', 'morph'],
+      ['counter', 'defensive'],
     ]
     for (const [a, b] of pairs) {
       const { state } = playOutPair(a, b)
@@ -127,22 +127,17 @@ describe('引擎不变式（AI 自对局）', () => {
 })
 
 describe('开局与选将', () => {
-  it('抽将给出 3 个互不重复的候选，且双方候选不重叠', () => {
+  it('抽将给出 3 个互不重复的候选（4 个代号里留 1 个给 AI）', () => {
     for (let seed = 0; seed < 50; seed++) {
       const draft = rollDraft(seed)
       expect(draft.playerOptions).toHaveLength(3)
       expect(new Set(draft.playerOptions).size).toBe(3)
-      expect(draft.aiOptions).toHaveLength(3)
-      expect(new Set(draft.aiOptions).size).toBe(3)
-      for (const id of draft.aiOptions) {
-        expect(draft.playerOptions).not.toContain(id)
-      }
+      for (const id of draft.playerOptions) expect(SPECIES_IDS).toContain(id)
     }
   })
 
   it('同种子的抽将结果一致', () => {
     expect(rollDraft(7).playerOptions).toEqual(rollDraft(7).playerOptions)
-    expect(rollDraft(7).aiOptions).toEqual(rollDraft(7).aiOptions)
   })
 
   it('选定不在候选中的物种会被拒绝', () => {
@@ -169,12 +164,28 @@ describe('开局与选将', () => {
 
   it('可以显式指定 AI 的物种', () => {
     const seed = 5
-    const draft = rollDraft(seed)
-    const playerSpecies = draft.playerOptions[0] as SpeciesId
-    const aiSpecies = draft.aiOptions[0] as SpeciesId
+    const playerSpecies = rollDraft(seed).playerOptions[0] as SpeciesId
+    const aiSpecies = SPECIES_IDS.find((id) => id !== playerSpecies) as SpeciesId
     const state = createGame({ seed, playerSpecies, aiSpecies })
     expect(state.players[1].species).toBe(aiSpecies)
     expect(state.players[1].hp).toBe(state.players[1].maxHp)
+  })
+
+  it('未指定 AI 物种时，AI 从「除玩家所选之外」的代号里随机选 1 个', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const playerSpecies = rollDraft(seed).playerOptions[0] as SpeciesId
+      const state = createGame({ seed, playerSpecies })
+      expect(state.players[1].species).not.toBe(playerSpecies)
+      expect(SPECIES_IDS).toContain(state.players[1].species)
+    }
+  })
+
+  it('AI 与玩家同种会被拒绝', () => {
+    const seed = 5
+    const playerSpecies = rollDraft(seed).playerOptions[0] as SpeciesId
+    expect(() => createGame({ seed, playerSpecies, aiSpecies: playerSpecies })).toThrow(
+      'AI 选将非法',
+    )
   })
 })
 
@@ -206,7 +217,7 @@ describe('私有牌组', () => {
   })
 
   it('摸牌只动自己的牌组：对手的牌组与手牌不受影响', () => {
-    const state = makeState({ playerSpecies: 'tiger', aiSpecies: 'bear' })
+    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     const before = {
       deck: state.players[1].deck.map((c) => c.uid),
       hand: state.players[1].hand.length,
@@ -222,15 +233,15 @@ describe('私有牌组', () => {
   })
 
   it('跨池取牌后归属获得者，双方池子此消彼长但全局仍守恒（合成技能）', () => {
-    // 【夺食】已随机制改动退役；这里把狼的技能换成一份等价的合成技能，
+    // 【夺食】已随机制改动退役；这里把反击型的技能换成一份等价的合成技能，
     // 守住「牌易主后仍全局守恒」这条口径（换文档即换行为，不需要改引擎）。
     const synthetic = contentWith([
       {
-        path: 'skills/retaliate.json',
+        path: 'skills/riposte.json',
         value: {
           dslVersion: 1,
           kind: 'skill',
-          id: 'retaliate',
+          id: 'riposte',
           priority: 40,
           name: '掠夺',
           text: '当你受到伤害后，你可以获得伤害来源的一张手牌。',
@@ -261,8 +272,8 @@ describe('私有牌组', () => {
 
     withRegistry(synthetic, () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'wolf',
+        playerSpecies: 'offensive',
+        aiSpecies: 'counter',
         playerHand: [{ kind: 'strike' }],
       })
 
@@ -272,7 +283,7 @@ describe('私有牌组', () => {
 
       const poolOf = (p: 0 | 1) =>
         state.players[p].deck.length + state.players[p].discard.length + state.players[p].hand.length
-      // 狼拿走了虎的一张牌：自己 21 张，虎只剩下 19 张
+      // 反击型拿走了进攻型的一张牌：自己 21 张，进攻型只剩下 19 张
       expect(poolOf(1)).toBe(DECK_SIZE + 1)
       expect(poolOf(0)).toBe(DECK_SIZE - 1)
       // 全局依旧一张不多不少

@@ -60,12 +60,12 @@ const MAX_ADVANCE_STEPS = 10000
 
 export interface DraftRoll {
   playerOptions: SpeciesId[]
-  aiOptions: SpeciesId[]
   rngState: number
 }
 
 /**
- * 随机抽将：玩家先抽 3 个物种，AI 从剩余池再抽 3 个（双方候选互不重复）。
+ * 随机抽将：从全部物种中抽 3 个作为玩家候选。
+ * AI 的候选在玩家选定后才确定（见 createGame）：除玩家所选之外的全部物种。
  * 纯函数，同 seed 必定同结果。
  *
  * 这里只负责抽样物种：牌组是每个物种私有的，只有在双方物种都确定之后
@@ -73,17 +73,14 @@ export interface DraftRoll {
  */
 export function rollDraft(seed: number): DraftRoll {
   const first = sample(SPECIES_IDS, DRAFT_SIZE, seed)
-  const rest = SPECIES_IDS.filter((id) => !first.values.includes(id))
-  const second = sample(rest, DRAFT_SIZE, first.state)
-
-  return { playerOptions: first.values, aiOptions: second.values, rngState: second.state }
+  return { playerOptions: first.values, rngState: first.state }
 }
 
 export interface CreateGameOptions {
   seed: number
   /** 玩家选定的物种，必须属于 rollDraft(seed).playerOptions */
   playerSpecies: SpeciesId
-  /** 指定 AI 的物种；缺省时由 AI 从自己的候选里随机选 1 个（测试与调试用） */
+  /** 指定 AI 的物种；缺省时由 AI 从「除玩家所选之外」的物种里随机选 1 个（测试与调试用） */
   aiSpecies?: SpeciesId
   /** 先手玩家，默认玩家（0） */
   firstPlayer?: PlayerIndex
@@ -105,12 +102,13 @@ export function createGame(options: CreateGameOptions): GameState {
   let aiSpecies: SpeciesId
   let rngState = draft.rngState
   if (options.aiSpecies) {
-    if (!draft.aiOptions.includes(options.aiSpecies)) {
-      throw new RuleError(`AI 选将非法：${options.aiSpecies} 不在本次候选之中`)
+    if (options.aiSpecies === playerSpecies || !SPECIES_IDS.includes(options.aiSpecies)) {
+      throw new RuleError(`AI 选将非法：${options.aiSpecies} 不可选（不能与玩家同种，且必须是已知物种）`)
     }
     aiSpecies = options.aiSpecies
   } else {
-    const aiPick = pickOne(draft.aiOptions, rngState)
+    const candidates = SPECIES_IDS.filter((id) => id !== playerSpecies)
+    const aiPick = pickOne(candidates, rngState)
     aiSpecies = aiPick.value
     rngState = aiPick.state
   }

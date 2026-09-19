@@ -29,7 +29,6 @@ export function speciesDef(species: SpeciesId): SpeciesDef {
   return {
     id: doc.id,
     name: doc.name,
-    emoji: doc.emoji,
     maxHp: doc.maxHp,
     skills: doc.skills.map((id) => skillDef(id)),
   }

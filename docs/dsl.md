@@ -1,6 +1,6 @@
 # 内容 DSL 参考
 
-本文档描述「协同进化」规则引擎引入的 JSON 内容 DSL：游戏内容（技能、卡牌、时机规则、物种、牌组、规则常量）以 JSON 写在 `src/game/data/dsl/**`，由 `src/game/dsl/**` 的解释层读取与结算。
+本文档描述「协同进化」规则引擎引入的 JSON 内容 DSL：游戏内容（技能、卡牌、时机规则、代号、牌组、规则常量）以 JSON 写在 `src/game/data/dsl/**`，由 `src/game/dsl/**` 的解释层读取与结算。
 
 适用版本：`DSL_VERSION = 1`（`src/game/dsl/kinds.ts`）。每份文档的 `dslVersion` 必须等于它。
 
@@ -23,8 +23,8 @@ DSL 只承载**内容**，不承载**结算机器**。判断一段逻辑该不�
 
 | 内容 | 文档种类 | 例子 |
 |---|---|---|
-| 物种：体力上限、外观、技能表、牌组 | `species` | `species/bear.json` |
-| 技能：常驻修正、牌面转化、触发、主动技 | `skill` | `skills/roar.json`、`skills/mend.json` |
+| 代号：体力上限、技能表、牌组 | `species` | `species/defensive.json` |
+| 技能：常驻修正、牌面转化、触发、主动技 | `skill` | `skills/charge.json`、`skills/assault.json` |
 | 卡牌：费用、`use` / `play` 变体与效果 | `card` | `cards/strike.json` |
 | 注册在时点上的非技能效果 | `rule` | `rules/attrition.json`（消耗战） |
 | 牌组：牌种与张数 | `deck` | `decks/basic.json` |
@@ -70,15 +70,15 @@ const RAW_DOCS = import.meta.glob('../data/dsl/*/*.json', {
 
 ```
 DSL 文档校验失败（2 项）：
-  species/tiger.json#/skills/0 [unknown-ref] 引用了不存在的技能 nope
-  /roar [dead-doc] 技能 roar 没有被任何物种引用
+  species/offensive.json#/skills/0 [unknown-ref] 引用了不存在的技能 nope
+  /ghost [dead-doc] 技能 ghost 没有被任何代号引用
 ```
 
 校验契约（见 `validate.ts` 顶注）：只要 `issues` 非空，调用方必须抛错，绝不能使用返回的 `docs`——结构校验不通过时这些对象不具备 IR 的字段保证。
 
 ### 2.2 顺序即结算顺序
 
-所有文档按 `(priority ?? 100, id)` 升序（`registry.ts` 的 `order`），物种的技能表用同一规则排序：
+所有文档按 `(priority ?? 100, id)` 升序（`registry.ts` 的 `order`），代号的技能表用同一规则排序：
 
 ```ts
 function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
@@ -90,21 +90,23 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 `priority` 缺省为 `100`；同优先级按 `id` 字典序。修正聚合、触发收集、主动技枚举都依赖这个确定性顺序。
 
-### 2.3 物种顺序与固定种子抽将
+### 2.3 代号顺序与固定种子抽将
 
-物种在注册表里的顺序由 `priority` 决定，并与原先硬编码的物种顺序逐一相同（`registry.test.ts` 断言 `speciesIds()`），因此依赖物种顺序的抽将（`rollDraft`）在固定种子下结果不变。当前顺序：
+代号在注册表里的顺序由 `priority` 决定（`registry.test.ts` 断言 `speciesIds()`），因此依赖代号顺序的抽将（`rollDraft`）在固定种子下结果由这个顺序决定——调整顺序会改变既有种子的抽将结果。当前是 4 个功能代号：
 
-| priority | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 |
-|---|---|---|---|---|---|---|---|---|
-| 物种 | `tiger` | `bear` | `leopard` | `wolf` | `deer` | `lion` | `ox` | `fox` |
+| priority | 10 | 20 | 30 | 40 |
+|---|---|---|---|---|
+| 代号 | `offensive`（进攻型） | `counter`（反击型） | `defensive`（防御型） | `morph`（转化型） |
+
+`rollDraft(seed)` 返回 `{ playerOptions, rngState }`：从 4 个代号里抽 3 个作为玩家的候选（没有 `aiOptions`）。AI 的候选池在 `createGame` 里才确定——「除玩家所选之外的全部代号」——再由 AI 从中随机选 1 个。
 
 ### 2.4 引用完整性与约束（第二遍解析）
 
 `resolveRefs` 在结构校验之后统一解析：
 
-- 技能 ↔ 物种（`species.skills`）、牌组 ↔ 牌种（`deck.cards[].kind`）、物种 ↔ 牌组（`species.deck`）、技能/效果里的 `skill` / `cardKind` / `expectedCard` / `from` / `to` / `respondsTo` 等引用。
+- 技能 ↔ 代号（`species.skills`）、牌组 ↔ 牌种（`deck.cards[].kind`）、代号 ↔ 牌组（`species.deck`）、技能/效果里的 `skill` / `cardKind` / `expectedCard` / `from` / `to` / `respondsTo` 等引用。
 - `ruleset` 必须**恰好一份**。
-- 死文档（`dead-doc`）：技能未被任何物种引用、牌种未被任何牌组引用、牌组未被任何物种引用，都会报错。
+- 死文档（`dead-doc`）：技能未被任何代号引用、牌种未被任何牌组引用、牌组未被任何代号引用，都会报错。
 
 ---
 
@@ -120,55 +122,57 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `id` | 是 | 非空字符串 | 全局唯一 |
 | `priority` | 否 | 非负整数 | 缺省 `100`；决定结算/注册顺序 |
 
-### 3.2 `species` — 物种
+### 3.2 `species` — 代号
 
 | 字段 | 必填 | 类型 | 说明 |
 |---|---|---|---|
-| `name` | 是 | 非空字符串 | 物种名 |
-| `emoji` | 是 | 非空字符串 | 界面/战报标签前缀 |
+| `name` | 是 | 非空字符串 | 代号名（如「进攻型」） |
 | `maxHp` | 是 | ≥ 1 整数 | 体力上限 |
-| `skills` | 是 | `string[]` | 技能 id 列表；空数组合法（如 `tiger`） |
+| `skills` | 是 | `string[]` | 技能 id 列表；空数组合法 |
 | `deck` | 是 | `string` | 牌组 id |
 
-`species/bear.json`：
+代号文档只描述规则数据，没有界面外观字段；界面/战报标签直接用 `name`。
+
+`species/defensive.json`：
 
 ```json
 {
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "species",
-  "id": "bear",
-  "priority": 20,
-  "name": "熊",
-  "emoji": "🐻",
+  "id": "defensive",
+  "priority": 30,
+  "name": "防御型",
   "maxHp": 4,
-  "skills": ["roar"],
-  "deck": "basic"
+  "skills": ["charge"],
+  "deck": "guarded"
 }
 ```
+
+内置的 4 个代号都是 `maxHp` 4，各带一个技能：`offensive` → `assault`（`deck: aggressive`）、`counter` → `riposte`（`deck: basic`）、`defensive` → `charge`（`deck: guarded`）、`morph` → `convert`（`deck: aggressive`）。
 
 ### 3.3 `skill` — 技能
 
 | 字段 | 必填 | 类型 | 说明 |
 |---|---|---|---|
 | `name` / `text` | 是 | 非空字符串 | 技能名与描述 |
-| `modifiers` | 否 | `Modifier[]` | 常驻通道修正（如怒吼、威压） |
-| `transforms` | 否 | `Transform[]` | 牌面转化（如疾影） |
-| `trigger` | 否 | `TriggerSpec` | 触发型（如反扑、狡黠） |
-| `activate` | 否 | `ActivateSpec` | 主动技（如疗愈、透支） |
+| `modifiers` | 否 | `Modifier[]` | 常驻通道修正（如蓄能） |
+| `transforms` | 否 | `Transform[]` | 牌面转化（如转换） |
+| `trigger` | 否 | `TriggerSpec` | 触发型（如反击） |
+| `activate` | 否 | `ActivateSpec` | 主动技（如强袭） |
 
 技能必须至少声明 `modifiers` / `transforms` / `trigger` / `activate` 之一（`bad-combination`）。技能分类（`SKILL_KINDS` 的 `transform` / `modifier` / `trigger` / `active`）由文档结构派生，不单独存储。
 
-`skills/roar.json`（常驻修正）：
+`skills/charge.json`（常驻修正）：
 
 ```json
 {
   "$schema": "../schema.json",
   "dslVersion": 1,
   "kind": "skill",
-  "id": "roar",
+  "id": "charge",
   "priority": 20,
-  "name": "怒吼",
+  "name": "蓄能",
   "text": "你每回合的能量上限 +2。",
   "modifiers": [
     { "channel": "energy-max", "op": "add", "value": { "kind": "const", "value": 2 } }
@@ -176,7 +180,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 }
 ```
 
-`skills/flicker.json`（转化，`contexts` ∈ `use` / `play`）：
+`skills/convert.json`（转化，`contexts` ∈ `use` / `play`）：
 
 ```json
 "transforms": [
@@ -187,17 +191,16 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 `TRANSFORM_CONTEXTS` 仍含 `play`，但内置内容没有任何卡牌声明 `play` 变体，因此当前只有 `use` 语境的转化是活的（见 8.1）。
 
-`skills/mend.json`（主动技，字段见 `ActivateSpec`）：
+`skills/assault.json`（主动技，字段见 `ActivateSpec`）：
 
 ```json
 "activate": {
   "timing": "play",
   "oncePerTurn": true,
   "costCards": { "count": { "kind": "const", "value": 1 } },
-  "target": { "scope": "any", "required": false, "default": "self", "alive": true, "conditions": [ ... ] },
+  "target": { "scope": "opponent", "required": false, "alive": true },
   "effects": [ ... ],
-  "after": [ ... ],
-  "ui": { "buttonLabel": "发动【疗愈】（先点选一张手牌）" }
+  "ui": { "buttonLabel": "发动【强袭】（先点选一张手牌）" }
 }
 ```
 
@@ -283,7 +286,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 |---|---|---|---|
 | `energy-max` | 每回合能量上限（3） | `rules/energy.ts` `energyMax` | 绝对值，`set` 即覆盖上限 |
 | `defend-need-against` | **占位**：对抗机制里抵消一次攻击需要的响应牌张数（1） | 仅 `contest` 帧（`dsl/internal.ts` `pushContest`）；内置内容没有 `play` 变体，实战不可达 | 绝对值，当前无内置内容使用 |
-| `threat-per-attack` | 每次攻击叠加的威胁点数（1） | `skills/index.ts` `threatPerAttack`（【打击】的 `threat` 效果） | 绝对值，威压 `set` 为 2 |
+| `threat-per-attack` | 每次攻击叠加的威胁点数（1） | `skills/index.ts` `threatPerAttack`（【打击】的 `threat` 效果） | 绝对值；内置内容不改该通道，技能修正可覆盖 |
 | `draw-count` | 摸牌阶段摸几张（2） | `rules/turn.ts` `drawCount` | 偏移量：先手首回合再 −1 |
 | `hand-limit` | 手牌上限相对体力的偏移（0） | `rules/turn.ts` `handLimit` | 偏移量：上限 = 体力 + 修正 |
 | `card-cost` | 牌面费用的偏移（0） | `rules/energy.ts` `energyCost` | 偏移量：费用 = 牌种费用 + 修正，**最终不低于 1** |
@@ -395,9 +398,9 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 `channelValue(state, channel, subject)`：
 
 1. 取 `ruleset` 里的基准值；
-2. 按 `(priority, id)` 顺序遍历 `subject` 物种的技能，对匹配通道的每条 `modifier` 依次应用：`add` 累加、`set` 覆盖、`min` / `max` 夹取。
+2. 按 `(priority, id)` 顺序遍历 `subject` 代号的技能，对匹配通道的每条 `modifier` 依次应用：`add` 累加、`set` 覆盖、`min` / `max` 夹取。
 
-`subject` 是「该数值属于谁」：怒吼看自己，威压看【打击】的使用者，由调用方给出。修正值本身可以是任意 `Value`，因此修正与求值互相递归。
+`subject` 是「该数值属于谁」：修正的归属由调用方给出——能量上限的修正看自己，攻击叠加威胁的修正看【打击】的使用者。内置内容不改 `threat-per-attack`（基准值即生效值），但技能修正可以覆盖它。修正值本身可以是任意 `Value`，因此修正与求值互相递归。
 
 七条通道里，`defend-need-against` 只由占位对抗机制消费（内置内容没有 `play` 变体，因此实战不可达）；其余六条**全部**被引擎消费（摸牌数、手牌上限、费用、攻击范围也走通道，见 3.5 的表），因此内容侧的修正不会"校验通过但不生效"。引擎读通道时统一遵守两条夹取规则：摸牌数、手牌上限、攻击范围夹到非负，牌面费用夹到 ≥ 1（0 费 + 无次数限制 = 无限连击）。
 
@@ -438,7 +441,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 **每个条件都可以带 `reason: string`**：条件不成立时，合法性判定会把这句话直接回给玩家，
 所以"为什么不能这么做"也是内容，写在文档里而不是散落在引擎分支中。例如
 `cards/heal.json` 的 `requires` 带 `"reason": "你的体力已满，无法使用【回复】"`，
-`skills/mend.json` 的目标条件带 `"reason": "目标角色体力已满，无法回复"`。
+`cards/first-aid.json` 的目标条件带 `"reason": "目标角色体力已满，无法回复"`。
 没有 `reason` 的条件失败时返回通用说明（`firstFailed` 只报最外层不成立的节点）。
 
 `ZoneName`（`ZONE_NAMES`）：`hand` / `discard` / `processing` / `deck`。
@@ -478,7 +481,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 **威胁是基础伤害机制**：攻击不再直接扣体力，而是用 `threat` 给目标叠加威胁；承受者在自己的出牌阶段打出【防御】，用 `offset-threat` 抵消；其**回合结束时**剩余威胁结算为等量伤害（走伤害帧：先 emit `after-damage` 触发，再做濒死检查），随后威胁归零、不跨回合累积。`damage` 指令已从 `EFFECT_KINDS` 删除。
 
-【打击】按 `threat-per-attack` 通道叠加威胁（基准值见 `rules/base.json`，威压覆盖为 2）：
+【打击】按 `threat-per-attack` 通道叠加威胁（基准值见 `rules/base.json`；内置内容未修改该通道，技能修正可覆盖）：
 
 ```json
 { "kind": "threat", "target": "target", "amount": { "kind": "channel", "channel": "threat-per-attack", "of": "self" } }
@@ -537,7 +540,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 }
 ```
 
-示例——【猛扑】的 `cost`（弃置一张费用牌）：
+示例——【强袭】的 `cost`（弃置一张费用牌）：
 
 ```json
 {
@@ -563,15 +566,15 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 所以 `after` 表达的是「先付出代价，若还能继续，再拿收益」。
 
-### 7.1 已有例子：透支
+### 7.1 已有例子：合成技能（内置内容暂无 `after`）
 
-`skills/overexert.json`：
+内置技能目前都不声明 `after`（【强袭】只有立即 `effects`），下面用一个合成技能说明它的时机：
 
 ```json
 "activate": {
   "timing": "play",
   "effects": [
-    { "kind": "log", "template": "{self} 发动【透支】" },
+    { "kind": "log", "template": "{self} 发动【示例】" },
     { "kind": "lose-hp", "target": "self", "amount": { "kind": "const", "value": 1 } }
   ],
   "after": [{ "kind": "draw", "target": "self", "count": { "kind": "const", "value": 2 } }]
@@ -580,12 +583,12 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 结算顺序：
 
-1. 立即打印「发动【透支】」；
+1. 立即打印「发动【示例】」；
 2. `lose-hp 1` 扣减体力，若降到 0 及以下则**立即进入濒死**并压入濒死帧；
 3. 濒死链（是否被【回复】救回、或阵亡）先走完；
 4. 只有**存活**下来，才轮到延迟的 `draw 2` 摸两张牌。
 
-这正是原引擎 `applyActiveSkill` 里「先安排摸牌帧，再 `loseHp`」的同一语义：摸牌被压在濒死结算之下，濒死被打断/阵亡时不会先摸牌。`skills/active.test.ts` 与「透支是失去体力而非伤害，不触发『受到伤害后』技能」守住了这条行为。
+这正是「先安排摸牌帧，再 `loseHp`」的同一语义：摸牌被压在濒死结算之下，濒死被打断/阵亡时不会先摸牌。`src/game/dsl/effect.test.ts` 的「`after` 先压栈，等当前结算链走完才执行（失去体力类技能的语义）」与「`lose-hp`：失去体力且不触发受到伤害后技能」守住了这条行为。
 
 同一条约定也适用于 `TriggerSpec.after` 与 `UseVariant.after`：它们都在当前结算链结束后才执行。
 
@@ -679,9 +682,9 @@ export interface EffectContext {
 
 **`conditions` 求值时会临时把 `target` 绑定为该候选**（`ctx.target = index`），因此 `{ "kind": "ref", "ref": "hp", "of": "target" }` 读取的是候选的体力。合法性判定与结算共用 `target.ts` 的同一套规则，避免「校验通过但结算取到别的目标」。
 
-### 9.1 已有例子：疗愈
+### 9.1 已有例子：急救
 
-`skills/mend.json` 的目标规格要求候选「已受伤」：
+`cards/first-aid.json` 的目标规格要求候选「已受伤」：
 
 ```json
 "target": {
@@ -694,7 +697,8 @@ export interface EffectContext {
       "kind": "compare",
       "op": "lt",
       "left": { "kind": "ref", "ref": "hp", "of": "target" },
-      "right": { "kind": "ref", "ref": "maxHp", "of": "target" }
+      "right": { "kind": "ref", "ref": "maxHp", "of": "target" },
+      "reason": "目标角色体力已满，无法回复"
     }
   ]
 }
@@ -750,7 +754,7 @@ export interface EffectContext {
 - **触发点已从「直接造成伤害」改到「回合结束时威胁结算」**：攻击只叠威胁（`threat` 指令），承受到伤害的方式是自己在回合结束时让剩余威胁结算为等量伤害，`dealDamage` 在这一刻 emit `after-damage`，随后做濒死检查。因此同一回合里先叠的威胁不会立刻触发「受到伤害后」技能。
 - 触发型的其它字段：`on`（必填）、`optional?`（当前只有 `after-damage` 可为 `true`）、`when?`（非空条件数组）、`effects`（必填）、`after?`。
 - 非可选的时机技能与 `rule` 按注册顺序（`priority`, `id`）依次执行；`trigger` 里可选的技能由引擎询问玩家，玩家应答后再结算其 `effects`。
-- 挂在 `after-damage` 上的两个内置技能：狼【反扑】（`optional: true`，令伤害来源获得 1 点威胁）与狐【狡黠】（`optional: true`，摸一张牌）。`optional: true` 的技能示例——`skills/retaliate.json`：
+- 挂在 `after-damage` 上的内置技能只有一个：反击型【反击】（`optional: true`，令伤害来源获得 1 点威胁）。`optional: true` 的技能示例——`skills/riposte.json`：
 
 ```json
 "trigger": {
@@ -758,12 +762,13 @@ export interface EffectContext {
   "optional": true,
   "when": [{ "kind": "alive", "of": "source" }],
   "effects": [
-    { "kind": "threat", "target": "source", "amount": { "kind": "const", "value": 1 } }
+    { "kind": "threat", "target": "source", "amount": { "kind": "const", "value": 1 } },
+    { "kind": "log", "template": "{self} 发动【反击】，向 {source} 反击" }
   ]
 }
 ```
 
-`when` 只是**发动前**的可用性条件；真正「是否发动」由玩家应答决定。`skills/cunning.json` 没有 `when`，只要受到伤害就能选择摸一张：
+`when` 只是**发动前**的可用性条件；真正「是否发动」由玩家应答决定。`when` 是可选的，省略它就表示只要受到伤害就能选择发动；内置内容暂时没有这样的技能，合成示例如下：
 
 ```json
 "trigger": {
@@ -792,16 +797,16 @@ export interface EffectContext {
 
 | 根占位符 | 含义 |
 |---|---|
-| `self` / `target` / `source` / `active` / `dying` | 玩家标签（`emoji + 空格 + 物种名`），可带字段 |
+| `self` / `target` / `source` / `active` / `dying` | 玩家标签（代号名，如 `进攻型`），可带字段 |
 | `usedRaw` | 本次使用/打出的**实际**牌：`【防御】` |
 | `usedAs` | 本次使用/打出的**当作**牌：`【打击】` |
-| `via` | 转化技能名：`疾影` |
+| `via` | 转化技能名：`转换` |
 | `cost` | 已支付的费用牌：`【打击】、【防御】` |
 | `picked` | 最近一次 `move-cards` 取到的牌 |
 | `amount` | 最近一次数值结果 |
 | `turn` | 当前回合数 |
 
-玩家占位符允许的字段（`LOG_PLAYER_FIELDS`）：`hp` / `maxHp` / `energy` / `energyMax` / `threat` / `handCount` / `energyTag`。其中 `energyTag` 渲染为 `（能量 2/3）`，`energyMax` 会实时读取 `energy-max` 通道（含怒吼修正），`threat` 读取该玩家当前的威胁点数（威胁机制见第 6、10 节）。
+玩家占位符允许的字段（`LOG_PLAYER_FIELDS`）：`hp` / `maxHp` / `energy` / `energyMax` / `threat` / `handCount` / `energyTag`。其中 `energyTag` 渲染为 `（能量 2/3）`，`energyMax` 会实时读取 `energy-max` 通道（含蓄能修正），`threat` 读取该玩家当前的威胁点数（威胁机制见第 6、10 节）。
 
 ### 11.2 显式绑定 `log.vars`
 
@@ -842,7 +847,7 @@ export interface EffectContext {
 ```
 
 ```json
-{ "kind": "log", "template": "{self} 发动【疗愈】，弃置{cost}，令 {target} 回复 1 点体力（体力 {target.hp}/{target.maxHp}）" }
+{ "kind": "log", "template": "{self} 发动【强袭】，弃置{cost}，强攻 {target}" }
 ```
 
 ```json
@@ -857,11 +862,11 @@ export interface EffectContext {
 
 ## 12. 校验错误码 `IssueCode`
 
-每条问题都是 `{ path, code, message }`；`path` 用 `#/` 表示字段（如 `species/tiger.json#/skills/0`），`issues` 按路径与错误码排序。
+每条问题都是 `{ path, code, message }`；`path` 用 `#/` 表示字段（如 `species/offensive.json#/skills/0`），`issues` 按路径与错误码排序。
 
 | `code` | 含义 | 例子 |
 |---|---|---|
-| `version` | `dslVersion` 不等于 `DSL_VERSION` | `dslVersion: 99` → `species/tiger.json#/dslVersion` |
+| `version` | `dslVersion` 不等于 `DSL_VERSION` | `dslVersion: 99` → `species/offensive.json#/dslVersion` |
 | `unknown-kind` | 文档 `kind` 不在 `DOC_KINDS` | `kind: "monster"` |
 | `unknown-key` | 出现未定义字段（拼写错误也要报） | 把 `kind` 写成 `Kind` → `...#/Kind` |
 | `missing-field` | 缺少必填字段 | 删掉 `card.cost`；`ruleset.channels` 少一个通道 |
@@ -869,7 +874,7 @@ export interface EffectContext {
 | `bad-number` | 数字不满足「有限整数 / 下限」 | `maxHp: 0`；`clamp.min` 不是数字；通道基准值不是非负整数 |
 | `bad-combination` | 结构组合非法 | 空 `effects` / 空 `when`；`move-cards` 的牌区与 `mode` 不匹配；`contest-contribute` 不在 `play`；`resolve-dying` 不在 `dying`；技能没声明任何部件；卡牌既无 `use` 也无 `play` |
 | `unknown-ref` | 交叉引用指向不存在的文档 | `species.skills: ["nope"]`；`deck.cards[].kind: "hex"` |
-| `duplicate-id` | `id` 重复 | 两个物种都叫 `tiger`；第二份 `ruleset`；同一卡牌两个 `context: "play"` |
+| `duplicate-id` | `id` 重复 | 两个代号都叫 `offensive`；第二份 `ruleset`；同一卡牌两个 `context: "play"` |
 | `unknown-role` | 角色合法但当前语境不允许 | 在 `use-play` 里写 `{source}` |
 | `unknown-channel` | 通道不在 `CHANNELS` | `modifiers[].channel: "mana-max"`；`ruleset.channels` 多一个 `mana-max` |
 | `unknown-instruction` | 数值节点 `kind` 或效果 `kind` 未知 | `{ "kind": "power", ... }`；`{ "kind": "execute", ... }` |
@@ -877,7 +882,7 @@ export interface EffectContext {
 | `unknown-pick-mode` | `pick.mode` 不在 `PICK_MODES` | `pick.mode: "any"` |
 | `bad-placeholder` | 日志占位符非法 | `{who}`；`{self.mana}`；`{self}` 少半个花括号；`vars` 绑定 `usedAs` |
 | `cost-below-minimum` | `const` 费用 < 1 | `cost: { "kind": "const", "value": 0 }` → `cards/strike.json#/cost#/value` |
-| `dead-doc` | 文档未被引用（拼写错误或残留） | 技能 `ghost` 没被任何物种引用 → `/ghost` |
+| `dead-doc` | 文档未被引用（拼写错误或残留） | 技能 `ghost` 没被任何代号引用 → `/ghost` |
 
 校验器**一次报出全部问题**（不遇错即停），但一个错误常连带产生衍生问题（例如悬空引用会让被引用的技能变成 `dead-doc`），因此测试通常只锁定目标错误码。
 
@@ -894,14 +899,14 @@ export interface EffectContext {
 1. 新建 `src/game/data/dsl/skills/<id>.json`，写上信封（`dslVersion: 1`、`kind: "skill"`、`id`、`priority`）与 `name` / `text`。
 2. 至少声明 `modifiers` / `transforms` / `trigger` / `activate` 之一（否则 `bad-combination`）。
 3. 用 `priority` 决定结算顺序（越小越先；同值按 `id` 字典序）。修正聚合、触发收集与主动技枚举都依赖这个顺序。
-4. 把技能 id 加进某个物种的 `species.skills`（`src/game/data/dsl/species/<id>.json`），否则该技能是 `dead-doc`。`skillsOf(speciesId)` 会按 `(priority, id)` 返回该物种的技能。
+4. 把技能 id 加进某个代号的 `species.skills`（`src/game/data/dsl/species/<id>.json`），否则该技能是 `dead-doc`。`skillsOf(speciesId)` 会按 `(priority, id)` 返回该代号的技能。
 
 选择机制：
 
-- 常驻数值 → `modifiers`（通道 + `add`/`set`/`min`/`max` + `Value`）。例：怒吼 `energy-max` +2；威压把 `threat-per-attack` 覆盖为 2（【打击】每次叠 2 点威胁）。
-- 牌面转化 → `transforms`（`from`、`to`、`contexts: ["use"] / ["play"]`；`play` 语境当前没有内容使用）。例：疾影把【防御】当【打击】、把【打击】当【防御】使用。
-- 「受到伤害后」可选发动 → `trigger`（`on: { "at": "after-damage" }`、`optional: true`、`when`、`effects`）。例：反扑（令伤害来源获得 1 点威胁）、狡黠（摸一张牌）。**伤害只来自回合结束的威胁结算**，写触发技时要按威胁语义来，不要假设攻击会立即造成伤害。
-- 出牌阶段主动技 → `activate`（`timing: "play"`、`oncePerTurn`、`costCards`、`target`、`effects`、`after`）。例：疗愈、猛扑（弃一张手牌令对方获得 2 点威胁）、透支。
+- 常驻数值 → `modifiers`（通道 + `add`/`set`/`min`/`max` + `Value`）。例：蓄能 `energy-max` +2。通道也可以被覆盖（`set`），但内置内容不再修改 `threat-per-attack`。
+- 牌面转化 → `transforms`（`from`、`to`、`contexts: ["use"] / ["play"]`；`play` 语境当前没有内容使用）。例：转换把【防御】当【打击】、把【打击】当【防御】使用。
+- 「受到伤害后」可选发动 → `trigger`（`on: { "at": "after-damage" }`、`optional: true`、`when`、`effects`）。例：反击（令伤害来源获得 1 点威胁）。**伤害只来自回合结束的威胁结算**，写触发技时要按威胁语义来，不要假设攻击会立即造成伤害。
+- 出牌阶段主动技 → `activate`（`timing: "play"`、`oncePerTurn`、`costCards`、`target`、`effects`、`after`）。例：强袭（弃一张手牌令对方获得 2 点威胁）。
 
 ### 13.2 新增一张卡牌
 
@@ -913,11 +918,11 @@ export interface EffectContext {
 
 注意 `move-cards` 的约束：`played` 从手牌取（使用/打出的那张），`cost` 从手牌取费用牌，`specific` 只能从处理区取；`to.zone = "processing"` 只允许从手牌进入。处理区与 `specific` 目前只服务占位对抗，实战中不会有牌进入。
 
-**要写攻击牌**：用 `threat` 叠加威胁，一般读 `threat-per-attack` 通道（【打击】）。例：【风暴】用 `count: all` + `for-each-target` 内 `threat` 2；【猛扑】直接对对方 `threat` 2。**不要再写 `damage` 指令**（已从 `EFFECT_KINDS` 删除）。
+**要写攻击牌**：用 `threat` 叠加威胁，一般读 `threat-per-attack` 通道（【打击】）。例：【风暴】用 `count: all` + `for-each-target` 内 `threat` 2；【强袭】直接对对方 `threat` 2。**不要再写 `damage` 指令**（已从 `EFFECT_KINDS` 删除）。
 
 **要写防御牌**：用 `use`（`context: "play"`）变体，`scope: self`，`requires` 读 `threat(self) >= 1`，效果是 `offset-threat` 自己 1 点（【防御】）。响应窗口式的 `play` 变体不再需要。
 
-**要写触发技**：挂 `after-damage`，按「回合结束的威胁结算」这一触发点写效果（如反扑给来源叠威胁、狡黠摸牌）。
+**要写触发技**：挂 `after-damage`，按「回合结束的威胁结算」这一触发点写效果（如反击给来源叠威胁）。
 
 **要写「使用时选目标」的牌**：在 `use.target` 上给目标规格（第 9 节）。候选不唯一或缺省目标不合格时界面会自动弹选择器，
 提交带上 `Action.use-card.targets`；引擎与合法性判定都不需要改。
@@ -925,11 +930,11 @@ export interface EffectContext {
 **要写多目标牌**：给 `use.target` 加 `count`，效果里用 `for-each-target` 包住所有引用 `target` 的指令（含 `threat`）。
 范例见 `cards/storm.json`（`{ "mode": "all" }` + `for-each-target` 内 `threat` 2）与 `dsl/extensibility.test.ts` 的 `exactly` 用例。
 
-### 13.3 新增一个物种
+### 13.3 新增一个代号
 
-1. 新建 `src/game/data/dsl/species/<id>.json`，字段 `name` / `emoji` / `maxHp` / `skills` / `deck`。
+1. 新建 `src/game/data/dsl/species/<id>.json`，字段 `name` / `maxHp` / `skills` / `deck`。
 2. `skills` 里的每个 id、`deck` 引用的牌组都必须已存在。
-3. `priority` 决定抽将顺序（`speciesIds()` → `rollDraft`）。给一个不与现有物种冲突的值；固定种子下的抽将结果会随物种顺序变化，若要保持既有种子结果，把新物种插在顺序末尾（更大的 `priority`）。
+3. `priority` 决定抽将顺序（`speciesIds()` → `rollDraft`）。给一个不与现有代号冲突的值；固定种子下的抽将结果会随代号顺序变化，若要保持既有种子结果，把新代号插在顺序末尾（更大的 `priority`）。
 
 ### 13.4 新增一条时机规则
 
@@ -965,19 +970,19 @@ export interface EffectContext {
 |---|---|
 | `src/game/dsl/kinds.test.ts` | 词表一致性：`PHASES` 与引擎 `TURN_PHASES` 相同；校验器为每种数值/条件/指令都定义了字段表；词表无重复项；`DSL_VERSION` 与文档一致 |
 | `src/game/dsl/validate.test.ts` | 逐项制造错误：信封、数值/条件、效果、日志模板、引用与死文档、技能/卡牌结构，并断言错误码与 `path` |
-| `src/game/dsl/registry.test.ts` | 内置内容全部通过校验；物种/牌种顺序；`skillsOf` 排序；`DslLoadError` 携带全部问题且按路径排序；`withRegistry` 注入与还原 |
-| `src/game/dsl/value.test.ts` | 常量与四则运算、`floor-div` / `clamp`、读取角色数值、消耗战表达式、通道聚合（怒吼/威压）、修正值可为表达式、通道自引用报错 |
+| `src/game/dsl/registry.test.ts` | 内置内容全部通过校验；代号/牌种顺序；`skillsOf` 排序；`DslLoadError` 携带全部问题且按路径排序；`withRegistry` 注入与还原 |
+| `src/game/dsl/value.test.ts` | 常量与四则运算、`floor-div` / `clamp`、读取角色数值、消耗战表达式、通道聚合（蓄能）、修正值可为表达式、通道自引用报错 |
 | `src/game/dsl/condition.test.ts` | 每种条件（`always`/`not`/`all`/`any`、`compare`、`alive`/`has-cards`/`card-kind-count`、`in-processing`、`card-transformed`/`picked-count`、`skill-unused`/`is-active`/`phase-is`） |
-| `src/game/dsl/target.test.ts` | 疗愈候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
+| `src/game/dsl/target.test.ts` | 急救候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
 | `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`threat`/`offset-threat`/`lose-hp`/`heal`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
-| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（反扑/狡黠）、不可选触发立即执行、可选触发只支持 `after-damage` |
+| `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（反击）、不可选触发立即执行、可选触发只支持 `after-damage` |
 | `src/game/dsl/schema.test.ts` | `uncoveredFields()` 为空；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
 | `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、扫描非空跑 |
 | `src/game/dsl/channels.test.ts` | 通道接线验收：七条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、每次攻击叠加的威胁、占位对抗的抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
 | `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限、使用时选目标的牌、多目标牌都只改文档即可端到端生效 |
 
-`src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 物种的最小自洽文档集）、`mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）与 `contentWith(docs)`（以完整内容集为底按 id 替换/新增文档）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
+`src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 代号的最小自洽文档集）、`mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）与 `contentWith(docs)`（以完整内容集为底按 id 替换/新增文档）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
 
 `registry.ts` 另提供 `registryToDocs()`：把当前注册表还原成文档列表。做"只替换一份文档"的扩展性测试时需要一份完整自洽的内容集（牌数守恒、引用完整性都还要成立），用它作底最省事。
 

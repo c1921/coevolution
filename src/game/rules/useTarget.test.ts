@@ -14,8 +14,8 @@ import { checkUseCard } from './legality'
 describe('使用卡牌时的目标', () => {
   it('急救：双方都受伤时需要选择，显式目标只治疗选定的人', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }],
@@ -38,8 +38,8 @@ describe('使用卡牌时的目标', () => {
 
   it('急救：不给目标时使用文档缺省目标（自己）', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       aiHp: 2,
       playerHand: [{ kind: 'first-aid' }],
@@ -51,8 +51,8 @@ describe('使用卡牌时的目标', () => {
 
   it('急救：目标必须已受伤，文档 reason 直接作为报错且状态不变', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 2,
       playerHand: [{ kind: 'first-aid' }],
     })
@@ -65,8 +65,8 @@ describe('使用卡牌时的目标', () => {
 
   it('风暴：count=all 不需要指定目标，双方各获得 2 点威胁', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'storm' }],
     })
     const card = state.players[0].hand[0]!
@@ -88,8 +88,8 @@ describe('使用卡牌时的目标', () => {
 
   it('风暴：只指定一部分目标会被拒绝（作用于全部合法目标）', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHand: [{ kind: 'storm' }],
     })
     const before = snapshot(state)
@@ -140,8 +140,8 @@ describe('使用卡牌时的目标', () => {
 
     withRegistry(synthetic, () => {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'bear',
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
         playerHand: [{ kind: 'jab' }],
       })
       const before = snapshot(state)
@@ -154,8 +154,8 @@ describe('使用卡牌时的目标', () => {
 
   it('濒死语境的目标由结算决定：显式给出别的目标会被拒绝', () => {
     const state = makeState({
-      playerSpecies: 'tiger',
-      aiSpecies: 'bear',
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
       playerHp: 0,
       playerHand: [{ kind: 'heal' }, { kind: 'first-aid' }],
     })
@@ -177,8 +177,8 @@ describe('使用卡牌时的目标', () => {
   it('对称威胁由各自在回合结束时结算：先结算的一方先阵亡', () => {
     for (const active of [0, 1] as const) {
       const state = makeState({
-        playerSpecies: 'tiger',
-        aiSpecies: 'lion',
+        playerSpecies: 'offensive',
+        aiSpecies: 'morph',
         playerHp: 1,
         aiHp: 1,
         active,
