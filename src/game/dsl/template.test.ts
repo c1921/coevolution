@@ -72,8 +72,9 @@ describe('日志模板渲染', () => {
   })
 
   it('濒死救援：{target} 的体力与能量标签', () => {
+    // 内置内容已删除回血牌，这里用一条等价的字面模板继续锁住 {target.hp}/{maxHp} 与能量标签
     const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive', playerEnergy: 2 })
-    const heal = state.players[0].deck.find((card) => card.kind === 'heal')!
+    const card = state.players[0].deck.find((item) => item.kind === 'strike')!
     state.players[1].hp = 1
     const env: EvalEnv = {
       state,
@@ -81,12 +82,15 @@ describe('日志模板渲染', () => {
         ...baseContext(state, 0),
         dying: 1,
         target: 1,
-        usedUid: heal.uid,
-        usedCard: { as: 'heal', source: heal },
+        usedUid: card.uid,
+        usedCard: { as: 'strike', source: card },
       },
     }
-    const effect = logOf(variantOf('heal', 'dying').effects)
-    expect(renderLog(env, effect)).toBe('反击型 使用【回复】救援 防御型（体力 1/10）（能量 2/3）')
+    const effect: LogEffect = {
+      kind: 'log',
+      template: '{self} 救援 {target}（体力 {target.hp}/{target.maxHp}）{self.energyTag}',
+    }
+    expect(renderLog(env, effect)).toBe('反击型 救援 防御型（体力 1/10）（能量 2/3）')
   })
 
   it('技能日志：{cost} 渲染费用牌', () => {

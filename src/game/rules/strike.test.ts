@@ -136,33 +136,6 @@ describe('【打击】结算', () => {
     expect(state).toEqual(before)
   })
 
-  it('满血时不能使用【回复】', () => {
-    const state = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      playerHand: [{ kind: 'heal' }],
-    })
-    const before = snapshot(state)
-    expect(() => submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })).toThrow(
-      '体力已满',
-    )
-    expect(state).toEqual(before)
-  })
-
-  it('已受伤时使用【回复】回复 1 点体力', () => {
-    const state = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      playerHand: [{ kind: 'heal' }],
-      playerHp: 2,
-    })
-    const heal = state.players[0].hand[0]!
-    submit(state, { kind: 'use-card', card: heal })
-    expect(state.players[0].hp).toBe(3)
-    expect(state.players[0].discard.map((c) => c.uid)).toContain(heal.uid)
-    assertConservation(state)
-  })
-
   it('使用不在手牌中的牌会被拒绝且状态不变', () => {
     const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     const before = snapshot(state)

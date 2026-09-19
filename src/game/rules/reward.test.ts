@@ -129,10 +129,10 @@ describe('跳过', () => {
 })
 
 describe('服务三选一', () => {
-  it('回复：回复规则给出的数值，不超过体力上限', () => {
+  it('回复：回复规则给出的数值（现为 1 点），不超过体力上限', () => {
     const state = startTurn(4, { playerHp: 2 })
     submit(state, { kind: 'pick-reward', service: 'heal' })
-    expect(state.players[0].hp).toBe(5)
+    expect(state.players[0].hp).toBe(3)
     expect(state.pending).toMatchObject({ kind: 'reward', player: 1, reward: 'service' })
   })
 

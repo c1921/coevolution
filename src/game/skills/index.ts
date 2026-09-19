@@ -102,10 +102,10 @@ export function dyingRescueOptions(): { kind: CardKind; name: string; cost: numb
     .map((doc) => ({ kind: doc.id, name: doc.name, cost: CARD_DEFS[doc.id].cost }))
 }
 
-/** 濒死时可用的牌面名（如「【回复】」），用于濒死语境的报错说明 */
+/** 濒死时可用的牌面名（如「【回复】」），用于濒死语境的报错说明；没有自救牌时给出中性说明 */
 export function dyingUsableLabel(): string {
   const names = dyingRescueOptions().map((option) => `【${option.name}】`)
-  return names.length > 0 ? names.join('、') : '【回复】'
+  return names.length > 0 ? names.join('、') : '自救牌'
 }
 
 /**

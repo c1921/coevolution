@@ -5,13 +5,31 @@
   "id": "convert",
   "priority": 50,
   "name": "转换",
-  "text": "你可以将【打击】当【防御】、【防御】当【打击】、【回复】当【打击】使用；你的能量上限 +2。",
+  "text": "你可以将【打击】当【防御】、【防御】当【打击】使用；你的能量上限 +2。",
   "modifiers": [
-    { "channel": "energy-max", "op": "add", "value": { "kind": "const", "value": 2 } }
+    {
+      "channel": "energy-max",
+      "op": "add",
+      "value": {
+        "kind": "const",
+        "value": 2
+      }
+    }
   ],
   "transforms": [
-    { "from": "defend", "to": "strike", "contexts": ["use"] },
-    { "from": "strike", "to": "defend", "contexts": ["use"] },
-    { "from": "heal", "to": "strike", "contexts": ["use"] }
+    {
+      "from": "defend",
+      "to": "strike",
+      "contexts": [
+        "use"
+      ]
+    },
+    {
+      "from": "strike",
+      "to": "defend",
+      "contexts": [
+        "use"
+      ]
+    }
   ]
 }

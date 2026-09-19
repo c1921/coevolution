@@ -103,7 +103,7 @@ describe('内置内容文档', () => {
   it('全部通过校验（导入注册表即校验）', () => {
     expect(registry.species).toHaveLength(4)
     expect(registry.skills).toHaveLength(4)
-    expect(registry.cards).toHaveLength(20)
+    expect(registry.cards).toHaveLength(16)
     expect(registry.decks).toHaveLength(3)
     expect(registry.rules).toHaveLength(3)
     expect(registry.ruleset.id).toBe('base')
@@ -115,11 +115,9 @@ describe('内置内容文档', () => {
 
   it('牌种顺序按 priority，三套牌组各自自洽', () => {
     expect(cardIds()).toEqual([
-      // 基础牌 10~50
+      // 基础牌 10~50（回血牌已删除，只剩三张）
       'strike',
       'defend',
-      'heal',
-      'first-aid',
       'storm',
       // 奖励池新卡 100（同优先级按 id）
       'backflip',
@@ -134,29 +132,23 @@ describe('内置内容文档', () => {
       'tactics',
       // 升级版 110（同优先级按 id）
       'defend-plus',
-      'first-aid-plus',
-      'heal-plus',
       'storm-plus',
       'strike-plus',
     ])
-    // 首个牌组（basic）仍是打击 11 / 防御 6 / 回复 3
+    // 首个牌组（basic）是打击 8 / 防御 4
     expect(registry.decks[0]?.cards).toEqual([
-      { kind: 'strike', count: 11 },
-      { kind: 'defend', count: 6 },
-      { kind: 'heal', count: 3 },
+      { kind: 'strike', count: 8 },
+      { kind: 'defend', count: 4 },
     ])
     const byId = (id: string) => registry.decks.find((deck) => deck.id === id)?.cards
     expect(byId('aggressive')).toEqual([
-      { kind: 'strike', count: 11 },
-      { kind: 'defend', count: 5 },
-      { kind: 'heal', count: 2 },
-      { kind: 'first-aid', count: 1 },
+      { kind: 'strike', count: 8 },
+      { kind: 'defend', count: 3 },
       { kind: 'storm', count: 1 },
     ])
     expect(byId('guarded')).toEqual([
-      { kind: 'strike', count: 10 },
-      { kind: 'defend', count: 7 },
-      { kind: 'heal', count: 3 },
+      { kind: 'strike', count: 7 },
+      { kind: 'defend', count: 5 },
     ])
   })
 
@@ -175,15 +167,13 @@ describe('内置内容文档', () => {
   it('牌面用途与自伤威胁由文档结构派生（含 for-each-target 内的效果）', () => {
     expect(cardRole('strike')).toBe('attack')
     expect(cardRole('defend')).toBe('defense')
-    expect(cardRole('heal')).toBe('recovery')
-    expect(cardRole('first-aid')).toBe('recovery')
     // 威胁写在 for-each-target 里也要被识别为攻击牌
     expect(cardRole('storm')).toBe('attack')
 
     // 对称威胁在 1v1 里必然打到自己，因此自伤威胁为 2
     expect(cardSelfThreat('storm')).toBe(2)
     expect(cardSelfThreat('strike')).toBe(0)
-    expect(cardSelfThreat('first-aid')).toBe(0)
+    expect(cardSelfThreat('defend')).toBe(0)
   })
 
   it('稀有度与升级指向：奖励池只收声明 rarity 的牌，升级版不入池', () => {

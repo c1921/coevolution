@@ -11,21 +11,20 @@ import { resolveThreatAtTurnEnd } from './threat'
 import { resetTurnUsage } from './usage'
 
 /**
- * 摸牌数：摸牌阶段默认摸两张牌。
+ * 摸牌数：摸牌阶段默认摸五张牌。
  * **默认值是 ruleset 的 draw-count 通道基准**（`data/dsl/rules/base.json`），
  * 这两个常量只用于界面提示与测试断言，turn.test.ts 会断言 DRAW_PER_TURN 与文档一致。
  */
-export const DRAW_PER_TURN = 2
+export const DRAW_PER_TURN = 5
 /** 先手玩家第一回合的摸牌数：先手补偿，先手少摸一张 */
-export const FIRST_TURN_DRAW = 1
+export const FIRST_TURN_DRAW = 4
 /** 起手手牌数 */
 export const INITIAL_HAND = 4
 
 /**
  * 消耗战（加时规则）：从第 ATTRITION_TURN 回合起，每回合开始时回合角色失去体力，
- * 每 ATTRITION_STEP 回合递增 1 点。三张基本牌的 1v1 里双方可以互相抵消到天荒地老
- * （回复牌每回合回 1 点、转换把每次【打击】都挡掉，牌堆还会无限洗回），因此必须有一条
- * 终止压力；流失量最终必定超过任何回复能力，保证对局必然结束。
+ * 每 ATTRITION_STEP 回合递增 1 点。牌组会无限洗回、【防御】可以一直抵消威胁，
+ * 因此必须有一条终止压力；流失量最终必定超过任何回复能力，保证对局必然结束。
  *
  * **行为数值在 data/dsl/rules/attrition.json**（由 DSL 的 rule 文档描述并执行）；
  * 这两个常量只用于界面提示（消耗战的角标）与测试断言，turn.test.ts 会断言两者一致。

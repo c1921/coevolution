@@ -19,12 +19,12 @@ import {
 import { cardUseCount, recordCardUse, recordSkillUse, skillUsed } from './usage'
 
 describe('回合流程', () => {
-  it('摸牌阶段摸 2 张', () => {
+  it('摸牌阶段摸 5 张', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       phase: 'draw',
-      playerHand: [{ kind: 'heal' }],
+      playerHand: [{ kind: 'strike' }],
     })
     state.turn = 2
 
@@ -45,7 +45,7 @@ describe('回合流程', () => {
     expect(state.players[0].hand).toHaveLength(FIRST_TURN_DRAW)
   })
 
-  it('后手玩家在自己第一回合正常摸 2 张', () => {
+  it('后手玩家在自己第一回合正常摸 5 张', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
@@ -121,7 +121,7 @@ describe('回合流程', () => {
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       phase: 'draw',
-      playerHand: [{ kind: 'heal' }],
+      playerHand: [{ kind: 'strike' }],
     })
     state.turn = 2
     const player = state.players[0]
@@ -132,7 +132,7 @@ describe('回合流程', () => {
 
     advanceTurn(state)
 
-    expect(player.hand).toHaveLength(3)
+    expect(player.hand).toHaveLength(1 + DRAW_PER_TURN)
     expect(player.discard).toHaveLength(0)
     expect(player.deck).toHaveLength(deckSize - DRAW_PER_TURN)
     // 私有牌组互不干扰：对手的牌组一张没动
@@ -146,7 +146,7 @@ describe('回合流程', () => {
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       phase: 'draw',
-      playerHand: [{ kind: 'heal' }],
+      playerHand: [{ kind: 'strike' }],
     })
     state.turn = 2
     const player = state.players[0]
@@ -240,13 +240,12 @@ describe('消耗战（终止规则）', () => {
     expect(logTexts(first)).toContain('消耗战开始')
   })
 
-  it('消耗战濒死被救活后，同一回合不会重复扣体力', () => {
+  it('消耗战打进濒死后无人可救：直接阵亡，且同一回合只扣一次体力', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       phase: 'turn-start',
       playerHp: 1,
-      playerHand: [{ kind: 'heal' }],
     })
     // 同样用 22 回合避开奖励帧（见上一条用例）
     state.turn = ATTRITION_TURN + 1
@@ -256,10 +255,12 @@ describe('消耗战（终止规则）', () => {
     expect(state.players[0].hp).toBe(0)
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 0 })
 
-    submit(state, { kind: 'use-card', card: state.players[0].hand[0]!, as: 'heal' })
+    // 内置内容没有自救牌：双方放弃即阵亡
+    submit(state, { kind: 'cancel' })
+    submit(state, { kind: 'cancel' })
+    expect(state.players[0].alive).toBe(false)
+    expect(state.result).toEqual({ winner: 1 })
 
-    expect(state.players[0].hp).toBe(1)
-    expect(state.phase).toBe('play')
     // 消耗战扣体力只发生了一次
     const losses = state.log.filter((e) => e.text.startsWith('消耗战：'))
     expect(losses).toHaveLength(1)
@@ -268,7 +269,7 @@ describe('消耗战（终止规则）', () => {
 })
 
 describe('规范额度', () => {
-  it('摸牌数：默认 2 张，先手角色的第一回合为 1 张', () => {
+  it('摸牌数：默认 5 张，先手角色的第一回合为 4 张', () => {
     const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     state.firstPlayer = 0
     state.active = 0

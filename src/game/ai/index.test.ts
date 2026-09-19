@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { contentWith } from '../dsl/fixtures'
+import { contentWith, syntheticHealingRegistry } from '../dsl/fixtures'
 import { withRegistry } from '../dsl/registry'
 import type { Registry } from '../dsl/types'
-import { makeState } from '../testUtils'
+import { injectHand, makeState } from '../testUtils'
 import type { Action } from '../types'
 import { aiDecide, chooseActivationTarget, chooseCardTargets } from './index'
 
@@ -156,22 +156,23 @@ describe('AI 选目标', () => {
 
 describe('AI 使用卡牌时的目标', () => {
   it('急救：优先治疗自己；只有对手受伤时治疗对手', () => {
-    const bothWounded = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      playerHp: 2,
-      aiHp: 2,
-      playerHand: [{ kind: 'first-aid' }],
-    })
-    expect(chooseCardTargets(bothWounded, 0, 'first-aid', 'play')).toEqual([0])
+    // 内置回血牌已删除：用合成急救牌（test-aid）验证「按效果方向选目标」
+    withRegistry(syntheticHealingRegistry(), () => {
+      const bothWounded = makeState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        playerHp: 2,
+        aiHp: 2,
+      })
+      expect(chooseCardTargets(bothWounded, 0, 'test-aid', 'play')).toEqual([0])
 
-    const onlyOpponent = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      aiHp: 2,
-      playerHand: [{ kind: 'first-aid' }],
+      const onlyOpponent = makeState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        aiHp: 2,
+      })
+      expect(chooseCardTargets(onlyOpponent, 0, 'test-aid', 'play')).toEqual([1])
     })
-    expect(chooseCardTargets(onlyOpponent, 0, 'first-aid', 'play')).toEqual([1])
   })
 
   it('风暴：all 模式不传目标（由引擎作用于全部合法候选）', () => {
@@ -226,15 +227,18 @@ describe('AI 使用卡牌时的目标', () => {
   })
 
   it('AI 打出的牌都带齐目标或明确不带（不会提交必失败的牌）', () => {
-    const state = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      playerHp: 2,
-      aiHp: 2,
-      playerHand: [{ kind: 'first-aid' }, { kind: 'strike' }],
+    withRegistry(syntheticHealingRegistry(), () => {
+      const state = makeState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        playerHp: 2,
+        aiHp: 2,
+      })
+      injectHand(state, 0, 'test-aid')
+      injectHand(state, 0, 'strike')
+      // 先治疗自己（带目标 0），而不是无目标地提交
+      expect(aiDecide(state)).toMatchObject({ kind: 'use-card', as: 'test-aid', targets: [0] })
     })
-    // 先治疗自己（带目标 0），而不是无目标地提交
-    expect(aiDecide(state)).toMatchObject({ kind: 'use-card', as: 'first-aid', targets: [0] })
   })
 })
 

@@ -5,10 +5,8 @@
   "id": "aggressive",
   "priority": 20,
   "cards": [
-    { "kind": "strike", "count": 11 },
-    { "kind": "defend", "count": 5 },
-    { "kind": "heal", "count": 2 },
-    { "kind": "first-aid", "count": 1 },
+    { "kind": "strike", "count": 8 },
+    { "kind": "defend", "count": 3 },
     { "kind": "storm", "count": 1 }
   ]
 }

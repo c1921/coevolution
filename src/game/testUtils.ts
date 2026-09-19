@@ -139,6 +139,17 @@ export function topOfDeck(state: GameState, kind: CardKind): Card {
   return card
 }
 
+/**
+ * 把**不在任何牌组里**的牌直接塞进某人手中（测试合成内容时用），并同步 `cardTotal`，
+ * 使 `assertConservation` 仍然成立。返回新发的那几张牌。
+ */
+export function injectHand(state: GameState, p: PlayerIndex, kind: CardKind, count = 1): Card[] {
+  const cards: Card[] = Array.from({ length: count }, () => ({ uid: state.nextUid++, kind }))
+  state.players[p].hand = [...state.players[p].hand, ...cards]
+  state.cardTotal += count
+  return cards
+}
+
 /** 深拷贝，用于断言"非法动作不修改状态" */
 export function snapshot(state: GameState): GameState {
   return structuredClone(state)

@@ -211,8 +211,14 @@ export const pendingHint = computed(() => {
     }
     case 'dying': {
       const rescue = dyingRescueOptions()[0]
+      // 当前内容没有任何「濒死可用」的牌，濒死即阵亡：给出直白说明，不要伪造一个救不回来的按钮
+      if (!rescue) {
+        return pending.dying === HUMAN
+          ? '你已濒死：当前没有可用的自救牌，放弃即阵亡'
+          : `${playerLabel(state, pending.dying)} 濒死：当前没有可用的救援牌，放弃则其阵亡`
+      }
       const label = dyingUsableLabel()
-      const cost = rescue ? energyCost(state, HUMAN, rescue.kind) : 0
+      const cost = energyCost(state, HUMAN, rescue.kind)
       const energy = `需 ${cost} 点能量（当前 ${state.players[HUMAN].energy}）`
       return pending.dying === HUMAN
         ? `你已濒死，使用${label}自救（${energy}）；放弃则阵亡`

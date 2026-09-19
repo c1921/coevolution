@@ -8,7 +8,7 @@
     "energy-max": 3,
     "defend-need-against": 1,
     "threat-per-attack": 1,
-    "draw-count": 2,
+    "draw-count": 5,
     "hand-limit": 0,
     "card-cost": 0,
     "attack-range": 1

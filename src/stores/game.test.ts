@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiDecide } from '../game/ai'
 import { advance, isOver } from '../game/engine'
-import { contentWith } from '../game/dsl/fixtures'
+import { contentWith, syntheticHealingRegistry } from '../game/dsl/fixtures'
 import { withRegistry } from '../game/dsl/registry'
 import { assertEnergyBounds, energyCost } from '../game/rules/energy'
-import { makeState } from '../game/testUtils'
+import { injectHand, makeState } from '../game/testUtils'
 import type { MakeStateOptions } from '../game/testUtils'
 import type { GameState } from '../game/types'
 import * as store from './game'
@@ -381,40 +381,42 @@ describe('界面状态与驱动循环', () => {
   })
 
   it('使用卡牌需要选目标时先进入选择态，选中后才结算', () => {
-    const state = loadState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      playerHp: 2,
-      aiHp: 2,
-      playerHand: [{ kind: 'first-aid' }],
+    // 内置回血牌已删除：用合成急救牌（test-aid）验证「卡牌选目标」链路
+    withRegistry(syntheticHealingRegistry(), () => {
+      const state = loadState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        playerHp: 2,
+        aiHp: 2,
+      })
+      const [card] = injectHand(state, 0, 'test-aid')
+      const option = store.legalOptions(card!).find((o) => o.as === 'test-aid')!
+
+      store.pickCard(card!.uid)
+      store.submitOption(card!, option)
+
+      expect(store.errorMessage.value).toBeNull()
+      expect(store.pendingTarget.value).toMatchObject({ kind: 'card', as: 'test-aid' })
+      expect(state.players[1].hp).toBe(2) // 还没结算
+      expect(store.pendingTargetOptions.value.map((o) => [o.index, o.selectable])).toEqual([
+        [0, true],
+        [1, true],
+      ])
+      // 选择器的标题与说明也由 store 给出（组件不自己拼文案）
+      expect(store.targetPickerTitle.value).toContain('测试急救')
+      expect(store.targetPickerHint.value).toBe('选择目标')
+
+      // 取消不提交
+      store.cancelTarget()
+      expect(store.pendingTarget.value).toBeNull()
+      expect(state.players[1].hp).toBe(2)
+
+      // 重新进入并治疗对手
+      store.submitOption(card!, option)
+      store.chooseTarget(1)
+      expect(store.pendingTarget.value).toBeNull()
+      expect(state.players[1].hp).toBe(3)
     })
-    const card = state.players[0].hand[0]!
-    const option = store.legalOptions(card).find((o) => o.as === 'first-aid')!
-
-    store.pickCard(card.uid)
-    store.submitOption(card, option)
-
-    expect(store.errorMessage.value).toBeNull()
-    expect(store.pendingTarget.value).toMatchObject({ kind: 'card', as: 'first-aid' })
-    expect(state.players[1].hp).toBe(2) // 还没结算
-    expect(store.pendingTargetOptions.value.map((o) => [o.index, o.selectable])).toEqual([
-      [0, true],
-      [1, true],
-    ])
-    // 选择器的标题与说明也由 store 给出（组件不自己拼文案）
-    expect(store.targetPickerTitle.value).toContain('急救')
-    expect(store.targetPickerHint.value).toBe('选择目标')
-
-    // 取消不提交
-    store.cancelTarget()
-    expect(store.pendingTarget.value).toBeNull()
-    expect(state.players[1].hp).toBe(2)
-
-    // 重新进入并治疗对手
-    store.submitOption(card, option)
-    store.chooseTarget(1)
-    expect(store.pendingTarget.value).toBeNull()
-    expect(state.players[1].hp).toBe(3)
   })
 
   it('多目标牌必须选够个数才能确认（合成 exactly=2 的牌）', () => {
@@ -463,10 +465,8 @@ describe('界面状态与驱动循环', () => {
           id: 'aggressive',
           priority: 20,
           cards: [
-            { kind: 'strike', count: 10 },
-            { kind: 'defend', count: 5 },
-            { kind: 'heal', count: 2 },
-            { kind: 'first-aid', count: 1 },
+            { kind: 'strike', count: 8 },
+            { kind: 'defend', count: 3 },
             { kind: 'storm', count: 1 },
             { kind: 'dual', count: 1 },
           ],

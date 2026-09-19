@@ -4,7 +4,9 @@
   "kind": "rule",
   "id": "reward-service",
   "priority": 20,
-  "on": { "at": "turn-start" },
+  "on": {
+    "at": "turn-start"
+  },
   "when": [
     {
       "kind": "compare",
@@ -14,20 +16,35 @@
         "of": [
           {
             "kind": "floor-div",
-            "of": { "kind": "ref", "ref": "turn" },
-            "by": { "kind": "const", "value": 4 }
+            "of": {
+              "kind": "ref",
+              "ref": "turn"
+            },
+            "by": {
+              "kind": "const",
+              "value": 4
+            }
           },
-          { "kind": "const", "value": 4 }
+          {
+            "kind": "const",
+            "value": 4
+          }
         ]
       },
-      "right": { "kind": "ref", "ref": "turn" }
+      "right": {
+        "kind": "ref",
+        "ref": "turn"
+      }
     }
   ],
   "effects": [
     {
       "kind": "offer-reward",
       "reward": "service",
-      "healAmount": { "kind": "const", "value": 3 },
+      "healAmount": {
+        "kind": "const",
+        "value": 1
+      },
       "removeFloor": 5
     }
   ]

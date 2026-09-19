@@ -5,7 +5,7 @@ import { assertConservation, moveHandToProcessing } from './cardZones'
 import { dealDamage } from './damage'
 
 /** 打一场必死对局：对 1 点体力的 AI 造成 1 点伤害，双方都不救援 */
-function killAi(aiHand: { kind: 'defend' | 'heal' | 'strike' }[] = []) {
+function killAi(aiHand: { kind: 'defend' | 'strike' }[] = []) {
   const state = makeState({
     playerSpecies: 'offensive',
     aiSpecies: 'defensive',
@@ -21,7 +21,7 @@ function killAi(aiHand: { kind: 'defend' | 'heal' | 'strike' }[] = []) {
 
 describe('死亡与胜负结算', () => {
   it('阵亡者弃置全部手牌，且仅有一方获胜', () => {
-    const state = killAi([{ kind: 'defend' }, { kind: 'heal' }])
+    const state = killAi([{ kind: 'defend' }, { kind: 'strike' }])
 
     expect(state.players[1].alive).toBe(false)
     expect(state.players[1].hand).toHaveLength(0)

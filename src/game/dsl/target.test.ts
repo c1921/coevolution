@@ -15,24 +15,42 @@ import {
 } from './target'
 import type { TargetSpec } from './types'
 
-/** 取内置文档里的目标规格，保证测试与内容文档同步。
- *  主动技只剩【强袭】，带「已受伤」条件的目标规格改由【急救】牌提供（两者的规格一致）。 */
-function firstAidTarget(): TargetSpec {
-  const variant = cardDoc('first-aid').use?.find((item) => item.context === 'play')
-  if (!variant?.target) throw new Error('急救缺少 target')
-  return variant.target
-}
-
+/** 【打击】的目标规格取自内置文档，保证测试与内容同步。 */
 function strikeTarget(): TargetSpec {
   const variant = cardDoc('strike').use?.find((item) => item.context === 'play')
   if (!variant?.target) throw new Error('打击缺少 target')
   return variant.target
 }
 
+/**
+ * 「任意已受伤角色」的目标规格（原【急救】的内置规格）。
+ * 内置回血牌已删除，但 `targetChoice` 的机制仍需覆盖，这里内联同一份规格。
+ */
+const ANY_WOUNDED_TARGET: TargetSpec = {
+  scope: 'any',
+  required: false,
+  default: 'self',
+  alive: true,
+  conditions: [
+    {
+      kind: 'compare',
+      op: 'lt',
+      left: { kind: 'ref', ref: 'hp', of: 'target' },
+      right: { kind: 'ref', ref: 'maxHp', of: 'target' },
+      reason: '目标角色体力已满，无法回复',
+    },
+  ],
+}
+
+function firstAidTarget(): TargetSpec {
+  return ANY_WOUNDED_TARGET
+}
+
+/** 「自己」/「濒死者」两个语境的目标规格（原【回复】的内置规格） */
 function healTarget(context: 'play' | 'dying'): TargetSpec {
-  const variant = cardDoc('heal').use?.find((item) => item.context === context)
-  if (!variant?.target) throw new Error(`回复缺少 ${context} 的 target`)
-  return variant.target
+  return context === 'play'
+    ? { scope: 'self', required: false, alive: true }
+    : { scope: 'dying', required: true, alive: true }
 }
 
 type ScenarioOptions = Omit<MakeStateOptions, 'playerSpecies' | 'aiSpecies'>

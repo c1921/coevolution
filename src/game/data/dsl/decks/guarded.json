@@ -4,9 +4,5 @@
   "kind": "deck",
   "id": "guarded",
   "priority": 30,
-  "cards": [
-    { "kind": "strike", "count": 10 },
-    { "kind": "defend", "count": 7 },
-    { "kind": "heal", "count": 3 }
-  ]
+  "cards": [{ "kind": "strike", "count": 7 }, { "kind": "defend", "count": 5 }]
 }

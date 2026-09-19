@@ -145,7 +145,7 @@ const PROBES: Record<Channel, () => void> = {
         playerSpecies: 'offensive',
         aiSpecies: 'defensive',
         phase: 'draw',
-        playerHand: [{ kind: 'heal' }],
+        playerHand: [{ kind: 'strike' }],
       })
       // 第 2 回合避开先手首回合补偿，观察纯通道修正
       state.turn = 2
@@ -206,7 +206,7 @@ const PROBES: Record<Channel, () => void> = {
       })
 
       expect(energyCost(state, 0, 'strike')).toBe(1)
-      expect(energyCost(state, 0, 'heal')).toBe(1)
+      expect(energyCost(state, 0, 'storm')).toBe(1)
       expect(canPayEnergy(state, 0, 'strike')).toBe(true)
     })
   },

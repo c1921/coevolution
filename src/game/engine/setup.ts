@@ -1,4 +1,4 @@
-import { buildDeck } from '../data/deck'
+import { buildDeck, totalDeckSize } from '../data/deck'
 import { SPECIES, SPECIES_IDS } from '../data/species'
 import { log, playerLabel } from '../log'
 import { pickOne, sample, shuffle } from '../rng'
@@ -114,8 +114,8 @@ export function createGame(options: CreateGameOptions): GameState {
       makePlayer(AI, aiSpecies, secondDeck.items),
     ],
     // 奖励加牌用的 uid 从双方牌组之后继续分配；cardTotal 是守恒的初始基准
-    nextUid: firstDeck.items.length + secondDeck.items.length,
-    cardTotal: firstDeck.items.length + secondDeck.items.length,
+    nextUid: totalDeckSize(playerSpecies, aiSpecies),
+    cardTotal: totalDeckSize(playerSpecies, aiSpecies),
     active: firstPlayer,
     firstPlayer,
     turn: 1,

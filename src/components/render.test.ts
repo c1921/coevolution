@@ -4,8 +4,10 @@ import { renderToString } from 'vue/server-renderer'
 import App from '../App.vue'
 import { CARD_DEFS, CARD_NAME } from '../game/data/cardDefs'
 import { SPECIES } from '../game/data/species'
+import { syntheticHealingRegistry } from '../game/dsl/fixtures'
+import { withRegistry } from '../game/dsl/registry'
 import { advance } from '../game/engine'
-import { makeState } from '../game/testUtils'
+import { injectHand, makeState } from '../game/testUtils'
 import {
   act,
   backToStart,
@@ -97,26 +99,31 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
 
   it('使用卡牌需要选目标时同样弹出目标选择器（牌名与提示可见）', async () => {
     backToStart()
-    gameState.value = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'defensive',
-      playerHp: 2,
-      aiHp: 2,
-      playerHand: [{ kind: 'first-aid' }],
+    // 内置回血牌已删除：用合成急救牌（test-aid）验证「卡牌选目标」的界面链路
+    await withRegistry(syntheticHealingRegistry(), async () => {
+      const state = makeState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        playerHp: 2,
+        aiHp: 2,
+      })
+      const [card] = injectHand(state, 0, 'test-aid')
+      gameState.value = state
+      screen.value = 'battle'
+
+      pickCard(card!.uid)
+      submitOption(
+        card!,
+        legalOptions(card!).find((o) => o.as === 'test-aid')!,
+      )
+
+      // 注意：`withRegistry` 是同步的 finally，异步渲染期间注册表已还原，
+      // 因此这里只断言与注册表无关的渲染结果；牌名/标题由 stores/game.test.ts 断言。
+      const html = await renderApp()
+      expect(html).toContain('选择目标')
+      expect(html).toContain('取消')
+      expect(html).toContain(SPECIES.defensive.name)
     })
-    screen.value = 'battle'
-
-    const card = gameState.value.players[0].hand[0]!
-    pickCard(card.uid)
-    submitOption(
-      card,
-      legalOptions(card).find((o) => o.as === 'first-aid')!,
-    )
-
-    const html = await renderApp()
-    expect(html).toContain(`使用【${CARD_NAME['first-aid']}】`)
-    expect(html).toContain('选择目标')
-    expect(html).toContain(SPECIES.defensive.name)
 
     backToStart()
   })

@@ -194,7 +194,7 @@ describe('效果解释器 · move-cards', () => {
 
   it('random：只消耗一次 nextInt，并在双方手牌之间转移', () => {
     const { state, ctx } = scenario('counter', 'defensive', {
-      aiHand: [{ kind: 'strike' }, { kind: 'defend' }, { kind: 'heal' }],
+      aiHand: [{ kind: 'strike' }, { kind: 'defend' }, { kind: 'strike' }],
     })
     const before = state.rngState
     const expected = nextInt(before, 3)
