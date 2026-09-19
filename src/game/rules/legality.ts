@@ -39,11 +39,7 @@ interface CardOptionLike {
   via?: SkillId
 }
 
-function matchesOption(
-  options: CardOptionLike[],
-  as: CardKind,
-  via?: SkillId,
-): boolean {
+function matchesOption(options: CardOptionLike[], as: CardKind, via?: SkillId): boolean {
   return options.some((o) => o.as === as && o.via === via)
 }
 
@@ -199,7 +195,10 @@ export function checkActivate(
   if (!activeOptions(state, p).includes(skill)) return fail(`当前无法发动【${name}】`)
 
   const provided = cards ?? []
-  const env = { state, ctx: { self: p, active: state.active, costCards: provided.map((c) => c.uid) } }
+  const env = {
+    state,
+    ctx: { self: p, active: state.active, costCards: provided.map((c) => c.uid) },
+  }
   const need = activationCostCards(state, p, skill)
   if (provided.length !== need) {
     return fail(need === 0 ? `【${name}】不需要弃置手牌` : `【${name}】需要弃置 ${need} 张手牌`)
@@ -230,11 +229,7 @@ export function checkActivate(
 }
 
 /** 弃牌阶段弃置手牌 */
-export function checkDiscard(
-  state: GameState,
-  p: PlayerIndex,
-  cards: Card[],
-): Legality {
+export function checkDiscard(state: GameState, p: PlayerIndex, cards: Card[]): Legality {
   const pending = state.pending
   if (!pending || pending.kind !== 'discard') return fail('当前不是弃牌阶段')
   if (pending.player !== p) return fail('现在不是你的弃牌阶段')

@@ -42,10 +42,7 @@ export function offsetThreat(state: GameState, p: PlayerIndex, amount: number): 
   const before = player.threat
   const actual = Math.min(before, value)
   if (actual > 0) player.threat = before - actual
-  log(
-    state,
-    `${playerLabel(state, p)} 抵消 ${actual} 点威胁（威胁 ${before} → ${player.threat}）`,
-  )
+  log(state, `${playerLabel(state, p)} 抵消 ${actual} 点威胁（威胁 ${before} → ${player.threat}）`)
   return actual
 }
 
@@ -78,9 +75,7 @@ export function resolveThreatAtTurnEnd(state: GameState, p: PlayerIndex): void {
 export function assertThreatBounds(state: GameState): void {
   for (const player of state.players) {
     if (!Number.isInteger(player.threat) || player.threat < 0) {
-      throw new Error(
-        `威胁越界：${player.index} 号角色的威胁为 ${player.threat}，应为非负整数`,
-      )
+      throw new Error(`威胁越界：${player.index} 号角色的威胁为 ${player.threat}，应为非负整数`)
     }
   }
 }

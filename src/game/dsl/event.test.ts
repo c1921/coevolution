@@ -37,9 +37,7 @@ function registryWithRule(effects: unknown[]) {
         id: 'charge',
         name: '蓄能',
         text: '占位。',
-        modifiers: [
-          { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 0 } },
-        ],
+        modifiers: [{ channel: 'energy-max', op: 'add', value: { kind: 'const', value: 0 } }],
       },
     },
     {
@@ -60,19 +58,23 @@ describe('时机派发', () => {
   it('sameTiming：区分阶段与事件时机', () => {
     expect(sameTiming({ at: 'turn-start' }, { at: 'turn-start' })).toBe(true)
     expect(sameTiming({ at: 'turn-start' }, { at: 'turn-end' })).toBe(false)
-    expect(sameTiming({ at: 'phase-start', phase: 'draw' }, { at: 'phase-start', phase: 'draw' })).toBe(
-      true,
-    )
-    expect(sameTiming({ at: 'phase-start', phase: 'draw' }, { at: 'phase-start', phase: 'play' })).toBe(
-      false,
-    )
-    expect(sameTiming({ at: 'phase-start', phase: 'draw' }, { at: 'phase-end', phase: 'draw' })).toBe(
-      false,
-    )
+    expect(
+      sameTiming({ at: 'phase-start', phase: 'draw' }, { at: 'phase-start', phase: 'draw' }),
+    ).toBe(true)
+    expect(
+      sameTiming({ at: 'phase-start', phase: 'draw' }, { at: 'phase-start', phase: 'play' }),
+    ).toBe(false)
+    expect(
+      sameTiming({ at: 'phase-start', phase: 'draw' }, { at: 'phase-end', phase: 'draw' }),
+    ).toBe(false)
   })
 
   it('规则文档：消耗战在回合开始时生效，并按回合递增', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     state.turn = 21
     state.active = 0
 
@@ -81,7 +83,11 @@ describe('时机派发', () => {
     expect(state.log.map((entry) => entry.text).join('\n')).toContain('消耗战开始')
 
     // 未到 21 回合时 when 条件不成立
-    const early = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const early = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     early.turn = 20
     applyTimingRules(early, { at: 'turn-start' })
     expect(early.players[early.active].hp).toBe(early.players[early.active].maxHp)
@@ -89,7 +95,11 @@ describe('时机派发', () => {
   })
 
   it('规则文档：只在与自己时机相同时执行', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     applyTimingRules(state, { at: 'turn-end' })
     expect(state.log).toHaveLength(0)
   })
@@ -156,7 +166,11 @@ describe('时机派发', () => {
       on: { at: 'turn-start' },
       effects: [{ kind: 'log', template: '{self} 的回合开始触发' }],
     })
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     withRegistry(synthetic, () => {
       const pending = emitTiming(state, { at: 'turn-start' }, 0)
       expect(pending).toEqual([])
@@ -179,7 +193,11 @@ describe('时机派发', () => {
       { kind: 'log', template: '附加规则：{active} 失去 1 点体力' },
       { kind: 'lose-hp', target: 'active', amount: { kind: 'const', value: 1 } },
     ])
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     withRegistry(synthetic, () => {
       applyTimingRules(state, { at: 'turn-start' })
     })

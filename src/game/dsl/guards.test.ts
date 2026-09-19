@@ -49,7 +49,8 @@ function appFiles(): string[] {
  */
 function contentIds(): { id: string; what: string; checkInDsl: boolean }[] {
   const ids: { id: string; what: string; checkInDsl: boolean }[] = []
-  for (const id of registry.skills.map((doc) => doc.id)) ids.push({ id, what: '技能', checkInDsl: true })
+  for (const id of registry.skills.map((doc) => doc.id))
+    ids.push({ id, what: '技能', checkInDsl: true })
   for (const id of cardIds()) ids.push({ id, what: '牌种', checkInDsl: false })
   for (const id of speciesIds()) ids.push({ id, what: '物种', checkInDsl: true })
   return ids
@@ -75,7 +76,9 @@ describe('守卫：内容 id 不得出现在应用代码里', () => {
         offenders.push(`${path} 出现${what} id "${id}"（${count} 次）`)
       }
     }
-    expect(offenders, `内容 id 应只出现在 data/dsl/*.json 中：\n${offenders.join('\n')}`).toEqual([])
+    expect(offenders, `内容 id 应只出现在 data/dsl/*.json 中：\n${offenders.join('\n')}`).toEqual(
+      [],
+    )
   })
 
   it('白名单没有过期条目（每个列出的 id 确实出现了）', () => {

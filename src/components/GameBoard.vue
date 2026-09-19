@@ -1,5 +1,19 @@
 <script setup lang="ts">
-import { cannotPlayAnything, gameState, human, humanDeckCount, humanEnergyMax, isHumanTurn, isSelectable, isSelected, pickCard, opponent, opponentDeckCount, opponentEnergyMax, turnLabel } from '../stores/game'
+import {
+  cannotPlayAnything,
+  gameState,
+  human,
+  humanDeckCount,
+  humanEnergyMax,
+  isHumanTurn,
+  isSelectable,
+  isSelected,
+  pickCard,
+  opponent,
+  opponentDeckCount,
+  opponentEnergyMax,
+  turnLabel,
+} from '../stores/game'
 import ActionBar from './ActionBar.vue'
 import HandCard from './HandCard.vue'
 import LogPanel from './LogPanel.vue'
@@ -16,7 +30,9 @@ import PromptOverlay from './PromptOverlay.vue'
       <span class="font-semibold text-ink-100">协同进化 · 1v1</span>
       <span class="text-ink-300">{{ turnLabel }}</span>
       <!-- 牌组私有化：双方各有一副 20 张的牌组，只从自己的牌组摸牌 -->
-      <span class="text-ink-500">牌组 我方 {{ humanDeckCount }} · 对方 {{ opponentDeckCount }}</span>
+      <span class="text-ink-500"
+        >牌组 我方 {{ humanDeckCount }} · 对方 {{ opponentDeckCount }}</span
+      >
     </header>
 
     <PlayerPanel

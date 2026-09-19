@@ -13,8 +13,13 @@ import { BTN_PRIMARY, PANEL } from './ui'
     <section :class="PANEL" class="text-sm text-ink-300">
       <h2 class="mb-2 text-base font-semibold text-ink-100">三张基本牌</h2>
       <ul class="space-y-1">
-        <li><b class="text-ink-100">打击</b>：消耗 1 点能量，对对方造成 1 点伤害，其可打出【防御】抵消。</li>
-        <li><b class="text-ink-100">防御</b>：消耗 1 点能量，抵消一次【打击】，只能在响应时打出。</li>
+        <li>
+          <b class="text-ink-100">打击</b>：消耗 1 点能量，对对方造成 1
+          点伤害，其可打出【防御】抵消。
+        </li>
+        <li>
+          <b class="text-ink-100">防御</b>：消耗 1 点能量，抵消一次【打击】，只能在响应时打出。
+        </li>
         <li><b class="text-ink-100">回复</b>：消耗 2 点能量，回复 1 点体力，濒死时可用来续命。</li>
       </ul>
     </section>

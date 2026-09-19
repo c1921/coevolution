@@ -108,9 +108,9 @@ describe('濒死结算', () => {
     submit(state, { kind: 'cancel' })
     expect(state.pending).toMatchObject({ kind: 'dying', player: 0, dying: 1 })
 
-    expect(() =>
-      submit(state, { kind: 'use-card', card: state.players[0].hand[0]! }),
-    ).toThrow('濒死结算中只能使用【回复】')
+    expect(() => submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })).toThrow(
+      '濒死结算中只能使用【回复】',
+    )
     assertConservation(state)
   })
 

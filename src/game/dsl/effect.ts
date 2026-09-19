@@ -36,11 +36,7 @@ import type { Effect } from './types'
  */
 
 /** 执行一组效果（立即，按声明顺序） */
-export function runEffects(
-  state: GameState,
-  effects: readonly Effect[],
-  ctx: EffectContext,
-): void {
+export function runEffects(state: GameState, effects: readonly Effect[], ctx: EffectContext): void {
   const env: EvalEnv = { state, ctx }
   for (const effect of effects) runEffect(env, effect)
 }

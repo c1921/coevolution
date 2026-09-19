@@ -19,12 +19,7 @@ import type { CardPick, Effect, ZoneRef } from './types'
  */
 
 /** 取牌：按 pick 描述从 from 牌区挑出牌（不移动） */
-function pickCards(
-  state: GameState,
-  env: EvalEnv,
-  from: ZoneRef,
-  pick: CardPick,
-): Card[] {
+function pickCards(state: GameState, env: EvalEnv, from: ZoneRef, pick: CardPick): Card[] {
   const owner: PlayerIndex = from.of ? requireRole(env, from.of) : env.ctx.self
   const pool = zoneCards(state, owner, from.zone)
   const matches = (card: Card): boolean =>
@@ -96,12 +91,7 @@ function removeFromZone(
 }
 
 /** 把一张牌放入某玩家的某牌区 */
-function addToZone(
-  state: GameState,
-  owner: PlayerIndex,
-  zone: ZoneRef['zone'],
-  card: Card,
-): void {
+function addToZone(state: GameState, owner: PlayerIndex, zone: ZoneRef['zone'], card: Card): void {
   switch (zone) {
     case 'hand':
       state.players[owner].hand.push(card)
@@ -184,11 +174,7 @@ export function pushContestFrame(
  * 收尾时必须按归属进弃牌堆，否则会永远留在处理区（牌数守恒会立刻发现）。
  * 保持静默：抵消进度与「被抵消」属于机制战报，由引擎在贡献后统一输出。
  */
-export function contributeToContest(
-  state: GameState,
-  env: EvalEnv,
-  amount: number,
-): void {
+export function contributeToContest(state: GameState, env: EvalEnv, amount: number): void {
   const top = state.stack[state.stack.length - 1]
   if (!top || top.kind !== 'contest') {
     throw new RuleError('contest-contribute 需要位于对抗结算中')
@@ -208,12 +194,7 @@ export function healHp(state: GameState, p: PlayerIndex, amount: number): void {
 }
 
 /** 造成威胁：叠加到目标身上，由其在自己的回合抵消、在自己的回合结束时兑现为伤害 */
-export function threatFor(
-  state: GameState,
-  env: EvalEnv,
-  target: RoleRef,
-  amount: number,
-): void {
+export function threatFor(state: GameState, env: EvalEnv, target: RoleRef, amount: number): void {
   const victim = requireRole(env, target)
   // 施加者恒为效果归属者：技能触发里的 source 是"伤害来源"（受害者视角），不是施加者
   addThreat(state, victim, env.ctx.self, amount)

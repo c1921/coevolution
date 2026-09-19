@@ -13,10 +13,7 @@ export function nextFloat(rngState: number): { value: number; state: number } {
 }
 
 /** 返回 [0, maxExclusive) 的整数；maxExclusive <= 0 时返回 0 */
-export function nextInt(
-  rngState: number,
-  maxExclusive: number,
-): { value: number; state: number } {
+export function nextInt(rngState: number, maxExclusive: number): { value: number; state: number } {
   if (maxExclusive <= 0) return { value: 0, state: rngState }
   const step = nextFloat(rngState)
   return { value: Math.floor(step.value * maxExclusive), state: step.state }
@@ -39,10 +36,7 @@ export function shuffle<T>(items: T[], rngState: number): { items: T[]; state: n
 }
 
 /** 从数组中随机取一个元素（数组不可为空） */
-export function pickOne<T>(
-  items: T[],
-  rngState: number,
-): { value: T; state: number } {
+export function pickOne<T>(items: T[], rngState: number): { value: T; state: number } {
   const step = nextInt(rngState, items.length)
   return { value: items[step.value] as T, state: step.state }
 }

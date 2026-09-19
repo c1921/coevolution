@@ -9,11 +9,7 @@ export function handOf(state: GameState, p: PlayerIndex): Card[] {
   return state.players[p].hand
 }
 
-export function findInHand(
-  state: GameState,
-  p: PlayerIndex,
-  uid: number,
-): Card | undefined {
+export function findInHand(state: GameState, p: PlayerIndex, uid: number): Card | undefined {
   return state.players[p].hand.find((c) => c.uid === uid)
 }
 
@@ -25,11 +21,7 @@ export function removeFromHand(state: GameState, p: PlayerIndex, card: Card): vo
 }
 
 /** 手牌 → 处理区（结算中的牌）；条目记住归属，收尾时才知道该进谁的弃牌堆 */
-export function moveHandToProcessing(
-  state: GameState,
-  p: PlayerIndex,
-  card: Card,
-): void {
+export function moveHandToProcessing(state: GameState, p: PlayerIndex, card: Card): void {
   removeFromHand(state, p, card)
   state.processing.push({ card, owner: p })
 }
@@ -41,10 +33,7 @@ export function moveHandToDiscard(state: GameState, p: PlayerIndex, card: Card):
 }
 
 /** 从处理区取走一张牌；不在处理区则返回 undefined（可能已被取走） */
-export function takeFromProcessing(
-  state: GameState,
-  uid: number,
-): ProcessingCard | undefined {
+export function takeFromProcessing(state: GameState, uid: number): ProcessingCard | undefined {
   const i = state.processing.findIndex((e) => e.card.uid === uid)
   if (i < 0) return undefined
   return state.processing.splice(i, 1)[0]
@@ -74,7 +63,10 @@ export function drawCards(state: GameState, p: PlayerIndex, count: number): Card
   for (let i = 0; i < count; i++) {
     if (player.deck.length === 0) {
       if (player.discard.length === 0) {
-        log(state, `${playerLabel(state, p)} 的牌组与弃牌堆均已耗尽，${count - i} 张牌无法摸取，跳过`)
+        log(
+          state,
+          `${playerLabel(state, p)} 的牌组与弃牌堆均已耗尽，${count - i} 张牌无法摸取，跳过`,
+        )
         break
       }
       const result = shuffle(player.discard, state.rngState)

@@ -68,9 +68,7 @@ export function baseDocs(): { path: string; value: unknown }[] {
         id: 'charge',
         name: '蓄能',
         text: '能量上限 +2。',
-        modifiers: [
-          { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } },
-        ],
+        modifiers: [{ channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } }],
       },
     },
     {

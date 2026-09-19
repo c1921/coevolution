@@ -40,7 +40,10 @@ function activationOf(action: Action): Extract<Action, { kind: 'activate' }> {
 }
 
 /** 令一名任意角色（可用 required 强制显式选择）回复体力的合成技 */
-function healSkill(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> & {
+function healSkill(
+  id: string,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> & {
   id: string
 } {
   return {
@@ -73,18 +76,21 @@ function healSkill(id: string, extra: Record<string, unknown> = {}): Record<stri
 
 describe('AI 选目标', () => {
   it('自我治疗类主动技：受伤时选自己，并把 target 交给引擎', () => {
-    withRegistry(probeWith(healSkill('restore', { costCards: { count: { kind: 'const', value: 1 } } })), () => {
-      const state = makeState({
-        playerSpecies: 'probe',
-        aiSpecies: 'defensive',
-        playerHp: 2,
-        playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
-      })
+    withRegistry(
+      probeWith(healSkill('restore', { costCards: { count: { kind: 'const', value: 1 } } })),
+      () => {
+        const state = makeState({
+          playerSpecies: 'probe',
+          aiSpecies: 'defensive',
+          playerHp: 2,
+          playerHand: [{ kind: 'strike' }, { kind: 'strike' }],
+        })
 
-      const action = activationOf(aiDecide(state))
-      expect(action).toMatchObject({ skill: 'restore', target: 0 })
-      expect(action.cards).toHaveLength(1)
-    })
+        const action = activationOf(aiDecide(state))
+        expect(action).toMatchObject({ skill: 'restore', target: 0 })
+        expect(action.cards).toHaveLength(1)
+      },
+    )
   })
 
   it('required:true 的技能：AI 会带上显式目标', () => {
@@ -181,12 +187,7 @@ describe('AI 使用卡牌时的目标', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
-      playerHand: [
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'defend' },
-        { kind: 'defend' },
-      ],
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'defend' }, { kind: 'defend' }],
     })
     const action = activationOf(aiDecide(state))
     expect(action).toMatchObject({ skill: 'assault', target: 1 })

@@ -420,7 +420,10 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
   }
 
   it('count 的未知键与非法模式会报错', () => {
-    expectSingle(withTarget({ scope: 'any', alive: true, count: { mode: 'all', extra: 1 } }), 'unknown-key')
+    expectSingle(
+      withTarget({ scope: 'any', alive: true, count: { mode: 'all', extra: 1 } }),
+      'unknown-key',
+    )
     expectSingle(withTarget({ scope: 'any', alive: true, count: { mode: 'some' } }), 'bad-type')
     expectSingle(withTarget({ scope: 'any', alive: true, count: 'all' }), 'bad-type')
   })
@@ -434,7 +437,11 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
 
   it('all 模式不需要个数', () => {
     expectSingle(
-      withTarget({ scope: 'any', alive: true, count: { mode: 'all', count: { kind: 'const', value: 2 } } }),
+      withTarget({
+        scope: 'any',
+        alive: true,
+        count: { mode: 'all', count: { kind: 'const', value: 2 } },
+      }),
       'bad-combination',
     )
   })
@@ -456,11 +463,16 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
 
   it('多目标效果的 target 引用必须写在 for-each-target 内', () => {
     expectSingle(
-      multiTargetStrike([{ kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } }]),
+      multiTargetStrike([
+        { kind: 'threat', target: 'target', amount: { kind: 'const', value: 1 } },
+      ]),
       'bad-combination',
     )
     // 日志占位符、move-cards 的牌区归属同样受限
-    expectSingle(multiTargetStrike([{ kind: 'log', template: '{target} 获得威胁' }]), 'bad-combination')
+    expectSingle(
+      multiTargetStrike([{ kind: 'log', template: '{target} 获得威胁' }]),
+      'bad-combination',
+    )
 
     // 包进 for-each-target 后完全没有问题
     expect(

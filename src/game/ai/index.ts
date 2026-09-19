@@ -141,8 +141,7 @@ export function chooseCardTargets(
   if (!choice.mustChoose) return []
 
   const harm = cardHarmsChosenTarget(kind, context)
-  const rank = (index: PlayerIndex): number =>
-    harm ? (index === p ? 1 : 0) : index === p ? 0 : 1
+  const rank = (index: PlayerIndex): number => (harm ? (index === p ? 1 : 0) : index === p ? 0 : 1)
   const ranked = [...choice.candidates].sort((a, b) => rank(a) - rank(b) || a - b)
   const size = choice.multi ? choice.size : 1
   return ranked.slice(0, size)
@@ -312,8 +311,12 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
 
   // 3. 体力告急就用【回复】（要付得起能量，且目标要凑得出来）
   if (player.hp <= HEAL_MAX_HP && player.hp < player.maxHp) {
-    const heal = findDirect(state, p, 'recovery', 'use', (option) =>
-      !canTarget(state, p, option.as, 'play'),
+    const heal = findDirect(
+      state,
+      p,
+      'recovery',
+      'use',
+      (option) => !canTarget(state, p, option.as, 'play'),
     )
     if (heal) return asAction(state, p, heal, 'use')
   }
@@ -442,9 +445,7 @@ function cardScore(card: Card): number {
 
 /** 最不值得留的 count 张手牌（发动费用与弃牌阶段共用同一份优先级） */
 function worstCards(hand: Card[], count: number): Card[] {
-  return [...hand]
-    .sort((a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid)
-    .slice(0, count)
+  return [...hand].sort((a, b) => cardScore(a) - cardScore(b) || a.uid - b.uid).slice(0, count)
 }
 
 function decideDiscard(state: GameState, p: PlayerIndex, count: number): Action {

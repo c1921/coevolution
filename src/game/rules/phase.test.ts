@@ -54,7 +54,11 @@ describe('回合阶段模型', () => {
 
   it('一个回合按顺序经过六个阶段，并在阶段前后触发时机', () => {
     const { seen, run } = makeProbe()
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
 
     expect(advanceTurn(state, run)).toBe('pending')
     expect(state.pending).toEqual({ kind: 'play', player: 0 })
@@ -120,7 +124,11 @@ describe('回合阶段模型', () => {
   })
 
   it('跳过阶段：回合开始时重新生成本回合的计划', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     skipPhase(state, 'play')
 
     advanceTurn(state)

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 沙箱内 ~/.npm 不可写，装依赖时用 --cache ./.npm-cache
+.npm-cache
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

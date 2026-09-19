@@ -12,11 +12,7 @@ import {
 } from './rules/cardZones'
 import { killPlayer } from './rules/death'
 import { pushDying } from './rules/dying'
-import {
-  assertEnergyBounds,
-  payEnergy,
-  refillEnergy,
-} from './rules/energy'
+import { assertEnergyBounds, payEnergy, refillEnergy } from './rules/energy'
 import {
   checkActivate,
   checkDiscard,
@@ -103,7 +99,9 @@ export function createGame(options: CreateGameOptions): GameState {
   let rngState = draft.rngState
   if (options.aiSpecies) {
     if (options.aiSpecies === playerSpecies || !SPECIES_IDS.includes(options.aiSpecies)) {
-      throw new RuleError(`AI 选将非法：${options.aiSpecies} 不可选（不能与玩家同种，且必须是已知物种）`)
+      throw new RuleError(
+        `AI 选将非法：${options.aiSpecies} 不可选（不能与玩家同种，且必须是已知物种）`,
+      )
     }
     aiSpecies = options.aiSpecies
   } else {
@@ -117,11 +115,7 @@ export function createGame(options: CreateGameOptions): GameState {
   // 玩家 1 的 uid 从玩家 0 的牌组之后开始分配，保证全局唯一
   const secondDeck = shuffle(buildDeck(aiSpecies, firstDeck.items.length), firstDeck.state)
 
-  const makePlayer = (
-    index: PlayerIndex,
-    species: SpeciesId,
-    deck: Card[],
-  ): PlayerState => ({
+  const makePlayer = (index: PlayerIndex, species: SpeciesId, deck: Card[]): PlayerState => ({
     index,
     species,
     hp: SPECIES[species].maxHp,
@@ -321,10 +315,7 @@ function applyAction(state: GameState, action: Action): void {
  * 开启对抗帧，回复在濒死语境里带 resolve-dying 指令弹出濒死帧。
  * 引擎这里只负责"谁的牌、当作什么、上下文是谁"，不再判断具体牌种。
  */
-function applyUseCard(
-  state: GameState,
-  action: Extract<Action, { kind: 'use-card' }>,
-): void {
+function applyUseCard(state: GameState, action: Extract<Action, { kind: 'use-card' }>): void {
   const pending = state.pending
   if (!pending || (pending.kind !== 'play' && pending.kind !== 'dying')) {
     throw new RuleError('当前不是使用牌的时机')
@@ -370,10 +361,7 @@ function applyUseCard(
 }
 
 /** 打出响应牌抵消对抗：校验 → 付费 → 按文档的 play 变体执行效果，最后记录抵消进度 */
-function applyPlayCard(
-  state: GameState,
-  action: Extract<Action, { kind: 'play-card' }>,
-): void {
+function applyPlayCard(state: GameState, action: Extract<Action, { kind: 'play-card' }>): void {
   const pending = state.pending
   if (!pending || pending.kind !== 'respond') {
     throw new RuleError('当前不是打出响应牌的时机')
@@ -412,10 +400,7 @@ function applyPlayCard(
   }
 }
 
-function applyActivate(
-  state: GameState,
-  action: Extract<Action, { kind: 'activate' }>,
-): void {
+function applyActivate(state: GameState, action: Extract<Action, { kind: 'activate' }>): void {
   const pending = state.pending
   if (!pending || pending.kind !== 'play') throw new RuleError('现在不是你的出牌阶段')
   const p = pending.player
@@ -462,10 +447,7 @@ function applyTriggerChoice(
   runTrigger(state, trigger, { damage: top.ctx })
 }
 
-function applyDiscard(
-  state: GameState,
-  action: Extract<Action, { kind: 'discard-cards' }>,
-): void {
+function applyDiscard(state: GameState, action: Extract<Action, { kind: 'discard-cards' }>): void {
   const pending = state.pending
   if (!pending || pending.kind !== 'discard') throw new RuleError('当前不是弃牌阶段')
   const p = pending.player
@@ -477,10 +459,7 @@ function applyDiscard(
     moveHandToDiscard(state, p, real)
     names.push(plainLabel(real))
   }
-  log(
-    state,
-    `${playerLabel(state, p)} 弃置了 ${action.cards.length} 张手牌：${names.join('、')}`,
-  )
+  log(state, `${playerLabel(state, p)} 弃置了 ${action.cards.length} 张手牌：${names.join('、')}`)
   // 弃牌阶段的效果已完成，交回回合循环执行「阶段结束时」
   finishPhaseBody(state)
 }

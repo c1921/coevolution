@@ -163,12 +163,7 @@ const PROBES: Record<Channel, () => void> = {
       aiSpecies: 'defensive',
       playerHp: 3,
       phase: 'discard',
-      playerHand: [
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-      ],
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     } as const
 
     const base = makeState({ ...options, playerHand: [...options.playerHand] })

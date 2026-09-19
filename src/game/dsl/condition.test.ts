@@ -116,9 +116,7 @@ describe('条件求值', () => {
     env.ctx.usedCard = { as: 'strike', source: card, via: 'convert' }
     expect(evalCondition(env, { kind: 'card-transformed' })).toBe(true)
 
-    expect(
-      evalCondition(env, { kind: 'picked-count', atLeast: CONST(1) }),
-    ).toBe(false)
+    expect(evalCondition(env, { kind: 'picked-count', atLeast: CONST(1) })).toBe(false)
     env.ctx.picked = [card.uid]
     expect(evalCondition(env, { kind: 'picked-count', atLeast: CONST(1) })).toBe(true)
     expect(evalCondition(env, { kind: 'picked-count', atLeast: CONST(2) })).toBe(false)

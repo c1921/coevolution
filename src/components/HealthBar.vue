@@ -9,9 +9,7 @@ defineProps<{ hp: number; maxHp: number }>()
       :key="i"
       class="h-3 w-3 rounded-full border"
       :class="
-        i <= Math.max(0, hp)
-          ? 'border-ember-600 bg-ember-400'
-          : 'border-table-600 bg-table-800'
+        i <= Math.max(0, hp) ? 'border-ember-600 bg-ember-400' : 'border-table-600 bg-table-800'
       "
     />
     <span class="ml-1 text-xs text-ink-500">{{ Math.max(0, hp) }}/{{ maxHp }}</span>

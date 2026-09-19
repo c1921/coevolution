@@ -101,7 +101,10 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
 
     const card = gameState.value.players[0].hand[0]!
     pickCard(card.uid)
-    submitOption(card, legalOptions(card).find((o) => o.as === 'first-aid')!)
+    submitOption(
+      card,
+      legalOptions(card).find((o) => o.as === 'first-aid')!,
+    )
 
     const html = await renderApp()
     expect(html).toContain(`使用【${CARD_NAME['first-aid']}】`)

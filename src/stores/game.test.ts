@@ -162,12 +162,7 @@ describe('界面状态与驱动循环', () => {
       aiSpecies: 'defensive',
       playerHp: 2,
       phase: 'discard',
-      playerHand: [
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-      ],
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
     // 手牌上限 = 当前体力 = 2 → 需要弃 2 张
     advance(state)
@@ -366,9 +361,7 @@ describe('界面状态与驱动循环', () => {
     expect(store.errorMessage.value).toBeNull()
     expect(store.pendingTarget.value).toMatchObject({ kind: 'card', as: 'first-aid' })
     expect(state.players[1].hp).toBe(2) // 还没结算
-    expect(
-      store.pendingTargetOptions.value.map((o) => [o.index, o.selectable]),
-    ).toEqual([
+    expect(store.pendingTargetOptions.value.map((o) => [o.index, o.selectable])).toEqual([
       [0, true],
       [1, true],
     ])

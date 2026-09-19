@@ -2,13 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { shuffle } from '../rng'
 import { speciesDoc } from '../dsl/registry'
 import { SPECIES_IDS } from './species'
-import {
-  buildDeck,
-  DECK_SIZE,
-  speciesDeck,
-  speciesDeckSize,
-  totalDeckSize,
-} from './deck'
+import { buildDeck, DECK_SIZE, speciesDeck, speciesDeckSize, totalDeckSize } from './deck'
 import type { SpeciesId } from '../types'
 
 /** 某个物种牌组的牌种计数（kind → 张数） */

@@ -1,0 +1,17 @@
+# 生成物与产物
+dist
+node_modules
+.npm-cache
+
+# schema.json 由 src/game/dsl/schema.ts 生成，schema.test.ts 逐字节比对，不能被格式化重排
+src/game/data/dsl/schema.json
+
+# 锁文件与文档不参与格式化
+package-lock.json
+README.md
+docs
+AGENTS.md
+.agents
+
+# 牌面是 JSON 内容文档，格式由内容作者与 schema.test.ts 决定
+src/game/data/dsl/**/*.json

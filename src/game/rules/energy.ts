@@ -54,11 +54,7 @@ export function canPayEnergy(state: GameState, p: PlayerIndex, as: CardKind): bo
 }
 
 /** 能量不足时的中文说明（合法性判定与引擎守卫共用同一份文案） */
-export function shortfallReason(
-  state: GameState,
-  p: PlayerIndex,
-  as: CardKind,
-): string {
+export function shortfallReason(state: GameState, p: PlayerIndex, as: CardKind): string {
   return `能量不足：使用【${CARD_DEFS[as].name}】需要 ${energyCost(state, p, as)} 点能量（当前 ${state.players[p].energy} 点）`
 }
 

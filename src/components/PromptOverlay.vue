@@ -51,11 +51,7 @@ const targetHint = computed(() => {
         <div v-for="option in pendingTargetOptions" :key="option.index">
           <button
             :class="[
-              option.selectable
-                ? chosenTargets.includes(option.index)
-                  ? BTN
-                  : BTN_PRIMARY
-                : BTN,
+              option.selectable ? (chosenTargets.includes(option.index) ? BTN : BTN_PRIMARY) : BTN,
               'w-full',
             ]"
             :disabled="!option.selectable"

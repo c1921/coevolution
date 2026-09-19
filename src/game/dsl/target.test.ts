@@ -171,12 +171,21 @@ describe('多目标选取', () => {
 
   it('exactly：必须显式指定恰好 N 个互不重复的目标', () => {
     const env = envOf('offensive', 'defensive')
-    expect(resolveTargetChoices(env, exactly(2))).toEqual({ ok: false, reason: '必须指定 2 个目标' })
+    expect(resolveTargetChoices(env, exactly(2))).toEqual({
+      ok: false,
+      reason: '必须指定 2 个目标',
+    })
     expect(resolveTargetChoices(env, exactly(2), [0, 1])).toEqual({ ok: true, targets: [0, 1] })
     // 目标顺序按玩家指定的顺序保留（for-each-target 会照此结算）
     expect(resolveTargetChoices(env, exactly(2), [1, 0])).toEqual({ ok: true, targets: [1, 0] })
-    expect(resolveTargetChoices(env, exactly(2), [0, 0])).toEqual({ ok: false, reason: '目标有重复' })
-    expect(resolveTargetChoices(env, exactly(2), [0])).toEqual({ ok: false, reason: '必须指定 2 个目标' })
+    expect(resolveTargetChoices(env, exactly(2), [0, 0])).toEqual({
+      ok: false,
+      reason: '目标有重复',
+    })
+    expect(resolveTargetChoices(env, exactly(2), [0])).toEqual({
+      ok: false,
+      reason: '必须指定 2 个目标',
+    })
   })
 
   it('exactly：候选不足时明确报「不足」', () => {
@@ -190,7 +199,10 @@ describe('多目标选取', () => {
 
   it('exactly 1 等价于「必须指定一个目标」', () => {
     const env = envOf('offensive', 'defensive')
-    expect(resolveTargetChoices(env, exactly(1))).toEqual({ ok: false, reason: '必须指定 1 个目标' })
+    expect(resolveTargetChoices(env, exactly(1))).toEqual({
+      ok: false,
+      reason: '必须指定 1 个目标',
+    })
     expect(resolveTargetChoices(env, exactly(1), [1])).toEqual({ ok: true, targets: [1] })
   })
 
@@ -210,7 +222,10 @@ describe('多目标选取', () => {
       ],
     }
     const bothWounded = envOf('counter', 'defensive', { playerHp: 2, aiHp: 2 })
-    expect(resolveTargetChoices(bothWounded, wounded, [0, 1])).toEqual({ ok: true, targets: [0, 1] })
+    expect(resolveTargetChoices(bothWounded, wounded, [0, 1])).toEqual({
+      ok: true,
+      targets: [0, 1],
+    })
     expect(resolveTargetChoices(bothWounded, wounded, [0])).toEqual({
       ok: false,
       reason: '必须指定 2 个目标',

@@ -35,7 +35,13 @@ function isObj(value: unknown): value is Record<string, unknown> {
 }
 
 /** 迷你 JSON Schema 校验器：支持 $ref / oneOf / type / const / enum / required / items / additionalProperties / propertyNames */
-function check(schema: Schema, defs: Record<string, Schema>, value: unknown, path: string, errors: string[]): boolean {
+function check(
+  schema: Schema,
+  defs: Record<string, Schema>,
+  value: unknown,
+  path: string,
+  errors: string[],
+): boolean {
   if (typeof schema.$ref === 'string') {
     const name = schema.$ref.replace('#/$defs/', '')
     const target = defs[name]
@@ -75,7 +81,7 @@ function check(schema: Schema, defs: Record<string, Schema>, value: unknown, pat
       return false
     }
     const properties = (schema.properties ?? {}) as Record<string, Schema>
-    for (const key of schema.required as string[] | undefined ?? []) {
+    for (const key of (schema.required as string[] | undefined) ?? []) {
       if (!(key in value)) errors.push(`${path}: 缺少必填字段 ${key}`)
     }
     for (const [key, item] of Object.entries(value)) {

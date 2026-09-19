@@ -13,7 +13,8 @@ const emit = defineEmits<{ pick: [species: SpeciesId] }>()
       <h1 class="text-3xl font-bold text-ink-100">选择出战代号</h1>
       <p class="mt-2 text-sm text-ink-300">
         从随机抽取的 3 个代号中选 1 个出战；AI 会从其余代号中随机选 1 个。
-      </p>    </header>
+      </p>
+    </header>
 
     <div class="grid gap-4 sm:grid-cols-3">
       <article

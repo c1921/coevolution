@@ -189,11 +189,7 @@ function stepTurnTiming(
 }
 
 /** 六个阶段：阶段开始时 → 阶段进行 → 阶段结束时 */
-function stepPhase(
-  state: GameState,
-  phase: TurnPhase,
-  run: TimingRunner,
-): 'pending' | 'done' {
+function stepPhase(state: GameState, phase: TurnPhase, run: TimingRunner): 'pending' | 'done' {
   switch (state.phaseStage) {
     case 'start': {
       state.phaseStage = 'body'

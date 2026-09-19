@@ -15,9 +15,7 @@ describe('使用次数记录', () => {
   it('按角色、按牌名分别计数', () => {
     const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' })
     // 记录表按当前牌种派生（新增牌种自动计入，不需要改这里）
-    expect(newCardUseRecord()).toEqual(
-      Object.fromEntries(cardIds().map((id) => [id, 0])),
-    )
+    expect(newCardUseRecord()).toEqual(Object.fromEntries(cardIds().map((id) => [id, 0])))
 
     recordCardUse(state, 0, 'strike')
     recordCardUse(state, 0, 'heal')

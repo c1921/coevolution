@@ -33,9 +33,7 @@ describe('常驻型技能', () => {
           id: 'charge',
           name: '蓄能',
           text: '你每回合的能量上限 +1。',
-          modifiers: [
-            { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 1 } },
-          ],
+          modifiers: [{ channel: 'energy-max', op: 'add', value: { kind: 'const', value: 1 } }],
         },
       },
     ])

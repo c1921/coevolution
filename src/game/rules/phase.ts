@@ -100,4 +100,3 @@ export function sameTiming(a: Timing, b: Timing): boolean {
   if (a.at === 'phase-end' && b.at === 'phase-end') return a.phase === b.phase
   return true
 }
-

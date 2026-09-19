@@ -108,9 +108,7 @@ describe('引擎不变式（AI 自对局）', () => {
 
     expect(second.steps).toBe(first.steps)
     expect(second.state.result).toEqual(first.state.result)
-    expect(second.state.log.map((e) => e.text)).toEqual(
-      first.state.log.map((e) => e.text),
-    )
+    expect(second.state.log.map((e) => e.text)).toEqual(first.state.log.map((e) => e.text))
   })
 
   it('战报覆盖完整流程：回合开始、摸牌、出牌、阵亡、获胜', () => {
@@ -201,7 +199,11 @@ describe('私有牌组', () => {
       expect(all).toHaveLength(DECK_SIZE)
       // 牌组的牌种构成与物种牌组一致（暂时所有物种共用同一套）
       const kinds = all.map((c) => c.kind).sort()
-      expect(kinds).toEqual(buildDeck(player.species).map((c) => c.kind).sort())
+      expect(kinds).toEqual(
+        buildDeck(player.species)
+          .map((c) => c.kind)
+          .sort(),
+      )
     }
 
     const uids = [
@@ -282,7 +284,9 @@ describe('私有牌组', () => {
       submit(state, { kind: 'trigger-choice', accept: true })
 
       const poolOf = (p: 0 | 1) =>
-        state.players[p].deck.length + state.players[p].discard.length + state.players[p].hand.length
+        state.players[p].deck.length +
+        state.players[p].discard.length +
+        state.players[p].hand.length
       // 反击型拿走了进攻型的一张牌：自己 21 张，进攻型只剩下 19 张
       expect(poolOf(1)).toBe(DECK_SIZE + 1)
       expect(poolOf(0)).toBe(DECK_SIZE - 1)

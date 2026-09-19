@@ -19,10 +19,7 @@ export interface CardOption {
 }
 
 /** 按钮文案：「使用【打击】（强袭）」 */
-export function optionLabel(
-  option: CardOption,
-  verb: '使用' | '打出' | '当',
-): string {
+export function optionLabel(option: CardOption, verb: '使用' | '打出' | '当'): string {
   if (option.via) {
     return `${verb}【${CARD_NAME[option.as]}】（${skillDef(option.via).name}）`
   }
@@ -33,7 +30,9 @@ export function optionLabel(
 function hasOwnVariant(kind: CardKind, context: 'use' | 'play'): boolean {
   const doc = cardDoc(kind)
   if (context === 'play') return doc.play !== undefined
-  return (doc.use ?? []).some((variant) => variant.context === 'play' || variant.context === 'dying')
+  return (doc.use ?? []).some(
+    (variant) => variant.context === 'play' || variant.context === 'dying',
+  )
 }
 
 /**
@@ -113,11 +112,7 @@ export function dyingUsableLabel(): string {
  * 发动某个主动技需要先选定并弃置的手牌数（0 表示不需要选牌）。
  * 界面据此提示"先点选 N 张手牌"，校验与结算也用它取同一份数值。
  */
-export function activationCostCards(
-  state: GameState,
-  p: PlayerIndex,
-  skill: SkillId,
-): number {
+export function activationCostCards(state: GameState, p: PlayerIndex, skill: SkillId): number {
   const activate = skillDoc(skill).activate
   if (!activate?.costCards) return 0
   const env = { state, ctx: baseContext(state, p) }

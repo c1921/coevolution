@@ -56,9 +56,7 @@ describe('死亡与胜负结算', () => {
   it('终局后不再接受任何动作', () => {
     const state = killAi()
     expect(() => submit(state, { kind: 'end-phase' })).toThrow('对局已经结束')
-    expect(() =>
-      submit(state, { kind: 'trigger-choice', accept: true }),
-    ).toThrow('对局已经结束')
+    expect(() => submit(state, { kind: 'trigger-choice', accept: true })).toThrow('对局已经结束')
   })
 
   it('终局后状态保持稳定', () => {

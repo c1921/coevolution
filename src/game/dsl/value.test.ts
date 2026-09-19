@@ -93,8 +93,12 @@ describe('修正通道', () => {
     expect(channelValue(offensive, 'energy-max', 0)).toBe(3)
     expect(modifierValue(defensive, 'energy-max', 0)).toBe(5)
     // 自身数值 energyMax 走同一通道
-    expect(evalValue({ state: defensive, ctx: baseContext(defensive, 0) }, { kind: 'ref', ref: 'energyMax' }))
-      .toBe(5)
+    expect(
+      evalValue(
+        { state: defensive, ctx: baseContext(defensive, 0) },
+        { kind: 'ref', ref: 'energyMax' },
+      ),
+    ).toBe(5)
   })
 
   it('没有技能修正时 threat-per-attack 取基准值 1', () => {

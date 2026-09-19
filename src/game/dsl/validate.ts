@@ -83,14 +83,7 @@ type Obj = Record<string, unknown>
 
 /** 效果所处的语境，决定可用角色与允许的指令 */
 type EffectContext =
-  | 'activate'
-  | 'use-play'
-  | 'use-dying'
-  | 'play'
-  | 'trigger'
-  | 'contest'
-  | 'rule'
-  | 'modifier'
+  'activate' | 'use-play' | 'use-dying' | 'play' | 'trigger' | 'contest' | 'rule' | 'modifier'
 
 const CONTEXT_ROLES: Record<EffectContext, readonly RoleRef[]> = {
   activate: ['self', 'target', 'active', 'opponent'],
@@ -233,13 +226,7 @@ function asObj(v: unknown): Obj | undefined {
 }
 
 /** 非空字符串字段 */
-function checkText(
-  node: Obj,
-  key: string,
-  path: string,
-  issues: Issue[],
-  required = true,
-): void {
+function checkText(node: Obj, key: string, path: string, issues: Issue[], required = true): void {
   const value = node[key]
   if (value === undefined && !required) return
   if (typeof value !== 'string' || value.length === 0) {
@@ -248,13 +235,7 @@ function checkText(
 }
 
 /** 非负整数字段 */
-function checkCount(
-  node: Obj,
-  key: string,
-  path: string,
-  issues: Issue[],
-  min = 0,
-): void {
+function checkCount(node: Obj, key: string, path: string, issues: Issue[], min = 0): void {
   const value = node[key]
   if (value === undefined) return
   const num = asNumber(value)
@@ -335,12 +316,7 @@ const VALUE_KEYS: Record<string, string[]> = {
   channel: ['kind', 'channel', 'of'],
 }
 
-function checkValue(
-  node: unknown,
-  path: string,
-  roles: readonly RoleRef[],
-  issues: Issue[],
-): void {
+function checkValue(node: unknown, path: string, roles: readonly RoleRef[], issues: Issue[]): void {
   const obj = asObj(node)
   if (!obj) {
     push(issues, path, 'bad-type', '数值表达式必须是对象')
@@ -504,7 +480,12 @@ const EFFECT_KEYS: Record<string, string[]> = {
   if: ['kind', 'condition', 'then', 'else'],
 }
 
-function checkLogTemplate(template: unknown, path: string, roles: readonly RoleRef[], issues: Issue[]): void {
+function checkLogTemplate(
+  template: unknown,
+  path: string,
+  roles: readonly RoleRef[],
+  issues: Issue[],
+): void {
   if (typeof template !== 'string' || template.length === 0) {
     push(issues, path, 'bad-type', 'template 必须是非空字符串')
     return
@@ -533,7 +514,12 @@ function checkLogTemplate(template: unknown, path: string, roles: readonly RoleR
       }
     }
     if (isPlayer && !roles.includes(root as RoleRef)) {
-      push(issues, path, 'unknown-role', `当前语境不允许占位符 {${root}}（可用：${roles.join(' / ')}）`)
+      push(
+        issues,
+        path,
+        'unknown-role',
+        `当前语境不允许占位符 {${root}}（可用：${roles.join(' / ')}）`,
+      )
     }
   }
 }
@@ -676,7 +662,6 @@ function checkEffect(
   }
 }
 
-
 function checkMoveCards(
   obj: Obj,
   path: string,
@@ -691,7 +676,13 @@ function checkMoveCards(
       push(issues, `${path}#/${side}`, 'bad-type', `${side} 必须是牌区对象`)
       continue
     }
-    checkKeys(zone, `${path}#/${side}`, DOC_FIELDS.zoneRef.allowed, DOC_FIELDS.zoneRef.required, issues)
+    checkKeys(
+      zone,
+      `${path}#/${side}`,
+      DOC_FIELDS.zoneRef.allowed,
+      DOC_FIELDS.zoneRef.required,
+      issues,
+    )
     const zoneName = checkEnum(zone, 'zone', MOVE_ZONES, `${path}#/${side}`, issues)
     optionalRole(zone, 'of', roles, `${path}#/${side}`, issues)
     void zoneName
@@ -752,7 +743,6 @@ function checkMoveCards(
 }
 
 // ------------------------------------------------------- 目标 / 修正 / 转化
-
 
 function checkTarget(
   node: unknown,
@@ -1033,12 +1023,24 @@ function checkDoc(raw: RawDoc, issues: Issue[], refs: Ref[], seenIds: Set<string
   const path = raw.path
   if (!isObj(raw.value)) {
     push(issues, path, 'bad-type', '文档必须是 JSON 对象')
-    return { dslVersion: DSL_VERSION, kind: 'rule', id: path, on: { at: 'turn-start' }, effects: [] }
+    return {
+      dslVersion: DSL_VERSION,
+      kind: 'rule',
+      id: path,
+      on: { at: 'turn-start' },
+      effects: [],
+    }
   }
   const node = raw.value
   const kind = checkEnum(node, 'kind', DOC_KINDS, path, issues, 'unknown-kind')
   if (!kind) {
-    return { dslVersion: DSL_VERSION, kind: 'rule', id: path, on: { at: 'turn-start' }, effects: [] }
+    return {
+      dslVersion: DSL_VERSION,
+      kind: 'rule',
+      id: path,
+      on: { at: 'turn-start' },
+      effects: [],
+    }
   }
 
   if (node.dslVersion !== DSL_VERSION) {
@@ -1092,7 +1094,8 @@ function checkSpecies(node: Obj, path: string, issues: Issue[], refs: Ref[]): vo
     push(issues, `${path}#/skills`, 'bad-type', 'skills 必须是数组')
   } else {
     skills.forEach((item, i) => {
-      if (typeof item === 'string') refs.push({ path: `${path}#/skills/${i}`, type: 'skill', id: item })
+      if (typeof item === 'string')
+        refs.push({ path: `${path}#/skills/${i}`, type: 'skill', id: item })
       else push(issues, `${path}#/skills/${i}`, 'bad-type', '技能引用必须是字符串 id')
     })
   }
@@ -1111,7 +1114,12 @@ function checkSkill(node: Obj, path: string, issues: Issue[], refs: Ref[]): void
     node.trigger !== undefined ||
     node.activate !== undefined
   if (!hasParts) {
-    push(issues, path, 'bad-combination', '技能必须至少声明 modifiers / transforms / trigger / activate 之一')
+    push(
+      issues,
+      path,
+      'bad-combination',
+      '技能必须至少声明 modifiers / transforms / trigger / activate 之一',
+    )
   }
 
   if (node.modifiers !== undefined) {
@@ -1210,7 +1218,13 @@ function checkActivate(node: unknown, path: string, issues: Issue[], refs: Ref[]
     if (!cost) {
       push(issues, `${path}#/costCards`, 'bad-type', 'costCards 必须是对象')
     } else {
-      checkKeys(cost, `${path}#/costCards`, DOC_FIELDS.costCards.allowed, DOC_FIELDS.costCards.required, issues)
+      checkKeys(
+        cost,
+        `${path}#/costCards`,
+        DOC_FIELDS.costCards.allowed,
+        DOC_FIELDS.costCards.required,
+        issues,
+      )
       checkValue(cost.count, `${path}#/costCards#/count`, ['self'], issues)
       const cardKind = asString(cost.cardKind)
       if (cardKind) refs.push({ path: `${path}#/costCards#/cardKind`, type: 'card', id: cardKind })
@@ -1332,12 +1346,24 @@ function checkCard(node: Obj, path: string, issues: Issue[], refs: Ref[]): void 
     if (!play) {
       push(issues, `${path}#/play`, 'bad-type', 'play 必须是对象')
     } else {
-      checkKeys(play, `${path}#/play`, DOC_FIELDS.playVariant.allowed, DOC_FIELDS.playVariant.required, issues)
+      checkKeys(
+        play,
+        `${path}#/play`,
+        DOC_FIELDS.playVariant.allowed,
+        DOC_FIELDS.playVariant.required,
+        issues,
+      )
       const respondsTo = asString(play.respondsTo)
       if (respondsTo) refs.push({ path: `${path}#/play#/respondsTo`, type: 'card', id: respondsTo })
       else push(issues, `${path}#/play#/respondsTo`, 'bad-type', 'respondsTo 必须是牌种 id')
       if (play.requires !== undefined) {
-        checkConditionList(play.requires, `${path}#/play#/requires`, CONTEXT_ROLES.play, issues, refs)
+        checkConditionList(
+          play.requires,
+          `${path}#/play#/requires`,
+          CONTEXT_ROLES.play,
+          issues,
+          refs,
+        )
       }
       checkEffects(play.effects, `${path}#/play#/effects`, 'play', issues, refs)
     }
@@ -1412,9 +1438,7 @@ function resolveRefs(docs: Doc[], refs: Ref[], issues: Issue[]): void {
     if (doc.kind === 'card') ids.card.add(doc.id)
     if (doc.kind === 'deck') ids.deck.add(doc.id)
   }
-  const cardDocs = new Map(
-    docs.filter((doc) => doc.kind === 'card').map((doc) => [doc.id, doc]),
-  )
+  const cardDocs = new Map(docs.filter((doc) => doc.kind === 'card').map((doc) => [doc.id, doc]))
   for (const ref of refs) {
     if (!ids[ref.type].has(ref.id)) {
       push(issues, ref.path, 'unknown-ref', `引用了不存在的${refLabel(ref.type)} ${ref.id}`)

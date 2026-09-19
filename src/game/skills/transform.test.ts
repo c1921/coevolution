@@ -109,9 +109,7 @@ describe('转化由文档描述', () => {
           name: '蓄能',
           text: '你每回合的能量上限 +2；你可以将【回复】当【打击】使用。',
           // 保留原有的能量修正，否则换掉文档后 defensive 的能量上限会从 5 变回 3
-          modifiers: [
-            { channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } },
-          ],
+          modifiers: [{ channel: 'energy-max', op: 'add', value: { kind: 'const', value: 2 } }],
           transforms: [{ from: 'heal', to: 'strike', contexts: ['use'] }],
         },
       },

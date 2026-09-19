@@ -163,7 +163,11 @@ describe('回合流程', () => {
   })
 
   it('回合切换会交换行动方并递增回合数', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-end' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-end',
+    })
     advanceTurn(state)
     expect(state.active).toBe(1)
     expect(state.turn).toBe(2)
@@ -179,7 +183,11 @@ describe('回合流程', () => {
   })
 
   it('回合开始时若回合角色已阵亡，则兜底判定对手获胜', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     state.players[0].alive = false
 
     expect(advanceTurn(state)).toBe('over')
@@ -199,7 +207,11 @@ describe('消耗战（终止规则）', () => {
   })
 
   it('消耗战回合开始时回合角色失去体力，并进入濒死结算', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     state.turn = ATTRITION_TURN
     state.active = 0
     state.players[0].hp = 1
@@ -278,7 +290,11 @@ describe('规范额度', () => {
   })
 
   it('消耗战挂在「回合开始时」时机：先失去体力，再进行摸牌阶段', () => {
-    const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     state.turn = ATTRITION_TURN
 
     advance(state)
@@ -295,7 +311,11 @@ describe('规范额度', () => {
   it('消耗战的行为数值与 rules/attrition.json 一致', () => {
     // 常量只用于界面提示与断言，真正的行为在 DSL 规则文档里；这里把两者钉在一起
     for (const turn of [ATTRITION_TURN, ATTRITION_TURN + ATTRITION_STEP, ATTRITION_TURN + 11]) {
-      const state = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+      const state = makeState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'defensive',
+        phase: 'turn-start',
+      })
       state.turn = turn
       state.active = 0
       applyTimingRules(state, { at: 'turn-start' })
@@ -303,7 +323,11 @@ describe('规范额度', () => {
     }
 
     // 消耗战之前不扣体力
-    const early = makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive', phase: 'turn-start' })
+    const early = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
     early.turn = ATTRITION_TURN - 1
     applyTimingRules(early, { at: 'turn-start' })
     expect(early.players[early.active].hp).toBe(early.players[early.active].maxHp)

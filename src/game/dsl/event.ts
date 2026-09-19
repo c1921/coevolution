@@ -26,11 +26,7 @@ export interface EventPayload {
 }
 
 /** 时机语境：self = 技能归属者（规则效果为当前回合角色） */
-function contextFor(
-  state: GameState,
-  self: PlayerIndex,
-  payload?: EventPayload,
-): EffectContext {
+function contextFor(state: GameState, self: PlayerIndex, payload?: EventPayload): EffectContext {
   return {
     ...baseContext(state, self),
     target: payload?.damage?.target,
@@ -69,11 +65,7 @@ export function collectTriggers(
 }
 
 /** 执行一条技能触发 */
-export function runTrigger(
-  state: GameState,
-  ref: TriggerRef,
-  payload?: EventPayload,
-): void {
+export function runTrigger(state: GameState, ref: TriggerRef, payload?: EventPayload): void {
   const trigger = skillDoc(ref.skill).trigger
   if (!trigger) throw new RuleError(`技能 ${ref.skill} 没有 trigger 定义`)
   const ctx = contextFor(state, ref.owner, payload)

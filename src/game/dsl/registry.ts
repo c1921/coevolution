@@ -59,7 +59,8 @@ export function createRegistry(raws: { path: string; value: unknown }[]): Regist
   const rules = order(docs.filter((doc): doc is RuleDoc => doc.kind === 'rule'))
   const rulesets = docs.filter((doc): doc is RulesetDoc => doc.kind === 'ruleset')
   const ruleset = rulesets[0]
-  if (!ruleset) throw new DslLoadError([{ path: '/', code: 'missing-field', message: '缺少 ruleset' }])
+  if (!ruleset)
+    throw new DslLoadError([{ path: '/', code: 'missing-field', message: '缺少 ruleset' }])
 
   const skillById = indexById(skills)
   const speciesById = indexById(species)

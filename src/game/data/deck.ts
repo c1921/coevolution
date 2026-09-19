@@ -15,9 +15,7 @@ import type { Card, CardKind, SpeciesId } from '../types'
 
 /** 把一个牌组文档展开成牌种序列 */
 function expandDeck(doc: DeckDoc): CardKind[] {
-  return doc.cards.flatMap((entry) =>
-    Array.from({ length: entry.count }, () => entry.kind),
-  )
+  return doc.cards.flatMap((entry) => Array.from({ length: entry.count }, () => entry.kind))
 }
 
 /** 某个物种私有牌组的牌种序列（返回副本，避免调用方改到牌表本身） */

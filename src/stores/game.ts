@@ -12,11 +12,7 @@ import { skillDoc } from '../game/dsl/registry'
 import { baseContext } from '../game/dsl/runtime'
 import type { UseContext } from '../game/dsl/kinds'
 import type { TargetSpec } from '../game/dsl/types'
-import {
-  targetCandidates,
-  targetFailureReason,
-  targetScopeMembers,
-} from '../game/dsl/target'
+import { targetCandidates, targetFailureReason, targetScopeMembers } from '../game/dsl/target'
 import {
   activationCostCards,
   activationTargetChoice,
@@ -114,7 +110,7 @@ export function act(action: Action): void {
     errorMessage.value = null
     selected.value = []
     pendingTarget.value = null
-  chosenTargets.value = []
+    chosenTargets.value = []
     pump()
   } catch (error) {
     errorMessage.value = error instanceof RuleError ? error.message : String(error)
@@ -192,9 +188,7 @@ export const humanSkills = computed<SkillId[]>(() => {
 })
 
 /** 双方各自的私有牌组剩余张数（牌组私有化后不再有公共牌堆） */
-export const humanDeckCount = computed(
-  () => gameState.value?.players[HUMAN].deck.length ?? 0,
-)
+export const humanDeckCount = computed(() => gameState.value?.players[HUMAN].deck.length ?? 0)
 export const opponentDeckCount = computed(
   () => gameState.value?.players[AI_PLAYER].deck.length ?? 0,
 )

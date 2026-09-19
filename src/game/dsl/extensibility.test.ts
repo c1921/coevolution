@@ -16,60 +16,60 @@ describe('扩展性：新增内容不需要改代码', () => {
   it('新增一个主动技（含费用、目标、限一次）即可端到端生效', () => {
     const synthetic = contentWith([
       {
-          path: 'skills/bloom.json',
-          value: {
-            dslVersion: 1,
-            kind: 'skill',
-            id: 'bloom',
-            name: '绽放',
-            text: '出牌阶段限一次：弃一张手牌，令一名已受伤的角色回复 2 点体力。',
-            activate: {
-              timing: 'play',
-              oncePerTurn: true,
-              costCards: { count: { kind: 'const', value: 1 } },
-              target: {
-                scope: 'any',
-                required: false,
-                default: 'self',
-                alive: true,
-                conditions: [
-                  {
-                    kind: 'compare',
-                    op: 'lt',
-                    left: { kind: 'ref', ref: 'hp', of: 'target' },
-                    right: { kind: 'ref', ref: 'maxHp', of: 'target' },
-                    reason: '目标体力已满',
-                  },
-                ],
-              },
-              effects: [
+        path: 'skills/bloom.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'bloom',
+          name: '绽放',
+          text: '出牌阶段限一次：弃一张手牌，令一名已受伤的角色回复 2 点体力。',
+          activate: {
+            timing: 'play',
+            oncePerTurn: true,
+            costCards: { count: { kind: 'const', value: 1 } },
+            target: {
+              scope: 'any',
+              required: false,
+              default: 'self',
+              alive: true,
+              conditions: [
                 {
-                  kind: 'move-cards',
-                  from: { zone: 'hand', of: 'self' },
-                  to: { zone: 'discard', of: 'self' },
-                  pick: { mode: 'cost' },
+                  kind: 'compare',
+                  op: 'lt',
+                  left: { kind: 'ref', ref: 'hp', of: 'target' },
+                  right: { kind: 'ref', ref: 'maxHp', of: 'target' },
+                  reason: '目标体力已满',
                 },
-                { kind: 'record-skill-use', skill: 'bloom' },
-                { kind: 'heal', target: 'target', amount: { kind: 'const', value: 2 } },
-                { kind: 'log', template: '{self} 发动【绽放】，回复 2 点体力' },
               ],
             },
+            effects: [
+              {
+                kind: 'move-cards',
+                from: { zone: 'hand', of: 'self' },
+                to: { zone: 'discard', of: 'self' },
+                pick: { mode: 'cost' },
+              },
+              { kind: 'record-skill-use', skill: 'bloom' },
+              { kind: 'heal', target: 'target', amount: { kind: 'const', value: 2 } },
+              { kind: 'log', template: '{self} 发动【绽放】，回复 2 点体力' },
+            ],
           },
         },
+      },
       // 试验型改用新技能
       {
         path: 'species/probe.json',
-          value: {
-            dslVersion: 1,
-            kind: 'species',
-            id: 'probe',
-            priority: 50,
-            name: '试验型',
-            maxHp: 3,
-            skills: ['bloom'],
-            deck: 'basic',
-          },
+        value: {
+          dslVersion: 1,
+          kind: 'species',
+          id: 'probe',
+          priority: 50,
+          name: '试验型',
+          maxHp: 3,
+          skills: ['bloom'],
+          deck: 'basic',
         },
+      },
     ])
 
     // 牌组与技能都取自当前注册表，因此状态也要在同一份注册表下构造
@@ -94,55 +94,55 @@ describe('扩展性：新增内容不需要改代码', () => {
     const synthetic = contentWith([
       {
         path: 'cards/smite.json',
-          value: {
-            dslVersion: 1,
-            kind: 'card',
-            id: 'smite',
-            name: '重击',
-            short: '令对方获得 3 点威胁',
-            text: '消耗 1 点能量：令对方获得 3 点威胁。',
-            cost: { kind: 'const', value: 1 },
-            use: [
-              {
-                context: 'play',
-                target: { scope: 'opponent', required: false, alive: true, range: true },
-                effects: [
-                  {
-                    kind: 'move-cards',
-                    from: { zone: 'hand', of: 'self' },
-                    to: { zone: 'discard', of: 'self' },
-                    pick: { mode: 'played' },
-                  },
-                  { kind: 'record-card-use', of: 'self', cardKind: 'smite' },
-                  { kind: 'log', template: '{self} 对 {target} 使用{usedAs}' },
-                  {
-                    kind: 'threat',
-                    target: 'target',
-                    amount: { kind: 'const', value: 3 },
-                  },
-                ],
-              },
-            ],
-          },
+        value: {
+          dslVersion: 1,
+          kind: 'card',
+          id: 'smite',
+          name: '重击',
+          short: '令对方获得 3 点威胁',
+          text: '消耗 1 点能量：令对方获得 3 点威胁。',
+          cost: { kind: 'const', value: 1 },
+          use: [
+            {
+              context: 'play',
+              target: { scope: 'opponent', required: false, alive: true, range: true },
+              effects: [
+                {
+                  kind: 'move-cards',
+                  from: { zone: 'hand', of: 'self' },
+                  to: { zone: 'discard', of: 'self' },
+                  pick: { mode: 'played' },
+                },
+                { kind: 'record-card-use', of: 'self', cardKind: 'smite' },
+                { kind: 'log', template: '{self} 对 {target} 使用{usedAs}' },
+                {
+                  kind: 'threat',
+                  target: 'target',
+                  amount: { kind: 'const', value: 3 },
+                },
+              ],
+            },
+          ],
         },
-        // 牌组里加入新牌（守恒校验会自动按新构成计算）
-        {
-          path: 'decks/aggressive.json',
-          value: {
-            dslVersion: 1,
-            kind: 'deck',
-            id: 'aggressive',
-            priority: 20,
-            cards: [
-              { kind: 'strike', count: 10 },
-              { kind: 'defend', count: 5 },
-              { kind: 'heal', count: 2 },
-              { kind: 'first-aid', count: 1 },
-              { kind: 'storm', count: 1 },
-              { kind: 'smite', count: 1 },
-            ],
-          },
+      },
+      // 牌组里加入新牌（守恒校验会自动按新构成计算）
+      {
+        path: 'decks/aggressive.json',
+        value: {
+          dslVersion: 1,
+          kind: 'deck',
+          id: 'aggressive',
+          priority: 20,
+          cards: [
+            { kind: 'strike', count: 10 },
+            { kind: 'defend', count: 5 },
+            { kind: 'heal', count: 2 },
+            { kind: 'first-aid', count: 1 },
+            { kind: 'storm', count: 1 },
+            { kind: 'smite', count: 1 },
+          ],
         },
+      },
     ])
 
     withRegistry(synthetic, () => {
@@ -314,23 +314,25 @@ describe('扩展性：新增内容不需要改代码', () => {
     const synthetic = contentWith([
       {
         path: 'species/offensive.json',
-          value: {
-            dslVersion: 1,
-            kind: 'species',
-            id: 'offensive',
-            priority: 10,
-            name: '进攻型',
-            maxHp: 6,
-            skills: [],
-            deck: 'basic',
-          },
+        value: {
+          dslVersion: 1,
+          kind: 'species',
+          id: 'offensive',
+          priority: 10,
+          name: '进攻型',
+          maxHp: 6,
+          skills: [],
+          deck: 'basic',
         },
+      },
     ])
 
     expect(speciesDef('offensive').maxHp).toBe(4)
     withRegistry(synthetic, () => {
       expect(SPECIES.offensive.maxHp).toBe(6)
-      expect(makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' }).players[0].maxHp).toBe(6)
+      expect(
+        makeState({ playerSpecies: 'offensive', aiSpecies: 'defensive' }).players[0].maxHp,
+      ).toBe(6)
     })
     expect(speciesDef('offensive').maxHp).toBe(4)
   })

@@ -53,12 +53,7 @@ describe('【打击】结算', () => {
     const state = makeState({
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
-      playerHand: [
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-      ],
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
 
     // 3 点能量正好打三张【打击】，第三张之后能量见底
@@ -121,9 +116,9 @@ describe('【打击】结算', () => {
       playerHand: [{ kind: 'defend' }],
     })
     const before = snapshot(state)
-    expect(() =>
-      submit(state, { kind: 'use-card', card: state.players[0].hand[0]! }),
-    ).toThrow('你没有需要抵消的威胁')
+    expect(() => submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })).toThrow(
+      '你没有需要抵消的威胁',
+    )
     expect(state).toEqual(before)
   })
 
@@ -148,9 +143,9 @@ describe('【打击】结算', () => {
       playerHand: [{ kind: 'heal' }],
     })
     const before = snapshot(state)
-    expect(() =>
-      submit(state, { kind: 'use-card', card: state.players[0].hand[0]! }),
-    ).toThrow('体力已满')
+    expect(() => submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })).toThrow(
+      '体力已满',
+    )
     expect(state).toEqual(before)
   })
 
@@ -188,9 +183,7 @@ describe('【打击】结算', () => {
       active: 1,
     })
     const before = snapshot(state)
-    expect(() =>
-      submit(state, { kind: 'use-card', card: state.players[0].hand[0]! }),
-    ).toThrow()
+    expect(() => submit(state, { kind: 'use-card', card: state.players[0].hand[0]! })).toThrow()
     expect(state).toEqual(before)
   })
 
@@ -199,12 +192,7 @@ describe('【打击】结算', () => {
       playerSpecies: 'offensive',
       aiSpecies: 'defensive',
       playerHp: 2,
-      playerHand: [
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-        { kind: 'strike' },
-      ],
+      playerHand: [{ kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }, { kind: 'strike' }],
     })
     submit(state, { kind: 'end-phase' })
     expect(state.pending).toEqual({ kind: 'discard', player: 0, count: 2 })
