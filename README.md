@@ -257,6 +257,7 @@ src/
 | `dsl/target.test.ts` | 急救候选与缺省目标、打击唯一候选、濒死目标、阵亡者不可选、候选为空即报错、文档 reason 作为报错、scope 成员集（过滤前）；**多目标**：all/exactly 的解析、候选不足、重复目标、条件 reason 沿用 |
 | `dsl/template.test.ts` | 普通/转化使用、濒死救援、技能日志、vars 优先、未知字段报错 |
 | `dsl/effect.test.ts` | 全部效果指令（含 `threat` / `offset-threat`）、四种取牌模式、对抗帧与抵消（占位机制）、濒死脱离、`for-each-target` 逐目标执行与单目标退化、after 延迟语义 |
+| `dsl/effects.test.ts` | 效果树结构查询：`effectsInclude` 递归进 if/contest/for-each-target、`effectsHarmChosenTarget` 区分「打向选定目标」与「打向自己」（不能拿前者代替后者）、`findEffect` 返回命中节点 |
 | `dsl/event.test.ts` | 时机匹配、消耗战规则、触发收集与 when 条件、runTrigger（【反击】）、不可选触发立即执行 |
 | `dsl/schema.test.ts` | 字段覆盖率、生成物逐字节一致、每份内容文档过 schema、schema 能拒绝错误 |
 | `dsl/guards.test.ts` | 应用代码零内容 id、白名单不过期、不 import node 内置模块、扫描非空跑；**运行时依赖图零环**（强连通分量比对，`import type` 不算边）；README 测试覆盖表列出全部测试文件 |

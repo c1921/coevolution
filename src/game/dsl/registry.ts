@@ -10,6 +10,7 @@ import type {
 } from './types'
 import type { Channel, SkillKind } from './kinds'
 import type { Effect, TargetSpec, Value } from './types'
+import { effectsInclude } from './effects'
 import { validateDocs } from './validate'
 import type { Issue } from './validate'
 
@@ -222,22 +223,9 @@ export function registryToDocs(): { path: string; value: unknown }[] {
  */
 export type CardRole = 'attack' | 'defense' | 'recovery' | 'utility'
 
-/** 递归判断效果列表（含 if / contest / for-each-target 分支）里是否出现某指令 */
-export function effectsInclude(effects: readonly Effect[] | undefined, kind: string): boolean {
-  for (const effect of effects ?? []) {
-    if (effect.kind === kind) return true
-    if (effect.kind === 'if') {
-      if (effectsInclude(effect.then, kind)) return true
-      if (effectsInclude(effect.else, kind)) return true
-    }
-    if (effect.kind === 'contest') {
-      if (effectsInclude(effect.onUnmet, kind)) return true
-      if (effectsInclude(effect.onMet, kind)) return true
-    }
-    if (effect.kind === 'for-each-target' && effectsInclude(effect.effects, kind)) return true
-  }
-  return false
-}
+// 效果树查询的实现搬到了 ./effects（纯叶子，AI 与注册表共用一份递归形状）；
+// 这里原样转出，既有调用点（ai/index.ts、registry.test.ts）无需改动。
+export { effectsInclude } from './effects'
 
 export function cardRole(kind: string): CardRole {
   const doc = cardDoc(kind)

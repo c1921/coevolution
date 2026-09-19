@@ -1,6 +1,6 @@
+import { effectsHarmChosenTarget } from '../dsl/effects'
 import { cardRole, cardSelfThreat, effectsInclude, skillDoc } from '../dsl/registry'
 import type { CardRole } from '../dsl/registry'
-import type { Effect } from '../dsl/types'
 import type { UseContext } from '../dsl/kinds'
 import { canPayEnergy } from '../rules/energy'
 import {
@@ -82,7 +82,7 @@ function activationRole(skill: SkillId): ActivationRole | undefined {
   if (effectsInclude(effects, 'heal')) return 'self-heal'
   if (effectsInclude(effects, 'draw')) return 'card-cycle'
   // 对选定目标造成伤害 / 失去体力 / 扣能量 = 进攻型主动技（如进攻型的【强袭】）
-  if (hasHarm(effects)) return 'offense'
+  if (effectsHarmChosenTarget(effects)) return 'offense'
   return undefined
 }
 
@@ -121,7 +121,7 @@ export function chooseActivationTarget(
 function harmsChosenTarget(skill: SkillId): boolean {
   const activate = skillDoc(skill).activate
   if (!activate) return false
-  return hasHarm([...activate.effects, ...(activate.after ?? [])])
+  return effectsHarmChosenTarget([...activate.effects, ...(activate.after ?? [])])
 }
 
 /**
@@ -152,7 +152,7 @@ export function chooseCardTargets(
 function cardHarmsChosenTarget(kind: CardKind, context: UseContext): boolean {
   const variant = useVariantOf(kind, context)
   if (!variant) return false
-  return hasHarm([...variant.effects, ...(variant.after ?? [])])
+  return effectsHarmChosenTarget([...variant.effects, ...(variant.after ?? [])])
 }
 
 /** 该牌面现在是否连目标都凑不出来（AI 据此跳过，绝不提交必失败的牌） */
@@ -170,30 +170,6 @@ function selfHarmWorthwhile(state: GameState, p: PlayerIndex, kind: CardKind): b
   const self = state.players[p]
   const opponent = state.players[otherPlayer(p)]
   return opponent.hp <= harm && self.hp > harm
-}
-
-function hasHarm(effects: readonly Effect[]): boolean {
-  for (const effect of effects) {
-    if (
-      (effect.kind === 'threat' || effect.kind === 'lose-hp' || effect.kind === 'pay-energy') &&
-      effect.target === 'target'
-    ) {
-      return true
-    }
-    if (effect.kind === 'if' && (hasHarm(effect.then) || hasHarm(effect.else ?? []))) {
-      return true
-    }
-    if (
-      effect.kind === 'contest' &&
-      (hasHarm(effect.onUnmet ?? []) || hasHarm(effect.onMet ?? []))
-    ) {
-      return true
-    }
-    if (effect.kind === 'for-each-target' && hasHarm(effect.effects)) {
-      return true
-    }
-  }
-  return false
 }
 
 /** 某张手牌在该语境下的可选牌面（直接用法优先，其次技能转化） */
