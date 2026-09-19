@@ -1,0 +1,30 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "bloodrage",
+  "priority": 100,
+  "name": "血怒",
+  "short": "失去 1 点体力，令对方获得 3 点威胁",
+  "text": "消耗 1 点能量：自己失去 1 点体力（不是伤害，不触发受到伤害后的技能），令对方获得 3 点威胁。",
+  "cost": { "kind": "const", "value": 1 },
+  "rarity": "uncommon",
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "opponent", "required": false, "alive": true, "range": true },
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "record-card-use", "of": "self", "cardKind": "bloodrage" },
+        { "kind": "log", "template": "{self} 对 {target} 使用{usedAs}{self.energyTag}" },
+        { "kind": "lose-hp", "target": "self", "amount": { "kind": "const", "value": 1 } },
+        { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 3 } }
+      ]
+    }
+  ]
+}

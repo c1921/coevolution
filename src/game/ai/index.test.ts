@@ -237,3 +237,43 @@ describe('AI 使用卡牌时的目标', () => {
     expect(aiDecide(state)).toMatchObject({ kind: 'use-card', as: 'first-aid', targets: [0] })
   })
 })
+
+/**
+ * 奖励新卡必须对 AI 不是死牌：功能牌要有专门策略，自伤攻击牌要用净收益判断。
+ * 用反击型（没有主动技）排除主动技分支的干扰，只考察卡牌本身。
+ */
+describe('AI 使用奖励新卡', () => {
+  /** 直接发牌：奖励新卡不在任何牌组里，makeState 取不到 */
+  function handState(kinds: string[], extra: Record<string, unknown> = {}) {
+    const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive', ...extra })
+    state.players[0].hand = kinds.map((kind) => ({ uid: state.nextUid++, kind }))
+    return state
+  }
+
+  it('至少两类新卡会被 AI 实际打出', () => {
+    // 功能牌：手牌少时用【战术演习】抽牌
+    expect(aiDecide(handState(['tactics']))).toMatchObject({ kind: 'use-card', as: 'tactics' })
+    // 自伤攻击牌：【血怒】收益（3 威胁）大于自伤（1 体力），不再被一律弃用
+    expect(aiDecide(handState(['bloodrage', 'strike', 'strike']))).toMatchObject({
+      kind: 'use-card',
+      as: 'bloodrage',
+    })
+  })
+
+  it('新攻击牌走同一条威胁机制（连击 / 痛击 / 重锤都只是牌面数据）', () => {
+    expect(aiDecide(handState(['combo', 'strike', 'strike', 'strike']))).toMatchObject({
+      kind: 'use-card',
+      as: 'combo',
+    })
+    expect(aiDecide(handState(['bludgeon', 'strike', 'strike', 'strike']))).toMatchObject({
+      kind: 'use-card',
+      as: 'bludgeon',
+    })
+  })
+
+  it('自伤牌在会把自己打穿时被跳过（已有威胁 + 自伤 ≥ 体力）', () => {
+    // 体力 6、身上已有 5 点威胁：再打【血怒】会变成 6 点，回合结束时阵亡
+    const state = handState(['bloodrage'], { playerHp: 6, playerThreat: 5 })
+    expect(aiDecide(state)).toEqual({ kind: 'end-phase' })
+  })
+})

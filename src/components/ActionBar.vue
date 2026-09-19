@@ -83,8 +83,11 @@ import { BTN, BTN_GHOST, BTN_PRIMARY } from './ui'
           </button>
         </template>
 
-        <!-- 可选发动技能由 PromptOverlay 处理 -->
-        <span v-else class="text-sm text-ink-500">请选择是否发动技能</span>
+        <!-- 可选发动技能由 PromptOverlay 处理，奖励由 RewardOverlay 处理 -->
+        <span v-else-if="humanPending.kind === 'trigger'" class="text-sm text-ink-500">
+          请选择是否发动技能
+        </span>
+        <span v-else class="text-sm text-ink-500">请在奖励界面中完成选择</span>
 
         <!-- 阶段说明：唯一事实来源在 store 的 pendingHint（含威胁提示） -->
         <span v-if="pendingHint" class="text-sm text-ink-300">{{ pendingHint }}</span>

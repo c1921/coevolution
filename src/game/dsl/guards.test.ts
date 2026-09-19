@@ -24,8 +24,23 @@ const README = 'README.md'
 /** 允许出现内容 id 的例外：文件 → id → 原因 */
 const ALLOWED_IDS: Record<string, Record<string, string>> = {
   'src/game/ai/index.ts': {
-    // 'heal' 既是牌种 id 也是效果指令名；这里出现的是效果指令名
-    heal: '效果指令名与牌种 id 同名，此处指指令',
+    // 'heal' 既是牌种 id 也是效果指令名 / 服务奖励选项名；这里出现的是后两者
+    heal: '效果指令名 / 服务奖励选项名与牌种 id 同名，此处不是牌种引用',
+  },
+  'src/game/rules/legality.ts': {
+    heal: '服务奖励选项名与牌种 id 同名，此处不是牌种引用',
+  },
+  'src/game/rules/reward.ts': {
+    heal: '服务奖励选项名与牌种 id 同名，此处不是牌种引用',
+  },
+  'src/game/types.ts': {
+    heal: '服务奖励选项名与牌种 id 同名，此处不是牌种引用',
+  },
+  'src/stores/actions.ts': {
+    heal: '服务奖励选项名与牌种 id 同名，此处不是牌种引用',
+  },
+  'src/stores/selectors.ts': {
+    heal: '服务奖励选项名与牌种 id 同名，此处不是牌种引用',
   },
 }
 

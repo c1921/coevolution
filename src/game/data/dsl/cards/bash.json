@@ -1,0 +1,29 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "bash",
+  "priority": 100,
+  "name": "痛击",
+  "short": "令对方获得 3 点威胁",
+  "text": "消耗 2 点能量：令对方获得 3 点威胁。",
+  "cost": { "kind": "const", "value": 2 },
+  "rarity": "uncommon",
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "opponent", "required": false, "alive": true, "range": true },
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "record-card-use", "of": "self", "cardKind": "bash" },
+        { "kind": "log", "template": "{self} 对 {target} 使用{usedAs}{self.energyTag}" },
+        { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 3 } }
+      ]
+    }
+  ]
+}

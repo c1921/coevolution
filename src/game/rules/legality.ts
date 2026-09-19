@@ -17,7 +17,14 @@ import {
 } from '../skills'
 import type { SkillId } from '../types'
 import { findInHand } from './cardZones'
-import type { Card, CardKind, GameState, PlayerIndex } from '../types'
+import {
+  canRemove,
+  findOwnCard,
+  removeCandidates,
+  serviceOptions,
+  upgradeCandidates,
+} from './reward'
+import type { Card, CardKind, Frame, GameState, PlayerIndex } from '../types'
 import { RuleError } from '../util'
 import { canPayEnergy, shortfallReason } from './energy'
 
@@ -259,5 +266,106 @@ export function checkTriggerChoice(state: GameState, p: PlayerIndex): Legality {
   const pending = state.pending
   if (!pending || pending.kind !== 'trigger') return fail('当前没有待应答的技能')
   if (pending.player !== p) return fail('现在不是你的应答时机')
+  return OK
+}
+
+/* ------------------------------------------------------------------ 奖励 */
+
+/** 栈顶的奖励帧（没有则返回 undefined） */
+function rewardFrameOf(state: GameState): Extract<Frame, { kind: 'reward' }> | undefined {
+  const top = state.stack[state.stack.length - 1]
+  return top && top.kind === 'reward' ? top : undefined
+}
+
+/**
+ * 提交奖励选择（卡牌奖励给 `card`，服务奖励给 `service`）。
+ *
+ * 这里是奖励的**唯一合法性入口**：候选内、可用性（满血不能回复、无牌可升、
+ * 移除后不足下限）都在这里判，错误信息就是文档给出的 reason。
+ * prompt 与提交用的是同一份候选（`pick-card` 的 candidates 也是现算的）。
+ */
+export function checkPickReward(
+  state: GameState,
+  p: PlayerIndex,
+  choice: { card?: CardKind; service?: 'upgrade' | 'remove' | 'heal' },
+): Legality {
+  const pending = state.pending
+  if (!pending || pending.kind !== 'reward') return fail('当前没有待选择的奖励')
+  if (pending.player !== p) return fail('现在不是你的奖励选择时机')
+  const frame = rewardFrameOf(state)
+  if (!frame) return fail('结算栈异常：缺少奖励结算帧')
+
+  if (frame.reward === 'card') {
+    if (choice.service !== undefined) return fail('这是卡牌奖励，请选择一张候选牌')
+    const cards = frame.cards ?? []
+    if (cards.length === 0) return fail('本次奖励没有可选的牌')
+    if (choice.card === undefined || !cards.includes(choice.card)) {
+      return fail('这张牌不在本次奖励候选中')
+    }
+    return OK
+  }
+
+  if (choice.card !== undefined) return fail('这是服务奖励，请选择升级 / 移除 / 回复')
+  const available = serviceOptions(state, p, frame)
+  switch (choice.service) {
+    case 'heal':
+      if (!available.heal) return fail('你的体力已满，无法回复')
+      return OK
+    case 'upgrade':
+      if (!available.upgrade) return fail('你没有可以升级的牌')
+      return OK
+    case 'remove':
+      if (!available.remove) {
+        return fail(`移除后牌组、手牌与弃牌堆不得少于 ${frame.removeFloor} 张`)
+      }
+      return OK
+    default:
+      return fail('请选择升级 / 移除 / 回复')
+  }
+}
+
+/** 跳过卡牌奖励：只有允许跳过的卡牌奖励才能跳过 */
+export function checkSkipReward(state: GameState, p: PlayerIndex): Legality {
+  const pending = state.pending
+  if (!pending || pending.kind !== 'reward') return fail('当前没有待选择的奖励')
+  if (pending.player !== p) return fail('现在不是你的奖励选择时机')
+  const frame = rewardFrameOf(state)
+  if (!frame || frame.reward !== 'card') return fail('服务奖励不能跳过')
+  if (!frame.allowSkip) return fail('本次奖励不能跳过')
+  return OK
+}
+
+/**
+ * 升级 / 移除服务的选牌：
+ *  - 升级要求目标牌在当前注册表里有 `upgradeTo`；
+ *  - 移除要求移除后「牌组 + 手牌 + 弃牌堆」不少于 `removeFloor`。
+ */
+export function checkPickOwnCard(state: GameState, p: PlayerIndex, card: Card): Legality {
+  const pending = state.pending
+  if (!pending || pending.kind !== 'pick-card') return fail('当前没有待选牌的奖励')
+  if (pending.player !== p) return fail('现在不是你的选牌时机')
+  const frame = rewardFrameOf(state)
+  const pick = frame?.pendingPick
+  if (!frame || !pick || pick.player !== p) return fail('结算栈异常：缺少待选牌的奖励')
+
+  const real = findOwnCard(state, p, card.uid)
+  if (!real) return fail('这张牌不在你的牌组、手牌或弃牌堆中')
+
+  if (pick.purpose === 'upgrade') {
+    if (cardDoc(real.kind).upgradeTo === undefined) {
+      return fail(`【${CARD_NAME[real.kind]}】没有可升级的版本`)
+    }
+    if (!upgradeCandidates(state, p).some((item) => item.uid === real.uid)) {
+      return fail('这张牌不在可升级的候选中')
+    }
+    return OK
+  }
+
+  if (!removeCandidates(state, p).some((item) => item.uid === real.uid)) {
+    return fail('这张牌不在可移除的候选中')
+  }
+  if (!canRemove(state, p, frame.removeFloor)) {
+    return fail(`移除后牌组、手牌与弃牌堆不得少于 ${frame.removeFloor} 张`)
+  }
   return OK
 }

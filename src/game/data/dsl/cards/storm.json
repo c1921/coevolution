@@ -8,6 +8,7 @@
   "short": "令每名角色获得 2 点威胁",
   "text": "消耗 2 点能量：令每名角色（包括你自己）获得 2 点威胁；各人可在自己的回合打出【防御】抵消，并在自己的回合结束时结算剩余威胁。",
   "cost": { "kind": "const", "value": 2 },
+  "upgradeTo": "storm-plus",
   "use": [
     {
       "context": "play",

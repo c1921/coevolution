@@ -49,7 +49,7 @@ export type SkillId = string
  * 技能分类词汇：transform=转化型 / passive=常驻型 / trigger=触发型 / active=主动型。
  * 唯一的词表在 dsl/kinds.ts，这里复用以免两处漂移。
  */
-import type { SkillKind } from './dsl/kinds'
+import type { RewardKind, SkillKind } from './dsl/kinds'
 
 export type { SkillKind }
 
@@ -82,6 +82,11 @@ export interface PlayerState {
   deck: Card[]
   /** 私有弃牌堆：自己使用 / 弃置的牌；自己的牌组耗尽时洗回自己的牌组 */
   discard: Card[]
+  /**
+   * 移除区：被「移除」奖励永久移出对局的牌（不参与摸牌，也不能再被升级/移除）。
+   * 它不进入牌组/手牌/弃牌堆，但**计入牌数守恒**，所以 `assertConservation` 必须一并统计。
+   */
+  removed: Card[]
   /**
    * 当前能量。上限由 rules/energy.ts 的 energyMax() 计算（基础值 + 技能修正），
    * 在**回合开始时**回复至上限；使用 / 打出卡牌都要按「当作的牌面」支付能量。
@@ -148,6 +153,25 @@ export type Prompt =
   | { kind: 'dying'; player: PlayerIndex; dying: PlayerIndex }
   | { kind: 'trigger'; player: PlayerIndex; skill: SkillId }
   | { kind: 'discard'; player: PlayerIndex; count: number }
+  /**
+   * 奖励三选一：等 `player` 选择。
+   *  - 卡牌奖励带 `cards` 候选（不重复的牌种，界面显示牌名/费用/稀有度）；
+   *  - 服务奖励不带候选，可选性由 `rules/reward.ts` 现算（满血不能回复、无牌可升等）。
+   */
+  | {
+      kind: 'reward'
+      player: PlayerIndex
+      reward: RewardKind
+      cards?: CardKind[]
+      allowSkip: boolean
+    }
+  /** 升级 / 移除服务的选牌：`candidates` 是当场按 uid 升序算出的合法牌 */
+  | {
+      kind: 'pick-card'
+      player: PlayerIndex
+      purpose: 'upgrade' | 'remove'
+      candidates: Card[]
+    }
 
 export type Action =
   /**
@@ -164,6 +188,12 @@ export type Action =
   | { kind: 'trigger-choice'; accept: boolean }
   /** 弃牌阶段弃置若干手牌 */
   | { kind: 'discard-cards'; cards: Card[] }
+  /** 提交奖励选择：卡牌奖励给 `card`，服务奖励给 `service`（二者互斥） */
+  | { kind: 'pick-reward'; card?: CardKind; service?: 'upgrade' | 'remove' | 'heal' }
+  /** 跳过奖励（只有允许跳过的卡牌奖励能用） */
+  | { kind: 'skip-reward' }
+  /** 升级 / 移除服务选定自己的一张牌 */
+  | { kind: 'pick-own-card'; card: Card }
   /** 结束出牌阶段 */
   | { kind: 'end-phase' }
   /** 放弃响应 / 放弃救援 */
@@ -220,6 +250,23 @@ export type Frame =
   | { kind: 'flush'; cards: ProcessingCard[] }
   /** 延迟效果帧（DSL 效果的 after 列表）：当前结算链走完后按 LIFO 执行 */
   | { kind: 'effects'; effects: Effect[]; ctx: EffectContext }
+  /**
+   * 奖励结算帧：`ask` 里的角色逐个选择（从回合角色起按座次）。
+   * 卡牌奖励把 `cards` 候选一次定好（同一帧内两人看到同一组候选）；
+   * 服务奖励的可用性由 `rules/reward.ts` 现算。
+   * 选择「升级 / 移除」后不立刻出 prompt，而是先记 `pendingPick`，
+   * 下一轮 `stepFrame` 才出 `pick-card`（照抄濒死帧分两步询问的写法）。
+   */
+  | {
+      kind: 'reward'
+      ask: PlayerIndex[]
+      reward: RewardKind
+      cards?: CardKind[]
+      allowSkip: boolean
+      healAmount: number
+      removeFloor: number
+      pendingPick?: { player: PlayerIndex; purpose: 'upgrade' | 'remove' }
+    }
 
 /** 待处理的技能触发：谁拥有哪个技能，是否可选发动 */
 export interface TriggerRef {
@@ -235,6 +282,17 @@ export interface GameState {
   /** 处理区（双方共享）：结算中的牌暂存于此，结算完全结束后才进各自的弃牌堆（可从处理区取回） */
   processing: ProcessingCard[]
   players: [PlayerState, PlayerState]
+  /**
+   * 下一张新牌的 uid。奖励加牌时用它分配，保证全局唯一。
+   * 初始 = 双方牌组张数之和（见 engine/setup.ts）。
+   */
+  nextUid: number
+  /**
+   * 全局牌数基准：初始 = 双方牌组张数之和。
+   * 奖励会加牌（三选一进手牌）也会移除牌，因此守恒校验不再能按"初始牌组"算，
+   * 而是以这个随加牌/移除同步增减的计数为准（见 rules/cardZones.ts）。
+   */
+  cardTotal: number
   active: PlayerIndex
   firstPlayer: PlayerIndex
   /** 从 1 开始计数；每次切换回合 +1 */

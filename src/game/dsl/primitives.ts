@@ -2,9 +2,10 @@ import { log, playerLabel } from '../log'
 import { nextInt } from '../rng'
 import { addExtraPhase, skipPhase } from '../rules/phase'
 import { removeFromHand, drawCards, takeFromProcessing } from '../rules/cardZones'
+import { REMOVE_FLOOR, REWARD_CANDIDATES, REWARD_WEIGHTS, rollRewardCards } from '../rules/reward'
 import { addThreat, offsetThreat } from '../rules/threat'
-import type { Card, GameState, PlayerIndex, ProcessingCard, TurnPhase } from '../types'
-import { RuleError } from '../util'
+import type { Card, Frame, GameState, PlayerIndex, ProcessingCard, TurnPhase } from '../types'
+import { RuleError, aliveOrderFrom } from '../util'
 import { evalValue } from './value'
 import { requireRole, resolveCardRef, zoneCards } from './runtime'
 import type { EvalEnv, EffectContext } from './runtime'
@@ -196,6 +197,46 @@ export function contributeToContest(state: GameState, env: EvalEnv, amount: numb
 export function healHp(state: GameState, p: PlayerIndex, amount: number): void {
   const player = state.players[p]
   player.hp = Math.min(player.hp + amount, player.maxHp)
+}
+
+/**
+ * 压入奖励帧（offer-reward 指令）。
+ *
+ * 照抄 `pushContestFrame` 的形状：读参数 → `state.stack.push`。
+ * 与对抗帧不同的是，奖励**不在压入时询问**，只是把帧放进栈里；
+ * 引擎处理完当前时机的全部规则后，才从栈顶开始逐个询问。
+ * 因此同一时机上的多份 offer-reward 规则会按"后压的先弹"依次结算
+ * （见 rules/reward-card.json 与 rules/reward-service.json 的 priority 说明）。
+ */
+export function pushRewardFrame(
+  state: GameState,
+  env: EvalEnv,
+  effect: Extract<Effect, { kind: 'offer-reward' }>,
+): void {
+  const frame: Extract<Frame, { kind: 'reward' }> = {
+    kind: 'reward',
+    // 从回合角色起按座次：1v1 即「回合角色 → 对手」，双方各选一次
+    ask: aliveOrderFrom(state, state.active),
+    reward: effect.reward,
+    allowSkip: effect.allowSkip ?? false,
+    healAmount:
+      effect.reward === 'service' && effect.healAmount
+        ? Math.max(0, Math.floor(evalValue(env, effect.healAmount)))
+        : 0,
+    removeFloor: effect.removeFloor ?? REMOVE_FLOOR,
+  }
+  if (effect.reward === 'card') {
+    frame.cards = rollRewardCards(
+      state,
+      effect.candidates ?? REWARD_CANDIDATES,
+      effect.weights ?? REWARD_WEIGHTS,
+    )
+  }
+  log(
+    state,
+    effect.reward === 'card' ? '奖励：双方依次三选一卡牌' : '奖励：双方依次选择升级 / 移除 / 回复',
+  )
+  state.stack.push(frame)
 }
 
 /** 造成威胁：叠加到目标身上，由其在自己的回合抵消、在自己的回合结束时兑现为伤害 */

@@ -514,3 +514,134 @@ describe('DSL 校验器 · 多目标与逐目标指令', () => {
     )
   })
 })
+
+describe('DSL 校验器 · 奖励指令与卡牌新字段', () => {
+  /** 把 strike 的使用效果换成一条 offer-reward，便于逐项制造组合错误 */
+  function withReward(effect: Record<string, unknown>): RawFixtureDoc[] {
+    return mutateDoc('cards/strike.json', (doc) => {
+      const use = (doc.use as Record<string, unknown>[])[0] as Record<string, unknown>
+      use.effects = [effect]
+    })
+  }
+
+  it('offer-reward 缺少必填的 reward 会报错', () => {
+    const issues = issuesOf(withReward({ kind: 'offer-reward', candidates: 3 }))
+    expect(
+      issues.some((issue) => issue.code === 'missing-field' && issue.path.includes('reward')),
+    ).toBe(true)
+  })
+
+  it('reward 必须是 card / service 之一', () => {
+    const issues = issuesOf(withReward({ kind: 'offer-reward', reward: 'loot' }))
+    expect(
+      issues.some((issue) => issue.code === 'unknown-instruction' && issue.path.includes('reward')),
+    ).toBe(true)
+  })
+
+  it('卡牌奖励不允许服务奖励的字段', () => {
+    const issues = issuesOf(
+      withReward({
+        kind: 'offer-reward',
+        reward: 'card',
+        healAmount: { kind: 'const', value: 1 },
+      }),
+    )
+    expect(
+      issues.some((issue) => issue.code === 'bad-combination' && issue.path.includes('healAmount')),
+    ).toBe(true)
+  })
+
+  it('服务奖励不允许卡牌奖励的字段', () => {
+    const issues = issuesOf(
+      withReward({
+        kind: 'offer-reward',
+        reward: 'service',
+        weights: { common: 1, uncommon: 1, rare: 1 },
+      }),
+    )
+    expect(issues.some((issue) => issue.code === 'bad-combination')).toBe(true)
+  })
+
+  it('weights 必须给出全部三个稀有度', () => {
+    const issues = issuesOf(
+      withReward({ kind: 'offer-reward', reward: 'card', weights: { common: 1 } }),
+    )
+    const missing = issues.filter(
+      (issue) => issue.code === 'missing-field' && issue.path.includes('weights'),
+    )
+    expect(missing.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('rarity 只能是词表内的三个值', () => {
+    const docs = mutateDoc('cards/strike.json', (doc) => {
+      doc.rarity = 'legendary'
+    })
+    expect(issuesOf(docs).some((issue) => issue.path.includes('rarity'))).toBe(true)
+  })
+
+  it('upgradeTo 必须指向存在的牌种', () => {
+    const docs = mutateDoc('cards/strike.json', (doc) => {
+      doc.upgradeTo = 'nope'
+    })
+    expect(
+      issuesOf(docs).some(
+        (issue) => issue.code === 'unknown-ref' && issue.path.includes('upgradeTo'),
+      ),
+    ).toBe(true)
+  })
+
+  it('upgradeTo 不能自指', () => {
+    const docs = mutateDoc('cards/strike.json', (doc) => {
+      doc.upgradeTo = 'strike'
+    })
+    expect(
+      issuesOf(docs).some(
+        (issue) => issue.code === 'bad-combination' && issue.path.includes('upgradeTo'),
+      ),
+    ).toBe(true)
+  })
+
+  it('禁止链式升级（升级版自身不得再声明 upgradeTo）', () => {
+    const docs = mutateDoc('cards/strike.json', (doc) => {
+      doc.upgradeTo = 'strike-plus'
+    })
+    docs.push({
+      path: 'cards/strike-plus.json',
+      value: {
+        dslVersion: 1,
+        kind: 'card',
+        id: 'strike-plus',
+        name: '打击+',
+        short: 'x',
+        text: 'x',
+        cost: { kind: 'const', value: 1 },
+        rarity: 'common',
+        upgradeTo: 'strike',
+      },
+    })
+    expect(
+      issuesOf(docs).some(
+        (issue) => issue.code === 'bad-combination' && issue.path.includes('upgradeTo'),
+      ),
+    ).toBe(true)
+  })
+
+  it('声明了 rarity 的牌即使不在任何牌组里也不算死文档', () => {
+    const docs = baseDocs()
+    docs.push({
+      path: 'cards/reward-only.json',
+      value: {
+        dslVersion: 1,
+        kind: 'card',
+        id: 'reward-only',
+        name: '奖励牌',
+        short: 'x',
+        text: 'x',
+        cost: { kind: 'const', value: 1 },
+        rarity: 'common',
+        use: [{ context: 'play', effects: [{ kind: 'log', template: '{self} 用牌' }] }],
+      },
+    })
+    expect(issuesOf(docs).filter((issue) => issue.code === 'dead-doc')).toEqual([])
+  })
+})

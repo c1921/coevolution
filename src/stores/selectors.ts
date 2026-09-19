@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 import { CARD_DEFS, CARD_NAME } from '../game/data/cardDefs'
 import { skillDef } from '../game/data/species'
-import { skillDoc } from '../game/dsl/registry'
+import { cardDoc, skillDoc } from '../game/dsl/registry'
 import { assertNever, baseContext } from '../game/dsl/runtime'
 import type { UseContext } from '../game/dsl/kinds'
 import { targetCandidates, targetFailureReason, targetScopeMembers } from '../game/dsl/target'
@@ -10,6 +10,7 @@ import { isOver } from '../game/engine'
 import { playerLabel } from '../game/log'
 import { checkPlayCardAsDefend, checkUseCard } from '../game/rules/legality'
 import { energyCost, energyMax } from '../game/rules/energy'
+import { serviceOptions } from '../game/rules/reward'
 import { PHASE_NAME } from '../game/rules/phase'
 import { ATTRITION_TURN } from '../game/rules/turn'
 import {
@@ -28,7 +29,7 @@ import {
   type CardOption,
   type TargetChoice,
 } from '../game/skills'
-import type { Card, CardKind, PlayerIndex, Prompt, SkillId } from '../game/types'
+import type { Card, CardKind, GameState, PlayerIndex, Prompt, SkillId } from '../game/types'
 import { AI_PLAYER, HUMAN, chosenTargets, gameState, pendingTarget, selected } from './state'
 
 /**
@@ -109,6 +110,8 @@ export function legalOptions(card: Card): CardOption[] {
   const state = gameState.value
   const pending = humanPending.value
   if (!state || !pending) return []
+  // 奖励期间手牌不可选：奖励的候选由 RewardOverlay 单独渲染
+  if (pending.kind === 'reward' || pending.kind === 'pick-card') return []
   if (pending.kind === 'respond') {
     return playOptions(state, HUMAN, card).filter(
       (o) => checkPlayCardAsDefend(state, HUMAN, card, o.as, o.via).ok,
@@ -219,6 +222,17 @@ export const pendingHint = computed(() => {
       return `弃牌阶段（手牌上限 = 当前体力）：请选择 ${pending.count} 张手牌弃置`
     case 'trigger':
       return `是否发动【${skillDef(pending.skill).name}】？`
+    case 'reward': {
+      if (pending.reward === 'service') {
+        return '奖励三选一：升级一张牌 / 移除一张牌 / 回复体力'
+      }
+      const names = (pending.cards ?? []).map((kind) => CARD_NAME[kind]).join(' / ')
+      return `奖励三选一：选择一张加入手牌（${names}）${pending.allowSkip ? '，或跳过' : ''}`
+    }
+    case 'pick-card':
+      return pending.purpose === 'upgrade'
+        ? '选择一张要升级的牌'
+        : '选择一张要移除的牌（移除后不再参与对局）'
     default:
       // Prompt 的变体已穷尽；assertNever 让新增变体在编译期报错，
       // 同时满足 vue/return-in-computed-property 的"所有路径都返回值"
@@ -320,3 +334,124 @@ export const targetsReady = computed(() => {
   if (!pendingTarget.value || !choice) return false
   return !choice.multi || chosenTargets.value.length === choice.size
 })
+
+/* ------------------------------------------------------------------ 奖励覆盖层 */
+
+/** 卡牌奖励的一个候选（牌名 / 费用 / 稀有度 / 效果文案） */
+export interface RewardCardOption {
+  kind: CardKind
+  name: string
+  cost: number
+  rarity: string
+  short: string
+  text: string
+}
+
+/** 卡牌奖励的候选列表（评级与顺序沿用引擎给的那一组，界面不重排） */
+export const rewardCardOptions = computed<RewardCardOption[]>(() => {
+  const pending = humanPending.value
+  if (!pending || pending.kind !== 'reward' || pending.reward !== 'card') return []
+  return (pending.cards ?? []).map((kind) => {
+    const def = CARD_DEFS[kind]
+    const doc = cardDoc(kind)
+    return {
+      kind,
+      name: def.name,
+      cost: cardCost(kind),
+      rarity: doc.rarity ?? 'common',
+      short: def.short,
+      text: def.text,
+    }
+  })
+})
+
+/** 是否允许跳过本次卡牌奖励 */
+export const rewardAllowSkip = computed(
+  () => humanPending.value?.kind === 'reward' && humanPending.value.allowSkip,
+)
+
+export type ServiceChoice = 'upgrade' | 'remove' | 'heal'
+
+/** 服务奖励的一个选项：不可用时附上文档口径的原因 */
+export interface RewardServiceOption {
+  service: ServiceChoice
+  label: string
+  enabled: boolean
+  reason?: string
+}
+
+/** 服务奖励的可选项与可用性（满血不能回复、无牌可升、移除后不足下限） */
+export const rewardServiceOptions = computed<RewardServiceOption[]>(() => {
+  const state = gameState.value
+  const pending = humanPending.value
+  if (!state || !pending || pending.kind !== 'reward' || pending.reward !== 'service') return []
+  const top = state.stack[state.stack.length - 1]
+  if (!top || top.kind !== 'reward') return []
+  const available = serviceOptions(state, HUMAN, top)
+  return [
+    {
+      service: 'upgrade',
+      label: '升级一张牌',
+      enabled: available.upgrade,
+      reason: available.upgrade ? undefined : '你没有可以升级的牌',
+    },
+    {
+      service: 'remove',
+      label: '移除一张牌',
+      enabled: available.remove,
+      reason: available.remove
+        ? undefined
+        : `移除后牌组、手牌与弃牌堆不得少于 ${top.removeFloor} 张`,
+    },
+    {
+      service: 'heal',
+      label: `回复 ${top.healAmount} 点体力`,
+      enabled: available.heal,
+      reason: available.heal ? undefined : '你的体力已满，无法回复',
+    },
+  ]
+})
+
+/** 升级 / 移除选牌的一张候选：所在牌区 + 升级预览 */
+export interface PickCardOption {
+  card: Card
+  name: string
+  zone: string
+  /** 升级后的牌名（移除时为空） */
+  upgradedName?: string
+}
+
+const ZONE_LABEL = { deck: '牌组', hand: '手牌', discard: '弃牌堆' } as const
+
+/** 某张牌目前在哪个牌区（升级/移除候选来自牌组、手牌、弃牌堆） */
+function zoneLabelOf(state: GameState, p: PlayerIndex, card: Card): string {
+  const player = state.players[p]
+  for (const zone of ['deck', 'hand', 'discard'] as const) {
+    if (player[zone].some((item) => item.uid === card.uid)) return ZONE_LABEL[zone]
+  }
+  return '牌组'
+}
+
+/** 升级 / 移除的候选列表（按引擎给定的 uid 升序） */
+export const pickCardOptions = computed<PickCardOption[]>(() => {
+  const state = gameState.value
+  const pending = humanPending.value
+  if (!state || !pending || pending.kind !== 'pick-card') return []
+  return pending.candidates.map((card) => {
+    const doc = cardDoc(card.kind)
+    const upgradedName = doc.upgradeTo ? cardDoc(doc.upgradeTo).name : undefined
+    return {
+      card,
+      name: doc.name,
+      zone: zoneLabelOf(state, HUMAN, card),
+      upgradedName,
+    }
+  })
+})
+
+/** 选牌覆盖层的标题：升级还是移除 */
+export const pickCardTitle = computed(() =>
+  humanPending.value?.kind === 'pick-card' && humanPending.value.purpose === 'remove'
+    ? '选择要移除的牌'
+    : '选择要升级的牌',
+)

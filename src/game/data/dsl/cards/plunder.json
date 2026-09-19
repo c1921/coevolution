@@ -1,0 +1,41 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "plunder",
+  "priority": 100,
+  "name": "掠夺",
+  "short": "随机弃置对手 1 张手牌",
+  "text": "消耗 1 点能量：随机弃置对手 1 张手牌（对手没有手牌时才能使用）。",
+  "cost": { "kind": "const", "value": 1 },
+  "rarity": "uncommon",
+  "use": [
+    {
+      "context": "play",
+      "requires": [
+        {
+          "kind": "has-cards",
+          "of": "opponent",
+          "zone": "hand",
+          "atLeast": { "kind": "const", "value": 1 },
+          "reason": "对手没有手牌"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "opponent" },
+          "to": { "zone": "discard", "of": "opponent" },
+          "pick": { "mode": "random", "count": 1 }
+        },
+        { "kind": "log", "template": "{self} 使用{usedAs}，弃置对手 1 张手牌{self.energyTag}" }
+      ]
+    }
+  ]
+}

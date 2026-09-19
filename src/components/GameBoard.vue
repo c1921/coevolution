@@ -19,6 +19,7 @@ import HandCard from './HandCard.vue'
 import LogPanel from './LogPanel.vue'
 import PlayerPanel from './PlayerPanel.vue'
 import PromptOverlay from './PromptOverlay.vue'
+import RewardOverlay from './RewardOverlay.vue'
 </script>
 
 <template>
@@ -74,5 +75,6 @@ import PromptOverlay from './PromptOverlay.vue'
 
     <ActionBar />
     <PromptOverlay />
+    <RewardOverlay />
   </div>
 </template>

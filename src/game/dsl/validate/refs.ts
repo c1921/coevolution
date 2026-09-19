@@ -41,6 +41,18 @@ export function resolveRefs(docs: Doc[], refs: Ref[], issues: Issue[]): void {
         )
       }
     }
+    // 禁止链式升级：升级版本身不得再声明 upgradeTo
+    if (ref.type === 'card' && ref.role === 'upgradeTo') {
+      const doc = cardDocs.get(ref.id)
+      if (doc?.upgradeTo !== undefined) {
+        push(
+          issues,
+          ref.path,
+          'bad-combination',
+          `牌种 ${ref.id} 自身声明了 upgradeTo，禁止链式升级`,
+        )
+      }
+    }
   }
 
   // ruleset 必须恰好一份
@@ -59,8 +71,13 @@ export function resolveRefs(docs: Doc[], refs: Ref[], issues: Issue[]): void {
     if (doc.kind === 'skill' && !usedSkills.has(doc.id)) {
       push(issues, `/${doc.id}`, 'dead-doc', `技能 ${doc.id} 没有被任何物种引用`)
     }
-    if (doc.kind === 'card' && !usedCards.has(doc.id)) {
-      push(issues, `/${doc.id}`, 'dead-doc', `牌种 ${doc.id} 没有被任何牌组引用`)
+    if (doc.kind === 'card' && !usedCards.has(doc.id) && doc.rarity === undefined) {
+      push(
+        issues,
+        `/${doc.id}`,
+        'dead-doc',
+        `牌种 ${doc.id} 既没有被任何牌组引用，也不在奖励池（未声明 rarity）`,
+      )
     }
     if (doc.kind === 'deck' && !usedDecks.has(doc.id)) {
       push(issues, `/${doc.id}`, 'dead-doc', `牌组 ${doc.id} 没有被任何物种引用`)

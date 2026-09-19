@@ -8,10 +8,12 @@ import {
   MOVE_ZONES,
   PHASES,
   PICK_MODES,
+  RARITIES,
+  REWARD_KINDS,
 } from '../kinds'
 import type { RoleRef, ZoneName } from '../kinds'
 import type { DocContext, Issue, Obj, Ref } from './fieldTables'
-import { CONTEXT_ROLES, DOC_FIELDS, EFFECT_KEYS } from './fieldTables'
+import { CONTEXT_ROLES, DOC_FIELDS, EFFECT_KEYS, EFFECT_REQUIRED } from './fieldTables'
 import {
   asArray,
   asObj,
@@ -111,6 +113,12 @@ export function checkEffect(
   const kind = checkEnum(obj, 'kind', EFFECT_KINDS, path, issues, 'unknown-instruction')
   if (!kind) return
   checkKeys(obj, path, EFFECT_KEYS[kind] ?? ['kind'], [], issues)
+  // 条件必填（效果节点的必填按 kind 而定，无法写进并表，见 fieldSpecs 的 EFFECT_REQUIRED）
+  for (const key of EFFECT_REQUIRED[kind] ?? []) {
+    if (!(key in obj)) {
+      push(issues, `${path}#/${key}`, 'missing-field', `缺少必填字段 ${key}`)
+    }
+  }
   const roles = CONTEXT_ROLES[context]
 
   switch (kind) {
@@ -210,8 +218,78 @@ export function checkEffect(
         checkEffects(obj.else, `${path}#/else`, context, issues, refs)
       }
       break
+    case 'offer-reward':
+      checkOfferReward(obj, path, roles, issues)
+      break
     default:
       break
+  }
+}
+
+/**
+ * `offer-reward` 的组合校验：卡牌奖励与服务奖励的字段互斥。
+ *  - `card` 允许 `candidates` / `allowSkip` / `weights`；
+ *  - `service` 允许 `healAmount` / `removeFloor`。
+ * 用错一组字段会得到 `bad-combination`（带 JSON 路径），避免"写了却不生效"。
+ */
+function checkOfferReward(
+  obj: Obj,
+  path: string,
+  roles: readonly RoleRef[],
+  issues: Issue[],
+): void {
+  const reward = checkEnum(obj, 'reward', REWARD_KINDS, path, issues, 'unknown-instruction')
+  if (!reward) return
+
+  const cardOnly = ['candidates', 'allowSkip', 'weights'] as const
+  const serviceOnly = ['healAmount', 'removeFloor'] as const
+  const forbidden = reward === 'card' ? serviceOnly : cardOnly
+  for (const key of forbidden) {
+    if (obj[key] !== undefined) {
+      push(
+        issues,
+        `${path}#/${key}`,
+        'bad-combination',
+        `${key} 只能用于 ${reward === 'card' ? 'service' : 'card'} 奖励`,
+      )
+    }
+  }
+
+  if (reward === 'card') {
+    if (obj.candidates !== undefined) checkCount(obj, 'candidates', path, issues, 1)
+    if (obj.allowSkip !== undefined && typeof obj.allowSkip !== 'boolean') {
+      push(issues, `${path}#/allowSkip`, 'bad-type', 'allowSkip 必须是布尔值')
+    }
+    if (obj.weights !== undefined) checkWeights(obj.weights, `${path}#/weights`, issues)
+  } else {
+    if (obj.healAmount !== undefined) {
+      checkValue(obj.healAmount, `${path}#/healAmount`, roles, issues)
+    }
+    if (obj.removeFloor !== undefined) checkCount(obj, 'removeFloor', path, issues, 0)
+  }
+}
+
+/** 稀有度权重：三个键都必须给出非负整数 */
+function checkWeights(node: unknown, path: string, issues: Issue[]): void {
+  const obj = asObj(node)
+  if (!obj) {
+    push(issues, path, 'bad-type', 'weights 必须是对象')
+    return
+  }
+  for (const key of Object.keys(obj)) {
+    if (!RARITIES.includes(key as (typeof RARITIES)[number])) {
+      push(issues, `${path}#/${key}`, 'unknown-key', `weights 只接受稀有度 ${RARITIES.join(' / ')}`)
+    }
+  }
+  for (const rarity of RARITIES) {
+    const value = obj[rarity]
+    if (value === undefined) {
+      push(issues, `${path}#/${rarity}`, 'missing-field', `weights 缺少稀有度 ${rarity}`)
+      continue
+    }
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      push(issues, `${path}#/${rarity}`, 'bad-number', '权重必须是非负整数')
+    }
   }
 }
 

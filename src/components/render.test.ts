@@ -4,6 +4,7 @@ import { renderToString } from 'vue/server-renderer'
 import App from '../App.vue'
 import { CARD_DEFS, CARD_NAME } from '../game/data/cardDefs'
 import { SPECIES } from '../game/data/species'
+import { advance } from '../game/engine'
 import { makeState } from '../game/testUtils'
 import {
   act,
@@ -14,8 +15,12 @@ import {
   gameState,
   legalOptions,
   pickCard,
+  pickCardOptions,
+  rewardCardOptions,
+  rewardServiceOptions,
   screen,
   submitOption,
+  submitRewardService,
 } from '../stores/game'
 
 /**
@@ -131,6 +136,51 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     const html = await renderApp()
     expect(html).toContain('没有需要抵消的威胁')
 
+    backToStart()
+  })
+
+  /** 装载一个「回合开始时」的奖励询问点（第 3 回合卡牌、第 4 回合服务） */
+  function renderRewardTurn(turn: number): Promise<string> {
+    backToStart()
+    const state = makeState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      phase: 'turn-start',
+    })
+    state.turn = turn
+    state.active = 0
+    advance(state)
+    gameState.value = state
+    screen.value = 'battle'
+    return renderApp()
+  }
+
+  it('奖励覆盖层：卡牌三选一显示候选牌名与「跳过」按钮', async () => {
+    const html = await renderRewardTurn(3)
+    expect(html).toContain('奖励三选一')
+    expect(html).toContain('选择一张牌，直接加入手牌')
+    for (const option of rewardCardOptions.value) expect(html).toContain(option.name)
+    expect(html).toContain('跳过')
+    backToStart()
+  })
+
+  it('奖励覆盖层：服务三选一显示三项，满血时回复被禁用并给出原因', async () => {
+    const html = await renderRewardTurn(4)
+    expect(html).toContain('升级一张牌')
+    expect(html).toContain('移除一张牌')
+    for (const option of rewardServiceOptions.value) expect(html).toContain(option.label)
+    expect(html).toContain('体力已满')
+    backToStart()
+  })
+
+  it('奖励覆盖层：升级选牌列出自己的牌并显示升级预览', async () => {
+    await renderRewardTurn(4)
+    submitRewardService('upgrade')
+    expect(pickCardOptions.value.length).toBeGreaterThan(0)
+
+    const html = await renderApp()
+    expect(html).toContain('选择要升级的牌')
+    for (const option of pickCardOptions.value) expect(html).toContain(option.name)
     backToStart()
   })
 })

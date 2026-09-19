@@ -1,0 +1,37 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "backflip",
+  "priority": 100,
+  "name": "后空翻",
+  "short": "抵消自己 2 点威胁，摸 1 张牌",
+  "text": "消耗 1 点能量：抵消自己 2 点威胁并摸 1 张牌（自己至少有 1 点威胁时才能使用）。",
+  "cost": { "kind": "const", "value": 1 },
+  "rarity": "common",
+  "use": [
+    {
+      "context": "play",
+      "requires": [
+        {
+          "kind": "compare",
+          "op": "gte",
+          "left": { "kind": "ref", "ref": "threat", "of": "self" },
+          "right": { "kind": "const", "value": 1 },
+          "reason": "你没有需要抵消的威胁"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "offset-threat", "target": "self", "amount": { "kind": "const", "value": 2 } },
+        { "kind": "draw", "target": "self", "count": { "kind": "const", "value": 1 } },
+        { "kind": "log", "template": "{self} 使用{usedAs}，抵消 2 点威胁并摸 1 张牌{self.energyTag}" }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
   errorMessage,
   gameState,
   pendingTarget,
+  rewardSelection,
   screen,
   selected,
 } from './state'
@@ -37,6 +38,7 @@ export function beginDraft(seedOverride?: number): void {
   errorMessage.value = null
   pendingTarget.value = null
   chosenTargets.value = []
+  rewardSelection.value = null
   screen.value = 'draft'
 }
 
@@ -47,6 +49,7 @@ export function chooseSpecies(species: SpeciesId): void {
   errorMessage.value = null
   pendingTarget.value = null
   chosenTargets.value = []
+  rewardSelection.value = null
   gameState.value = reactive(createGame({ seed, playerSpecies: species })) as GameState
   screen.value = 'battle'
   pump()
@@ -59,5 +62,6 @@ export function backToStart(): void {
   errorMessage.value = null
   pendingTarget.value = null
   chosenTargets.value = []
+  rewardSelection.value = null
   screen.value = 'start'
 }

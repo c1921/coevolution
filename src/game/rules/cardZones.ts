@@ -1,4 +1,3 @@
-import { totalDeckSize } from '../data/deck'
 import { log, playerLabel } from '../log'
 import { shuffle } from '../rng'
 import type { Card, GameState, PlayerIndex, ProcessingCard } from '../types'
@@ -83,29 +82,34 @@ export function drawCards(state: GameState, p: PlayerIndex, count: number): Card
   return drawn
 }
 
-/** 汇总所有牌区，用于「牌数守恒」校验 */
+/** 汇总所有牌区，用于「牌数守恒」校验（含移除区：被移除的牌仍属于对局，只是不再参与摸牌） */
 export function allCards(state: GameState): Card[] {
   return [
     ...state.players[0].deck,
     ...state.players[0].discard,
     ...state.players[0].hand,
+    ...state.players[0].removed,
     ...state.players[1].deck,
     ...state.players[1].discard,
     ...state.players[1].hand,
+    ...state.players[1].removed,
     ...state.processing.map((e) => e.card),
   ]
 }
 
 /**
- * 牌数守恒：双方私有牌组合计张数（当前 20 + 20 = 40）必须一张不多不少，
- * 每张牌恰好属于一个牌区，且 uid 全局唯一（处理区由双方共享）。
- * 任何结算漏牌 / 重复放牌都会在这里被立刻发现。
+ * 牌数守恒：全部牌区的合计张数必须等于 `state.cardTotal`，每张牌恰好属于一个牌区，
+ * 且 uid 全局唯一（处理区由双方共享）。任何结算漏牌 / 重复放牌都会在这里被立刻发现。
+ *
+ * 基准值是 `state.cardTotal` 而不是初始牌组张数：奖励会**加牌**（三选一进手牌时 +1）、
+ * 移除会把牌挪进移除区（总数不变），因此"初始 20 + 20 = 40"只在开局成立。
+ * 加牌时 `applyPickReward` 同步 +1，移除只是换区，两者都不放宽这条断言。
  *
  * 注意：不要求「每方恒为 20 张」——技能可以把对手的牌拿进自己手里，
  * 之后再弃置就归获得者的弃牌堆，因此双方池子的张数可能此消彼长，但全局总数不变。
  */
 export function assertConservation(state: GameState): void {
-  const expected = totalDeckSize(state.players[0].species, state.players[1].species)
+  const expected = state.cardTotal
   const all = allCards(state)
   if (all.length !== expected) {
     throw new Error(`牌数守恒被破坏：共 ${all.length} 张，应为 ${expected} 张`)

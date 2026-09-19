@@ -11,6 +11,8 @@ import {
   MOVE_ZONES,
   PHASES,
   PICK_MODES,
+  RARITIES,
+  REWARD_KINDS,
   ROLES,
   TARGET_COUNT_MODES,
   TARGET_DEFAULTS,
@@ -205,6 +207,24 @@ export const EFFECT_SPECS: Record<(typeof EFFECT_KINDS)[number], Record<string, 
   },
   'for-each-target': { effects: EFFECTS },
   if: { condition: CONDITION, then: EFFECTS, else: EFFECTS },
+  'offer-reward': {
+    reward: { t: 'enum', values: REWARD_KINDS },
+    candidates: INTEGER,
+    allowSkip: BOOLEAN,
+    weights: { t: 'map', of: INTEGER, keys: RARITIES },
+    healAmount: VALUE,
+    removeFloor: INTEGER,
+  },
+}
+
+/**
+ * 效果指令里**必填**的字段。
+ * 效果节点的必填是"按 kind 而定"的，而 `NODE_SPECS.effect` 是把各 kind 的字段并成
+ * 一张联合表（`requiredFieldsOf` 只支持节点级必填），因此这类条件必填由校验器读这张表，
+ * 并在 `checkEffect` 里统一检查。目前只有 `offer-reward` 需要 `reward`。
+ */
+export const EFFECT_REQUIRED: Partial<Record<(typeof EFFECT_KINDS)[number], readonly string[]>> = {
+  'offer-reward': ['reward'],
 }
 
 /* ------------------------------------------------------------------ 结构节点与文档节点 */
@@ -335,6 +355,8 @@ const STRUCTURAL_AND_DOC_SPECS: Record<
       cost: VALUE,
       use: { t: 'array', of: { t: 'ref', name: 'useVariant' } },
       play: { t: 'ref', name: 'playVariant' },
+      rarity: { t: 'enum', values: RARITIES },
+      upgradeTo: STRING,
     },
     required: ['name', 'short', 'text', 'cost'],
   },

@@ -88,8 +88,20 @@ export const EFFECT_KINDS = [
   'extra-phase',
   'for-each-target',
   'if',
+  'offer-reward',
 ] as const
 export type EffectKind = (typeof EFFECT_KINDS)[number]
+
+/** 奖励种类：卡牌三选一 / 服务三选一（升级·移除·回复） */
+export const REWARD_KINDS = ['card', 'service'] as const
+export type RewardKind = (typeof REWARD_KINDS)[number]
+
+/**
+ * 卡牌稀有度。只有声明了稀有度的牌种才进入奖励池；
+ * 升级版与基础牌一律不写 rarity，因此天然不入池（见 rules/reward.ts）。
+ */
+export const RARITIES = ['common', 'uncommon', 'rare'] as const
+export type Rarity = (typeof RARITIES)[number]
 
 /** 取牌方式（chosen 需要交互式选牌机制，当前没有该 prompt，故不提供） */
 export const PICK_MODES = ['played', 'cost', 'random', 'specific', 'all'] as const

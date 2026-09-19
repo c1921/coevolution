@@ -1,0 +1,36 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "defend-plus",
+  "priority": 110,
+  "name": "防御+",
+  "short": "抵消自己 2 点威胁",
+  "text": "消耗 1 点能量：抵消自己 2 点威胁（自己至少有 1 点威胁时才能使用）。",
+  "cost": { "kind": "const", "value": 1 },
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "self", "required": false, "alive": true },
+      "requires": [
+        {
+          "kind": "compare",
+          "op": "gte",
+          "left": { "kind": "ref", "ref": "threat", "of": "self" },
+          "right": { "kind": "const", "value": 1 },
+          "reason": "你没有需要抵消的威胁"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "offset-threat", "target": "self", "amount": { "kind": "const", "value": 2 } },
+        { "kind": "log", "template": "{self} 使用{usedAs}，抵消 2 点威胁{self.energyTag}" }
+      ]
+    }
+  ]
+}

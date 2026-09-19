@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DslLoadError,
+  cardDoc,
   cardIds,
   cardRole,
   cardSelfThreat,
@@ -102,9 +103,9 @@ describe('内置内容文档', () => {
   it('全部通过校验（导入注册表即校验）', () => {
     expect(registry.species).toHaveLength(4)
     expect(registry.skills).toHaveLength(4)
-    expect(registry.cards).toHaveLength(5)
+    expect(registry.cards).toHaveLength(20)
     expect(registry.decks).toHaveLength(3)
-    expect(registry.rules).toHaveLength(1)
+    expect(registry.rules).toHaveLength(3)
     expect(registry.ruleset.id).toBe('base')
   })
 
@@ -113,7 +114,31 @@ describe('内置内容文档', () => {
   })
 
   it('牌种顺序按 priority，三套牌组各自自洽', () => {
-    expect(cardIds()).toEqual(['strike', 'defend', 'heal', 'first-aid', 'storm'])
+    expect(cardIds()).toEqual([
+      // 基础牌 10~50
+      'strike',
+      'defend',
+      'heal',
+      'first-aid',
+      'storm',
+      // 奖励池新卡 100（同优先级按 id）
+      'backflip',
+      'bash',
+      'bloodrage',
+      'bludgeon',
+      'combo',
+      'heavy-press',
+      'iron-wave',
+      'plunder',
+      'sprint',
+      'tactics',
+      // 升级版 110（同优先级按 id）
+      'defend-plus',
+      'first-aid-plus',
+      'heal-plus',
+      'storm-plus',
+      'strike-plus',
+    ])
     // 首个牌组（basic）仍是打击 11 / 防御 6 / 回复 3
     expect(registry.decks[0]?.cards).toEqual([
       { kind: 'strike', count: 11 },
@@ -159,6 +184,23 @@ describe('内置内容文档', () => {
     expect(cardSelfThreat('storm')).toBe(2)
     expect(cardSelfThreat('strike')).toBe(0)
     expect(cardSelfThreat('first-aid')).toBe(0)
+  })
+
+  it('稀有度与升级指向：奖励池只收声明 rarity 的牌，升级版不入池', () => {
+    // 基础牌声明 upgradeTo，但不声明 rarity（不参与奖励池）
+    expect(cardDoc('strike').upgradeTo).toBe('strike-plus')
+    expect(cardDoc('strike').rarity).toBeUndefined()
+    expect(cardDoc('defend').upgradeTo).toBe('defend-plus')
+    expect(cardDoc('storm').upgradeTo).toBe('storm-plus')
+
+    // 升级版不再声明 upgradeTo（禁止链式升级），也不声明 rarity
+    expect(cardDoc('strike-plus').upgradeTo).toBeUndefined()
+    expect(cardDoc('strike-plus').rarity).toBeUndefined()
+
+    // 新卡声明了稀有度，因此进奖励池
+    expect(cardDoc('combo').rarity).toBe('common')
+    expect(cardDoc('bash').rarity).toBe('uncommon')
+    expect(cardDoc('bludgeon').rarity).toBe('rare')
   })
 })
 

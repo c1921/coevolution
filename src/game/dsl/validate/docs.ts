@@ -1,4 +1,4 @@
-import { CHANNELS, DOC_KINDS, DSL_VERSION, USE_CONTEXTS } from '../kinds'
+import { CHANNELS, DOC_KINDS, DSL_VERSION, RARITIES, USE_CONTEXTS } from '../kinds'
 import type { RoleRef } from '../kinds'
 import type { Doc } from '../types'
 import type { Issue, Obj, RawDoc, Ref } from './fieldTables'
@@ -291,6 +291,23 @@ export function checkCard(node: Obj, path: string, issues: Issue[], refs: Ref[])
   const hasPlay = node.play !== undefined
   if (!hasUse && !hasPlay) {
     push(issues, path, 'bad-combination', '卡牌至少需要 use 或 play 之一')
+  }
+
+  // 稀有度：只允许词表内的三个值；未声明表示不入奖励池（基础牌与升级版）。
+  if (node.rarity !== undefined) {
+    checkEnum(node, 'rarity', RARITIES, path, issues)
+  }
+
+  // 升级指向：必须存在（第二遍解析），且不得自指或链式升级。
+  if (node.upgradeTo !== undefined) {
+    const upgradeTo = asString(node.upgradeTo)
+    if (!upgradeTo) {
+      push(issues, `${path}#/upgradeTo`, 'bad-type', 'upgradeTo 必须是牌种 id')
+    } else if (upgradeTo === asString(node.id)) {
+      push(issues, `${path}#/upgradeTo`, 'bad-combination', 'upgradeTo 不能指向自己')
+    } else {
+      refs.push({ path: `${path}#/upgradeTo`, type: 'card', id: upgradeTo, role: 'upgradeTo' })
+    }
   }
 
   if (hasUse) {

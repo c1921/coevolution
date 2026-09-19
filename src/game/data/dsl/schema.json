@@ -315,6 +315,37 @@
             "$ref": "#/$defs/effect"
           }
         },
+        "reward": {
+          "enum": [
+            "card",
+            "service"
+          ]
+        },
+        "candidates": {
+          "type": "integer"
+        },
+        "allowSkip": {
+          "type": "boolean"
+        },
+        "weights": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "common",
+              "uncommon",
+              "rare"
+            ]
+          }
+        },
+        "healAmount": {
+          "$ref": "#/$defs/value"
+        },
+        "removeFloor": {
+          "type": "integer"
+        },
         "kind": {
           "enum": [
             "log",
@@ -334,7 +365,8 @@
             "skip-phase",
             "extra-phase",
             "for-each-target",
-            "if"
+            "if",
+            "offer-reward"
           ]
         }
       },
@@ -787,6 +819,16 @@
         },
         "play": {
           "$ref": "#/$defs/playVariant"
+        },
+        "rarity": {
+          "enum": [
+            "common",
+            "uncommon",
+            "rare"
+          ]
+        },
+        "upgradeTo": {
+          "type": "string"
         },
         "kind": {
           "enum": [

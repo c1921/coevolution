@@ -1,0 +1,33 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "storm-plus",
+  "priority": 110,
+  "name": "风暴+",
+  "short": "令每名角色获得 3 点威胁",
+  "text": "消耗 2 点能量：令每名角色（包括你自己）获得 3 点威胁；各人可在自己的回合打出【防御】抵消，并在自己的回合结束时结算剩余威胁。",
+  "cost": { "kind": "const", "value": 2 },
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "any", "alive": true, "count": { "mode": "all" } },
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "record-card-use", "of": "self", "cardKind": "storm-plus" },
+        { "kind": "log", "template": "{self} 使用{usedAs}，风暴席卷全场{self.energyTag}" },
+        {
+          "kind": "for-each-target",
+          "effects": [
+            { "kind": "threat", "target": "target", "amount": { "kind": "const", "value": 3 } }
+          ]
+        }
+      ]
+    }
+  ]
+}

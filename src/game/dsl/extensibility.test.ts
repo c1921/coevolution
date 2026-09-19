@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { submit } from '../engine'
 import { CARD_DEFS } from '../data/cardDefs'
 import { SPECIES, speciesDef } from '../data/species'
-import { assertConservation } from '../rules/cardZones'
+import { assertConservation, allCards } from '../rules/cardZones'
 import { makeState } from '../testUtils'
-import { withRegistry } from './registry'
+import { cardDoc, withRegistry } from './registry'
 import { contentWith } from './fixtures'
 
 /**
@@ -335,5 +335,90 @@ describe('扩展性：新增内容不需要改代码', () => {
       ).toBe(6)
     })
     expect(speciesDef('offensive').maxHp).toBe(10)
+  })
+
+  it('注入一张带 upgradeTo 的牌：升级后 kind 变化、uid 不变、守恒成立', () => {
+    const synthetic = contentWith([
+      {
+        path: 'cards/temper.json',
+        value: {
+          dslVersion: 1,
+          kind: 'card',
+          id: 'temper',
+          name: '淬火',
+          short: '测试',
+          text: '测试用牌',
+          cost: { kind: 'const', value: 1 },
+          rarity: 'common',
+          upgradeTo: 'temper-plus',
+          use: [{ context: 'play', effects: [{ kind: 'log', template: '{self} 使用{usedAs}' }] }],
+        },
+      },
+      {
+        path: 'cards/temper-plus.json',
+        value: {
+          dslVersion: 1,
+          kind: 'card',
+          id: 'temper-plus',
+          name: '淬火+',
+          short: '测试',
+          text: '测试用牌',
+          cost: { kind: 'const', value: 1 },
+          use: [{ context: 'play', effects: [{ kind: 'log', template: '{self} 使用{usedAs}' }] }],
+        },
+      },
+      {
+        path: 'decks/temper.json',
+        value: {
+          dslVersion: 1,
+          kind: 'deck',
+          id: 'temper-deck',
+          cards: [{ kind: 'temper', count: 20 }],
+        },
+      },
+      {
+        path: 'species/temperer.json',
+        value: {
+          dslVersion: 1,
+          kind: 'species',
+          id: 'temperer',
+          priority: 60,
+          name: '淬火型',
+          maxHp: 10,
+          skills: [],
+          deck: 'temper-deck',
+        },
+      },
+    ])
+
+    withRegistry(synthetic, () => {
+      const state = makeState({ playerSpecies: 'temperer', aiSpecies: 'defensive' })
+      const target = state.players[0].deck[0]!
+      const uid = target.uid
+      expect(cardDoc(target.kind).upgradeTo).toBe('temper-plus')
+
+      // 手工摆出一次"升级服务已选定、等待选牌"的结算现场
+      state.stack.push({
+        kind: 'reward',
+        ask: [0],
+        reward: 'service',
+        allowSkip: false,
+        healAmount: 3,
+        removeFloor: 5,
+        pendingPick: { player: 0, purpose: 'upgrade' },
+      })
+      state.pending = {
+        kind: 'pick-card',
+        player: 0,
+        purpose: 'upgrade',
+        candidates: state.players[0].deck.map((card) => ({ ...card })),
+      }
+      submit(state, { kind: 'pick-own-card', card: target })
+
+      const after = allCards(state).find((card) => card.uid === uid)!
+      expect(after.kind).toBe('temper-plus')
+      expect(after.uid).toBe(uid)
+      assertConservation(state)
+    })
   })
 })

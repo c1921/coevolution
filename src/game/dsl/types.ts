@@ -6,6 +6,8 @@ import type {
   DocKind,
   ModifierOp,
   PickMode,
+  Rarity,
+  RewardKind,
   RoleRef,
   TargetCountMode,
   TargetDefault,
@@ -131,6 +133,21 @@ export type Effect =
   /** 对每个选定目标执行一次子效果（把 target 临时绑定为当前目标） */
   | { kind: 'for-each-target'; effects: Effect[] }
   | { kind: 'if'; condition: Condition; then: Effect[]; else?: Effect[] }
+  /**
+   * 奖励三选一：压入奖励结算帧，让双方各自做一次选择。
+   *  - `card`：从奖励池按权重抽 `candidates` 张不重复的牌，`allowSkip` 决定能否跳过；
+   *  - `service`：升级 / 移除 / 回复 三选一，`healAmount` 为回复量、`removeFloor` 为移除下限。
+   * 该指令只压帧、不立即询问，因此同一时机上的多份规则会按压栈顺序依次弹出。
+   */
+  | {
+      kind: 'offer-reward'
+      reward: RewardKind
+      candidates?: number
+      allowSkip?: boolean
+      weights?: { common: number; uncommon: number; rare: number }
+      healAmount?: Value
+      removeFloor?: number
+    }
 
 /** 数值修正 */
 export interface Modifier {
@@ -244,6 +261,16 @@ export interface CardDoc extends DocBase {
   cost: Value
   use?: UseVariant[]
   play?: PlayVariant
+  /**
+   * 稀有度：只有声明了稀有度的牌种才进入奖励池（见 rules/reward.ts）。
+   * 基础牌与升级版都不声明，因此不会出现在奖励候选里。
+   */
+  rarity?: Rarity
+  /**
+   * 升级后的牌种 id：升级奖励把目标牌的 kind 就地改成它（uid 不变）。
+   * 只写在基础牌上；升级版本身不得再声明 upgradeTo（禁止链式升级）。
+   */
+  upgradeTo?: string
 }
 
 export interface RulesetDoc extends DocBase {

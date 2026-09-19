@@ -2,11 +2,19 @@ import { submit } from '../game/engine'
 import { cardTargetChoice } from '../game/skills'
 import type { CardOption } from '../game/skills'
 import type { UseContext } from '../game/dsl/kinds'
-import type { Action, Card } from '../game/types'
+import type { Action, Card, CardKind } from '../game/types'
 import { RuleError } from '../game/util'
 import { pump } from './aiDriver'
 import { humanPending, selectedCards } from './selectors'
-import { HUMAN, chosenTargets, errorMessage, gameState, pendingTarget, selected } from './state'
+import {
+  HUMAN,
+  chosenTargets,
+  errorMessage,
+  gameState,
+  pendingTarget,
+  rewardSelection,
+  selected,
+} from './state'
 
 /**
  * 提交入口：把界面上的点击变成引擎动作。
@@ -27,6 +35,7 @@ export function act(action: Action): void {
     selected.value = []
     pendingTarget.value = null
     chosenTargets.value = []
+    rewardSelection.value = null
     pump()
   } catch (error) {
     errorMessage.value = error instanceof RuleError ? error.message : String(error)
@@ -74,4 +83,39 @@ export function submitDiscard(): void {
     return
   }
   act({ kind: 'discard-cards', cards })
+}
+
+/* ------------------------------------------------------------------ 奖励 */
+
+/** 卡牌奖励：选一张加入手牌 */
+export function submitRewardCard(kind: CardKind): void {
+  const pending = humanPending.value
+  if (!pending || pending.kind !== 'reward' || pending.reward !== 'card') return
+  act({ kind: 'pick-reward', card: kind })
+}
+
+/** 跳过卡牌奖励（服务奖励不可跳过，由引擎拒绝） */
+export function submitSkipReward(): void {
+  const pending = humanPending.value
+  if (!pending || pending.kind !== 'reward') return
+  act({ kind: 'skip-reward' })
+}
+
+/**
+ * 服务奖励：升级 / 移除 / 回复。
+ * 选「升级 / 移除」只是表达意图，引擎随后会出 `pick-card` 待输入项让玩家挑牌；
+ * 这里把中间选择态记下来，供覆盖层显示"正在为升级选牌"。
+ */
+export function submitRewardService(service: 'upgrade' | 'remove' | 'heal'): void {
+  const pending = humanPending.value
+  if (!pending || pending.kind !== 'reward' || pending.reward !== 'service') return
+  rewardSelection.value = service === 'heal' ? null : service
+  act({ kind: 'pick-reward', service })
+}
+
+/** 升级 / 移除选定一张自己的牌 */
+export function submitPickOwnCard(card: Card): void {
+  const pending = humanPending.value
+  if (!pending || pending.kind !== 'pick-card') return
+  act({ kind: 'pick-own-card', card })
 }

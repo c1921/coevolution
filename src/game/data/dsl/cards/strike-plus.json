@@ -1,0 +1,38 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "strike-plus",
+  "priority": 110,
+  "name": "打击+",
+  "short": "令对方获得 2 点威胁",
+  "text": "消耗 1 点能量：令对方获得 2 点威胁（在【打击】的基础上 +1）。",
+  "cost": { "kind": "const", "value": 1 },
+  "use": [
+    {
+      "context": "play",
+      "target": { "scope": "opponent", "required": false, "alive": true, "range": true },
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "record-card-use", "of": "self", "cardKind": "strike-plus" },
+        { "kind": "log", "template": "{self} 对 {target} 使用{usedAs}{self.energyTag}" },
+        {
+          "kind": "threat",
+          "target": "target",
+          "amount": {
+            "kind": "add",
+            "of": [
+              { "kind": "channel", "channel": "threat-per-attack", "of": "self" },
+              { "kind": "const", "value": 1 }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

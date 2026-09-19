@@ -97,6 +97,7 @@ export function createGame(options: CreateGameOptions): GameState {
     hand: [],
     deck,
     discard: [],
+    removed: [],
     // 能量上限由技能决定（见 rules/energy.ts），因此先置 0 再统一回满
     energy: 0,
     threat: 0,
@@ -112,6 +113,9 @@ export function createGame(options: CreateGameOptions): GameState {
       makePlayer(PLAYER, playerSpecies, firstDeck.items),
       makePlayer(AI, aiSpecies, secondDeck.items),
     ],
+    // 奖励加牌用的 uid 从双方牌组之后继续分配；cardTotal 是守恒的初始基准
+    nextUid: firstDeck.items.length + secondDeck.items.length,
+    cardTotal: firstDeck.items.length + secondDeck.items.length,
     active: firstPlayer,
     firstPlayer,
     turn: 1,

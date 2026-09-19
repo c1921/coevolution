@@ -249,30 +249,40 @@ function constOr(value: Value, fallback: number): number {
   return fallback
 }
 
-/** 递归累计效果对自己造成的威胁（用于 AI 判断"这张牌会不会伤到自己"） */
-function selfThreatOf(effects: readonly Effect[] | undefined, mayHitSelfTarget: boolean): number {
+/** 递归累计效果里满足 `include` 的伤害类数值（threat / lose-hp） */
+function harmTotal(
+  effects: readonly Effect[] | undefined,
+  include: (effect: Extract<Effect, { kind: 'threat' | 'lose-hp' }>) => boolean,
+): number {
   let total = 0
   for (const effect of effects ?? []) {
-    if (effect.kind === 'threat' || effect.kind === 'lose-hp') {
-      if (effect.target === 'self') total += constOr(effect.amount, 1)
-      else if (effect.target === 'target' && mayHitSelfTarget) total += constOr(effect.amount, 1)
+    if ((effect.kind === 'threat' || effect.kind === 'lose-hp') && include(effect)) {
+      total += constOr(effect.amount, 1)
     }
     if (effect.kind === 'for-each-target') {
-      total += selfThreatOf(effect.effects, mayHitSelfTarget)
+      total += harmTotal(effect.effects, include)
     }
     if (effect.kind === 'if') {
-      const thenHarm = selfThreatOf(effect.then, mayHitSelfTarget)
-      const elseHarm = selfThreatOf(effect.else, mayHitSelfTarget)
-      total += Math.max(thenHarm, elseHarm)
+      total += Math.max(harmTotal(effect.then, include), harmTotal(effect.else, include))
     }
     if (effect.kind === 'contest') {
-      total += Math.max(
-        selfThreatOf(effect.onMet, mayHitSelfTarget),
-        selfThreatOf(effect.onUnmet, mayHitSelfTarget),
-      )
+      total += Math.max(harmTotal(effect.onMet, include), harmTotal(effect.onUnmet, include))
     }
   }
   return total
+}
+
+/** 递归累计效果对自己造成的威胁（用于 AI 判断"这张牌会不会伤到自己"） */
+function selfThreatOf(effects: readonly Effect[] | undefined, mayHitSelfTarget: boolean): number {
+  return harmTotal(
+    effects,
+    (effect) => effect.target === 'self' || (effect.target === 'target' && mayHitSelfTarget),
+  )
+}
+
+/** 递归累计效果对**选定目标**（1v1 里即对手）造成的威胁 */
+function targetThreatOf(effects: readonly Effect[] | undefined): number {
+  return harmTotal(effects, (effect) => effect.target === 'target')
 }
 
 /**
@@ -286,6 +296,20 @@ export function cardSelfThreat(kind: string): number {
     harm = Math.max(harm, selfThreatOf(variant.effects, mayTargetSelf(variant.target)))
   }
   return harm
+}
+
+/**
+ * 卡牌对选定目标造成的威胁总量（由文档结构派生）。
+ * AI 用它与 `cardSelfThreat` 比较「收益 − 自伤」，避免自伤牌被一律弃用。
+ * 非 const 的数值按 1 保守估计（与 `constOr` 同一口径）。
+ */
+export function cardThreatToTarget(kind: string): number {
+  const doc = cardDoc(kind)
+  let best = 0
+  for (const variant of doc.use ?? []) {
+    best = Math.max(best, targetThreatOf(variant.effects))
+  }
+  return best
 }
 
 export type { Doc }

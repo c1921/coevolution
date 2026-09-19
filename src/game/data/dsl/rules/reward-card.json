@@ -1,0 +1,35 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "rule",
+  "id": "reward-card",
+  "priority": 30,
+  "on": { "at": "turn-start" },
+  "when": [
+    {
+      "kind": "compare",
+      "op": "eq",
+      "left": {
+        "kind": "mul",
+        "of": [
+          {
+            "kind": "floor-div",
+            "of": { "kind": "ref", "ref": "turn" },
+            "by": { "kind": "const", "value": 3 }
+          },
+          { "kind": "const", "value": 3 }
+        ]
+      },
+      "right": { "kind": "ref", "ref": "turn" }
+    }
+  ],
+  "effects": [
+    {
+      "kind": "offer-reward",
+      "reward": "card",
+      "candidates": 3,
+      "allowSkip": true,
+      "weights": { "common": 60, "uncommon": 30, "rare": 10 }
+    }
+  ]
+}

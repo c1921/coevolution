@@ -40,3 +40,11 @@ export type PendingTarget =
 export const pendingTarget = ref<PendingTarget | null>(null)
 /** 多选时已勾选的目标（单选点一下即提交，不留状态） */
 export const chosenTargets = ref<PlayerIndex[]>([])
+
+/**
+ * 服务奖励的中间选择态：玩家点了「升级 / 移除」但还没选牌。
+ * 引擎在提交 `pick-reward` 之后会进入 `pick-card` 待输入项，因此这里只用于
+ * 界面高亮与"当前正在选牌做什么"，真正推进仍由引擎的待输入项决定。
+ */
+export type RewardSelection = 'upgrade' | 'remove'
+export const rewardSelection = ref<RewardSelection | null>(null)

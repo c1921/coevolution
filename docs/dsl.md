@@ -26,8 +26,8 @@ DSL 只承载**内容**，不承载**结算机器**。判断一段逻辑该不�
 |---|---|---|
 | 代号：体力上限、技能表、牌组 | `species` | `species/defensive.json` |
 | 技能：常驻修正、牌面转化、触发、主动技 | `skill` | `skills/charge.json`、`skills/assault.json` |
-| 卡牌：费用、`use` / `play` 变体与效果 | `card` | `cards/strike.json` |
-| 注册在时点上的非技能效果 | `rule` | `rules/attrition.json`（消耗战） |
+| 卡牌：费用、`use` / `play` 变体与效果、`rarity` / `upgradeTo` | `card` | `cards/strike.json`、`cards/bludgeon.json`（奖励池）、`cards/strike-plus.json`（升级版） |
+| 注册在时点上的非技能效果（含奖励节奏） | `rule` | `rules/attrition.json`（消耗战）、`rules/reward-card.json` / `rules/reward-service.json`（奖励三选一） |
 | 牌组：牌种与张数 | `deck` | `decks/basic.json` |
 | 七个修正通道的基准值 | `ruleset` | `rules/base.json` |
 
@@ -106,8 +106,9 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 `resolveRefs` 在结构校验之后统一解析：
 
 - 技能 ↔ 代号（`species.skills`）、牌组 ↔ 牌种（`deck.cards[].kind`）、代号 ↔ 牌组（`species.deck`）、技能/效果里的 `skill` / `cardKind` / `expectedCard` / `from` / `to` / `respondsTo` 等引用。
+- 卡牌的 `upgradeTo` 也必须指向存在的牌种；指向自己报 `bad-combination`，指向一个**自身也声明了 `upgradeTo`** 的牌同样报 `bad-combination`（禁链式升级）。
 - `ruleset` 必须**恰好一份**。
-- 死文档（`dead-doc`）：技能未被任何代号引用、牌种未被任何牌组引用、牌组未被任何代号引用，都会报错。
+- 死文档（`dead-doc`）：技能未被任何代号引用、牌组未被任何代号引用都会报错；**牌种只要有 `rarity`（在奖励池里）就不算死文档**，否则必须被某个牌组引用。
 
 ---
 
@@ -223,6 +224,8 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `cost` | 是 | `Value` | 费用；当它是 `const` 时必须 ≥ 1 |
 | `use` | 否 | `UseVariant[]` | 使用变体（`play` / `dying`，同语境不可重复） |
 | `play` | 否 | `PlayVariant` | 响应变体（`respondsTo`）；**占位，当前无内容使用** |
+| `rarity` | 否 | `common` / `uncommon` / `rare` | 稀有度；**声明了才进奖励池**（基础牌与升级版都不声明） |
+| `upgradeTo` | 否 | 牌种 id | 升级后的牌种；升级奖励把目标牌的 `kind` 就地改成它（`uid` 不变）。升级版不得再声明（禁链式升级），也不能自指 |
 
 卡牌至少需要 `use` 或 `play` 之一。费用下限由 `cost-below-minimum` 强制：0 费 + 无次数限制的【打击】会形成无限连击。
 
@@ -272,6 +275,29 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 ```
 
 `play` 变体（旧的响应式防御）在仓库里已无内容声明，取而代之的是上面这种「出牌阶段用【防御】抵消自己威胁」的写法（威胁机制见 3.5、第 6、10 节）。
+
+#### 稀有度、升级与奖励池
+
+- **奖励池 = 所有声明了 `rarity` 的牌种**（`src/game/rules/reward.ts` 的 `rewardPool()`）。候选与权重都由这条结构规则派生，代码里**没有任何牌种 id**。
+- 基础牌声明 `upgradeTo` 指向自己的升级版；升级版是**独立牌种文档**（`id` 用 `-plus` 后缀），不声明 `rarity`，因此天然不入池；也不再声明 `upgradeTo`，加载期会以 `bad-combination` 拒绝链式升级。
+- 升级是「就地改 `kind`」：`uid` 不变、牌区不变，因此不破坏牌数守恒，也不需要重建牌组。
+- 一个最小例子：
+
+```json
+{
+  "kind": "card",
+  "id": "temper",
+  "name": "淬火",
+  "short": "测试",
+  "text": "测试",
+  "cost": { "kind": "const", "value": 1 },
+  "rarity": "common",
+  "upgradeTo": "temper-plus",
+  "use": [{ "context": "play", "effects": [{ "kind": "log", "template": "{self} 使用{usedAs}" }] }]
+}
+```
+
+`dsl/extensibility.test.ts` 用一份这样的牌验证了「升级后 `kind` 变化、`uid` 不变、守恒成立」。
 
 ### 3.5 `ruleset` — 规则常量
 
@@ -479,6 +505,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `extra-phase` | `phase: TurnPhase`、`position: 'next' \| 'last'` | 插入一个额外阶段 |
 | `for-each-target` | `effects: Effect[]` | 对每个选定目标各执行一次子效果：迭代时把 `target` 临时绑定为当前目标（多目标牌的唯一正确写法） |
 | `if` | `condition: Condition`、`then: Effect[]`、`else?: Effect[]` | 条件分支；`then` / `else` 都是非空效果列表 |
+| `offer-reward` | `reward: 'card' \| 'service'`（必填）、`candidates?`、`allowSkip?`、`weights?`、`healAmount?`、`removeFloor?` | 压入奖励结算帧，让双方各做一次三选一（见 §6.2） |
 
 **威胁是基础伤害机制**：攻击不再直接扣体力，而是用 `threat` 给目标叠加威胁；承受者在自己的出牌阶段打出【防御】，用 `offset-threat` 抵消；其**回合结束时**剩余威胁结算为等量伤害（走伤害帧：先 emit `after-damage` 触发，再做濒死检查），随后威胁归零、不跨回合累积。`damage` 指令已从 `EFFECT_KINDS` 删除。
 
@@ -555,6 +582,53 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 **处理区与 `specific` / `event-card` 当前只服务占位对抗**：它们原本用于「把造成伤害/被响应的牌压入处理区、事后再取回」的响应链，而内置内容没有任何卡牌声明 `play` 变体，`contest` 不可达，因此实战中不会有牌进入处理区。新增反制内容前不要照抄旧的响应式写法。
 
 效果列表与条件列表都**不能为空数组**（`bad-combination`）。
+
+### 6.2 `offer-reward` — 奖励三选一
+
+`offer-reward` 是**唯一会打开交互式奖励的指令**：它不立即询问，而是把一帧奖励结算压进帧栈
+（`dsl/primitives.ts` 的 `pushRewardFrame`），等当前时机的全部规则执行完后，引擎从栈顶开始逐个询问。
+
+字段（`reward` 必填，两组字段互斥，写错一组报 `bad-combination`）：
+
+| `reward` | 允许字段 | 语义 |
+|---|---|---|
+| `card` | `candidates?`（默认 3）、`allowSkip?`、`weights?`（`common`/`uncommon`/`rare` 三个非负整数） | 从奖励池按权重抽 `candidates` 张不重复的牌；选中后**直接进手牌**（`cardTotal += 1`，uid 用 `state.nextUid`）；`allowSkip` 决定能否跳过 |
+| `service` | `healAmount?`（`Value`）、`removeFloor?` | 升级 / 移除 / 回复三选一；回复量取 `healAmount`，移除下限取 `removeFloor`（移除后「牌组+手牌+弃牌堆」不得少于它） |
+
+要点：
+
+- **压帧顺序反直觉**：同一时机上的规则按 `priority` **升序执行**，而 `advance()` 从**栈顶**结算，
+  因此**后压的帧先弹**。内置的两份奖励规则把服务放在 `priority: 20`、卡牌放在 `priority: 30`，
+  于是卡牌三选一先弹、服务三选一后弹——想要「A 先于 B」，就让 A 的规则**后执行**（priority 更大）。
+- **询问顺序**：从回合角色起按座次（`aliveOrderFrom(state, state.active)`），双方各选一次；
+  非回合角色同样会被询问，因此界面只依据 `pending.kind`，不能看 `state.phase`。
+- **两步询问**：服务奖励选定「升级 / 移除」时不立即出选牌，而是先记 `pendingPick`，
+  下一轮 `stepFrame` 才出 `pick-card`（候选按 `uid` 升序现算）。
+- **可用性现算**：满血不能回复、没有 `upgradeTo` 的牌不能升级、移除后不足下限不能移除；
+  三项都不可用时跳过该玩家并记战报，避免出现无解的待输入项。
+- **战报**：每个选择写一行日志，玩家能看到对手拿到了什么。
+
+最小例子（`rules/reward-card.json`，第 3 的倍数回合抽三选一）：
+
+```json
+{
+  "kind": "rule",
+  "id": "reward-card",
+  "priority": 30,
+  "on": { "at": "turn-start" },
+  "when": [
+    { "kind": "compare", "op": "eq",
+      "left": { "kind": "mul", "of": [
+        { "kind": "floor-div", "of": { "kind": "ref", "ref": "turn" }, "by": { "kind": "const", "value": 3 } },
+        { "kind": "const", "value": 3 }] },
+      "right": { "kind": "ref", "ref": "turn" } }
+  ],
+  "effects": [
+    { "kind": "offer-reward", "reward": "card", "candidates": 3, "allowSkip": true,
+      "weights": { "common": 60, "uncommon": 30, "rare": 10 } }
+  ]
+}
+```
 
 ---
 
@@ -870,11 +944,11 @@ export interface EffectContext {
 | `version` | `dslVersion` 不等于 `DSL_VERSION` | `dslVersion: 99` → `species/offensive.json#/dslVersion` |
 | `unknown-kind` | 文档 `kind` 不在 `DOC_KINDS` | `kind: "monster"` |
 | `unknown-key` | 出现未定义字段（拼写错误也要报） | 把 `kind` 写成 `Kind` → `...#/Kind` |
-| `missing-field` | 缺少必填字段 | 删掉 `card.cost`；`ruleset.channels` 少一个通道 |
-| `bad-type` | 类型/枚举不合法（未指定专用码时的兜底） | `compare.op` 不是 `lt/lte/...`；`required` 不是布尔；`activate.timing` 不是 `play` |
-| `bad-number` | 数字不满足「有限整数 / 下限」 | `maxHp: 0`；`clamp.min` 不是数字；通道基准值不是非负整数 |
-| `bad-combination` | 结构组合非法 | 空 `effects` / 空 `when`；`move-cards` 的牌区与 `mode` 不匹配；`contest-contribute` 不在 `play`；`resolve-dying` 不在 `dying`；技能没声明任何部件；卡牌既无 `use` 也无 `play` |
-| `unknown-ref` | 交叉引用指向不存在的文档 | `species.skills: ["nope"]`；`deck.cards[].kind: "hex"` |
+| `missing-field` | 缺少必填字段 | 删掉 `card.cost`；`ruleset.channels` 少一个通道；`offer-reward` 缺 `reward`；`weights` 缺某个稀有度 |
+| `bad-type` | 类型/枚举不合法（未指定专用码时的兜底） | `compare.op` 不是 `lt/lte/...`；`required` 不是布尔；`activate.timing` 不是 `play`；`rarity` 不是词表内的值 |
+| `bad-number` | 数字不满足「有限整数 / 下限」 | `maxHp: 0`；`clamp.min` 不是数字；通道基准值不是非负整数；`weights` 出现负数 |
+| `bad-combination` | 结构组合非法 | 空 `effects` / 空 `when`；`move-cards` 的牌区与 `mode` 不匹配；`contest-contribute` 不在 `play`；`resolve-dying` 不在 `dying`；技能没声明任何部件；卡牌既无 `use` 也无 `play`；`offer-reward` 用错一组字段或 `upgradeTo` 自指/链式升级 |
+| `unknown-ref` | 交叉引用指向不存在的文档 | `species.skills: ["nope"]`；`deck.cards[].kind: "hex"`；`card.upgradeTo: "nope"` |
 | `duplicate-id` | `id` 重复 | 两个代号都叫 `offensive`；第二份 `ruleset`；同一卡牌两个 `context: "play"` |
 | `unknown-role` | 角色合法但当前语境不允许 | 在 `use-play` 里写 `{source}` |
 | `unknown-channel` | 通道不在 `CHANNELS` | `modifiers[].channel: "mana-max"`；`ruleset.channels` 多一个 `mana-max` |
@@ -915,7 +989,10 @@ export interface EffectContext {
 2. `cost` 若是 `const`，必须 ≥ 1（`cost-below-minimum`）。
 3. 声明 `use`（`context: "play"` 和/或 `"dying"`，同一语境不可重复）；`play`（`respondsTo`）是**占位对抗机制**的字段，内置内容无人使用，新增反制内容前不要照抄旧的响应式写法。
 4. 把 `{ kind: <id>, count: n }` 加进某个牌组的 `cards`（`decks/<id>.json`），否则牌种是 `dead-doc`。
+   **奖励新卡是例外**：声明 `rarity` 后它就在奖励池里，不必进牌组（`refs.ts` 对声明了稀有度的牌种免除 `dead-doc`）。
 5. 变体里的效果用第 6 节的指令集表达；引用牌种时（`pick.cardKind`，以及占位对抗才用到的 `expectedCard`、`respondsTo`、`contest`）必须指向存在的牌。
+6. 想做**升级版**：写一份独立牌种（`id` 用 `-plus`、`name` 用 `+`），在基础牌上声明 `upgradeTo` 指向它；
+   升级版**不写** `rarity`（不入奖励池）、**不写** `upgradeTo`（禁链式升级，加载期拒绝）。
 
 注意 `move-cards` 的约束：`played` 从手牌取（使用/打出的那张），`cost` 从手牌取费用牌，`specific` 只能从处理区取；`to.zone = "processing"` 只允许从手牌进入。处理区与 `specific` 目前只服务占位对抗，实战中不会有牌进入。
 
@@ -942,6 +1019,9 @@ export interface EffectContext {
 1. 新建 `src/game/data/dsl/rules/<id>.json`，`kind: "rule"`，字段 `on` / `when?` / `effects`。
 2. `on` 只声明引擎会执行/emit 的时机：`turn-start` / `turn-end` / `phase-start` / `phase-end`（需要 `phase`）。事件类时机目前只有 `after-damage`，且只用于 `trigger`。
 3. 规则按注册顺序执行；`when` 全部成立才执行 `effects`。
+4. 想发奖励就用 `effects: [{ kind: "offer-reward", reward: "card" | "service", ... }]`（§6.2）。
+   同一时机上多份奖励规则时，**priority 更大的先弹**（规则先执行、帧后进先出）；
+   内置的消耗战（priority 10）排在两份奖励规则之前，因此「先扣血、扣死了就不再发奖励」。
 
 ### 13.5 怎么验证新增内容
 
@@ -983,7 +1063,9 @@ export interface EffectContext {
 | `src/game/dsl/schema.test.ts` | 没有孤儿 `$defs` 节点；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
 | `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、**运行时依赖图零环**（强连通分量比对）、README 测试表覆盖全部测试文件、stores 只从 barrel 进入 |
 | `src/game/dsl/channels.test.ts` | 通道接线验收：七条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、每次攻击叠加的威胁、占位对抗的抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
-| `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限、使用时选目标的牌、多目标牌都只改文档即可端到端生效 |
+| `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限、使用时选目标的牌、多目标牌、带 `upgradeTo` 的牌都只改文档即可端到端生效 |
+| `src/game/rules/reward.test.ts` | 奖励节奏（3/4/6/12 回合触发与「卡牌先于服务」）、奖励池与加权不重复抽取的确定性、跳过、服务三项与边界（满血 / 无可升级牌 / 移除下限） |
+| `src/game/rules/deckEdit.test.ts` | 升级保 `uid`、移除进 `removed` 且不随洗回复活、移除下限被拒且状态不变 |
 
 `src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 代号的最小自洽文档集）、`mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）与 `contentWith(docs)`（以完整内容集为底按 id 替换/新增文档）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
 
@@ -1024,4 +1106,6 @@ export interface EffectContext {
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
 | 数值递归上限 16 | 表达式/通道递归超过 16 层抛 `RuleError`；这是防自引用与防栈溢出的硬保护 |
 | 没有 native 逃生舱 | 效果必须表达为数据；无法表达的新机制只能扩展指令集（改词表、类型、校验器、解释器、schema），不能绕过校验直接调函数 |
-| 手牌上限 = 体力、守恒/能量不变式、RNG、距离仍在引擎 | 这些是机器不变量，不属于内容；见第 1 节的边界表 |
+| 奖励帧一次抽好双方共享的候选 | `offer-reward` 压帧时抽一次候选，两名玩家从同一组里选；没有「各自重抽」或「刷新候选」的字段，要改就调 `candidates` / `weights` / 周期 |
+| 奖励的交互顺序由帧栈决定 | `offer-reward` 只压帧不立即询问，同一时机上的多份奖励规则「priority 大者先弹」；想要确定的顺序就必须显式写 `priority` |
+| 手牌上限 = `min(体力, 6)`、守恒/能量不变式、RNG、距离仍在引擎 | 这些是机器不变量，不属于内容；见第 1 节的边界表 |

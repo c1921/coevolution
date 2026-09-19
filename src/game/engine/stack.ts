@@ -1,8 +1,10 @@
 import { runEffects } from '../dsl/effect'
 import { runTrigger } from '../dsl/event'
+import { log, playerLabel } from '../log'
 import { flushProcessing } from '../rules/cardZones'
 import { killPlayer } from '../rules/death'
 import { pushDying } from '../rules/dying'
+import { removeCandidates, serviceOptions, upgradeCandidates } from '../rules/reward'
 import { advanceTurn } from '../rules/turn'
 import type { Frame, GameState } from '../types'
 
@@ -106,6 +108,57 @@ function stepFrame(state: GameState, top: Frame): boolean {
       state.stack.pop()
       runEffects(state, top.effects, top.ctx)
       return false
+    }
+
+    case 'reward': {
+      // 第一步：升级 / 移除已经选定，等玩家在自己的候选里挑一张
+      const pick = top.pendingPick
+      if (pick) {
+        const candidates =
+          pick.purpose === 'upgrade'
+            ? upgradeCandidates(state, pick.player)
+            : removeCandidates(state, pick.player)
+        if (candidates.length === 0) {
+          // 合法性已挡住"没有候选还选升级/移除"，这里只是兜底，避免出现无解的待输入项
+          top.pendingPick = undefined
+          top.ask.shift()
+          return false
+        }
+        state.pending = {
+          kind: 'pick-card',
+          player: pick.player,
+          purpose: pick.purpose,
+          // 候选当场现算（按 uid 升序），保证界面看到的与提交时校验的是同一份
+          candidates: candidates.map((card) => ({ ...card })),
+        }
+        return true
+      }
+
+      // 第二步：队列空了就弹栈
+      const next = top.ask[0]
+      if (next === undefined) {
+        state.stack.pop()
+        return false
+      }
+
+      // 服务奖励若三项都不可用（满血且无牌可升且不能移除），跳过该玩家，避免死锁
+      if (top.reward === 'service') {
+        const available = serviceOptions(state, next, top)
+        if (!available.upgrade && !available.remove && !available.heal) {
+          log(state, `${playerLabel(state, next)} 没有可用的奖励选项，跳过`)
+          top.ask.shift()
+          return false
+        }
+      }
+
+      state.pending = {
+        kind: 'reward',
+        player: next,
+        reward: top.reward,
+        ...(top.cards !== undefined ? { cards: top.cards } : {}),
+        allowSkip: top.allowSkip,
+      }
+      return true
     }
   }
 }

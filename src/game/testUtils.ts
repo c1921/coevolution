@@ -90,6 +90,7 @@ export function makeState(o: MakeStateOptions): GameState {
     hand,
     deck,
     discard: [],
+    removed: [],
     // 先置 0，构造完 state 后统一回满（上限可能带技能修正）
     energy: 0,
     threat: 0,
@@ -105,6 +106,8 @@ export function makeState(o: MakeStateOptions): GameState {
       makePlayer(0, o.playerSpecies, playerHand, playerDeck, o.playerHp),
       makePlayer(1, o.aiSpecies, aiHand, aiDeck, o.aiHp),
     ],
+    nextUid: playerDeck.length + aiDeck.length + playerHand.length + aiHand.length,
+    cardTotal: playerDeck.length + aiDeck.length + playerHand.length + aiHand.length,
     active,
     firstPlayer: 0,
     turn: 1,

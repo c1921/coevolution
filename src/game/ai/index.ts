@@ -1,8 +1,18 @@
-import { effectsHarmChosenTarget } from '../dsl/effects'
-import { cardRole, cardSelfThreat, effectsInclude, skillDoc } from '../dsl/registry'
+import { effectsHarmChosenTarget, findEffect } from '../dsl/effects'
+import {
+  cardDoc,
+  cardRole,
+  cardSelfThreat,
+  cardThreatToTarget,
+  effectsInclude,
+  skillDoc,
+} from '../dsl/registry'
 import type { CardRole } from '../dsl/registry'
+import type { Effect, Value } from '../dsl/types'
 import type { UseContext } from '../dsl/kinds'
 import { canPayEnergy } from '../rules/energy'
+import { checkUseCard } from '../rules/legality'
+import { ownCards, serviceOptions } from '../rules/reward'
 import {
   activationCostCards,
   activationTargetChoice,
@@ -14,7 +24,16 @@ import {
   useVariantOf,
 } from '../skills'
 import type { CardOption } from '../skills'
-import type { Action, Card, CardKind, GameState, PlayerIndex, SkillId } from '../types'
+import type {
+  Action,
+  Card,
+  CardKind,
+  Frame,
+  GameState,
+  PlayerIndex,
+  Prompt,
+  SkillId,
+} from '../types'
 import { otherPlayer, RuleError } from '../util'
 
 /** AI 思考延迟（毫秒）：只影响界面节奏，引擎与单测不受影响 */
@@ -39,6 +58,34 @@ export const CYCLE_MAX_HAND = 2
 export const HAND_RESERVE = 1
 /** 发动进攻型主动技（如【强袭】）后至少留下的手牌数：不把最后的牌全押在一次进攻上 */
 export const OFFENSE_RESERVE = 3
+/** 手牌少到这个数就值得打抽牌类牌面（卡牌本身打出后手牌还会减一） */
+export const UTILITY_DRAW_MAX_HAND = 3
+/** 对手手牌多到这个数就值得打弃他手牌的牌面 */
+export const UTILITY_DISCARD_MIN_HAND = 3
+/**
+ * 自伤牌的门槛：`对手受到的威胁 − 自己承受的威胁` 至少要有这么多才值得打。
+ * 只看"自伤量"会让【血怒】这类以血换输出的牌几乎绝迹，因此改成比较净收益；
+ * 对手会被这一击压垮时另算（见 selfHarmWorthwhile）。
+ */
+export const SELF_HARM_MARGIN = 1
+
+/** 奖励卡牌评分权重（"怎么选"属于 AI 策略，不是规则） */
+export const REWARD_SCORE = {
+  threat: 1.4,
+  heal: 1.2,
+  offset: 0.8,
+  draw: 1.4,
+  cost: 0.3,
+  utility: 2,
+} as const
+/** 卡牌奖励的最低接受分：最高分低于它且允许跳过时就跳过 */
+export const REWARD_MIN_SCORE = 1.5
+/** 服务奖励：体力低于最大体力的这个比例时优先回复 */
+export const REWARD_HEAL_RATIO = 0.5
+/** 服务奖励：自己的牌多到这个数就优先移除 */
+export const REWARD_REMOVE_COUNT = 26
+/** 服务奖励：攻击牌占比低于这个值就优先移除 */
+export const REWARD_MIN_ATTACK_RATIO = 0.35
 
 /**
  * 规则式 AI：读取当前待输入项并返回一个动作。
@@ -64,6 +111,10 @@ export function aiDecide(state: GameState): Action {
       return { kind: 'trigger-choice', accept: true }
     case 'discard':
       return decideDiscard(state, p, pending.count)
+    case 'reward':
+      return decideReward(state, p, pending)
+    case 'pick-card':
+      return decidePickCard(pending)
   }
 }
 
@@ -161,15 +212,22 @@ function canTarget(state: GameState, p: PlayerIndex, kind: CardKind, context: Us
 }
 
 /**
- * 自伤牌是否值得打：对手体力 ≤ 这张牌将造成的威胁，且自己扛得住它带给自己的威胁。
- * 威胁在各自的回合结束时才兑现，这里只是保守的前置筛子。
+ * 自伤牌是否值得打：比较「对对手的收益 − 对自己的威胁」，而不是只看自伤量。
+ *  - 自己的威胁在**自己的回合结束时**兑现，因此先把"已有威胁 + 这张牌的自伤"
+ *    加在一起：扛不住就绝不打（哪怕对手会被这一击压垮——自己会先结算阵亡）；
+ *  - 对手会被这一击压垮时，只要自己扛得住就打（收尾优先）；
+ *  - 否则净收益至少要有 SELF_HARM_MARGIN。
  */
 function selfHarmWorthwhile(state: GameState, p: PlayerIndex, kind: CardKind): boolean {
   const harm = cardSelfThreat(kind)
   if (harm <= 0) return true
   const self = state.players[p]
   const opponent = state.players[otherPlayer(p)]
-  return opponent.hp <= harm && self.hp > harm
+  const benefit = cardThreatToTarget(kind)
+  // 本回合结束时自己身上的威胁会全部兑现，打出自伤牌只会雪上加霜
+  if (self.hp <= self.threat + harm) return false
+  if (opponent.hp <= benefit) return true
+  return benefit - harm >= SELF_HARM_MARGIN
 }
 
 /** 某张手牌在该语境下的可选牌面（直接用法优先，其次技能转化） */
@@ -295,7 +353,11 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     if (heal) return asAction(state, p, heal, 'use')
   }
 
-  // 4. 换牌类主动技：体力充裕但手牌太少时换牌
+  // 4. 功能牌：抽牌 / 弃对手手牌 / 额外阶段——按文档结构判断，不用牌种 id
+  const utility = bestUtility(state, p)
+  if (utility) return utility
+
+  // 5. 换牌类主动技：体力充裕但手牌太少时换牌
   const cycle = activations.find((item) => item.role === 'card-cycle')
   if (cycle && player.hp >= CYCLE_MIN_HP && player.hand.length <= CYCLE_MAX_HAND) {
     const target = chooseActivationTarget(state, p, cycle.skill)
@@ -304,7 +366,7 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
       : { kind: 'activate', skill: cycle.skill, target }
   }
 
-  // 5. 进攻型主动技：弃得起且留出余量时发动（如进攻型的【强袭】）
+  // 6. 进攻型主动技：弃得起且留出余量时发动（如进攻型的【强袭】）
   const offense = activations.find((item) => item.role === 'offense')
   if (offense) {
     const cost = activationCostCards(state, p, offense.skill)
@@ -320,11 +382,66 @@ function decidePlay(state: GameState, p: PlayerIndex): Action {
     }
   }
 
-  // 6. 进攻
+  // 7. 进攻
   const attack = bestAttack(state, p)
   if (attack) return attack
 
   return { kind: 'end-phase' }
+}
+
+/**
+ * 功能牌：当前 `cardRole` 把抽牌 / 额外阶段 / 弃对手手牌都归为 utility，
+ * 旧 AI 完全不会用，新卡里的【战术演习】【疾跑】【掠夺】【后空翻】因此成了死牌。
+ *
+ * 判定完全由文档结构派生（`effectsInclude` / `findEffect`），不出现任何牌种 id：
+ *  - 含 `draw` 且手牌 ≤ UTILITY_DRAW_MAX_HAND → 用；
+ *  - 含从对手手牌取牌的 `move-cards` 且对手手牌 ≥ UTILITY_DISCARD_MIN_HAND → 用；
+ *  - 含 `extra-phase` → 用。
+ * 提交前过一遍 `checkUseCard`，保证 `requires`（如【后空翻】需要自己有威胁）不满足时不会打出。
+ */
+function bestUtility(state: GameState, p: PlayerIndex): Action | null {
+  const player = state.players[p]
+  const opponent = state.players[otherPlayer(p)]
+
+  for (const card of player.hand) {
+    for (const option of optionsOf(state, p, card, 'use')) {
+      // 转化牌留给进攻/防御分支，不在功能分支里抢牌
+      if (option.via !== undefined) continue
+      const variant = useVariantOf(option.as, 'play')
+      if (!variant) continue
+      const effects = [...variant.effects, ...(variant.after ?? [])]
+      const wantsDraw =
+        effectsInclude(effects, 'draw') && player.hand.length <= UTILITY_DRAW_MAX_HAND
+      const wantsDiscard =
+        discardsOpponentHand(effects) && opponent.hand.length >= UTILITY_DISCARD_MIN_HAND
+      const wantsPhase = effectsInclude(effects, 'extra-phase')
+      if (!wantsDraw && !wantsDiscard && !wantsPhase) continue
+      if (!canPayEnergy(state, p, option.as)) continue
+
+      const targets = chooseCardTargets(state, p, option.as, 'play')
+      const legality = checkUseCard(
+        state,
+        p,
+        card,
+        option.as,
+        option.via,
+        targets.length > 0 ? targets : undefined,
+      )
+      if (!legality.ok) continue
+      return asAction(state, p, { card, option }, 'use')
+    }
+  }
+  return null
+}
+
+/** 效果树里是否含"从对手手牌取牌"的 move-cards（弃对手手牌 / 干扰类） */
+function discardsOpponentHand(effects: readonly Effect[]): boolean {
+  return (
+    findEffect(
+      effects,
+      (effect) => effect.kind === 'move-cards' && effect.from.of === 'opponent',
+    ) !== undefined
+  )
 }
 
 /**
@@ -424,4 +541,130 @@ function worstCards(hand: Card[], count: number): Card[] {
 
 function decideDiscard(state: GameState, p: PlayerIndex, count: number): Action {
   return { kind: 'discard-cards', cards: worstCards(state.players[p].hand, count) }
+}
+
+/* ------------------------------------------------------------------ 奖励决策 */
+
+/** 栈顶的奖励帧（AI 用它读取服务奖励的参数） */
+function currentRewardFrame(state: GameState): Extract<Frame, { kind: 'reward' }> | undefined {
+  const top = state.stack[state.stack.length - 1]
+  return top && top.kind === 'reward' ? top : undefined
+}
+
+function constNumber(value: Value, fallback: number): number {
+  return value.kind === 'const' ? value.value : fallback
+}
+
+/** 效果树里某类效果的数值合计（含嵌套分支；非 const 按 fallback=1 估） */
+function magnitudeOf(
+  effects: readonly Effect[] | undefined,
+  kind: 'threat' | 'heal' | 'offset-threat' | 'draw',
+): number {
+  let total = 0
+  for (const effect of effects ?? []) {
+    if (effect.kind === 'threat' && kind === 'threat') total += constNumber(effect.amount, 1)
+    else if (effect.kind === 'heal' && kind === 'heal') total += constNumber(effect.amount, 1)
+    else if (effect.kind === 'offset-threat' && kind === 'offset-threat') {
+      total += constNumber(effect.amount, 1)
+    } else if (effect.kind === 'draw' && kind === 'draw') total += constNumber(effect.count, 1)
+
+    if (effect.kind === 'for-each-target') total += magnitudeOf(effect.effects, kind)
+    if (effect.kind === 'if') {
+      total += Math.max(magnitudeOf(effect.then, kind), magnitudeOf(effect.else, kind))
+    }
+    if (effect.kind === 'contest') {
+      total += Math.max(magnitudeOf(effect.onMet, kind), magnitudeOf(effect.onUnmet, kind))
+    }
+  }
+  return total
+}
+
+/**
+ * 奖励卡牌评分：完全由文档结构派生（威胁/治疗/抵消/摸牌的量与费用），
+ * 不含任何牌种 id。无以上效果的牌（干扰、额外阶段等）按 utility 给低基础分，
+ * 避免它们因为"分数算不出来"而被一律跳过。
+ */
+export function rewardCardScore(kind: CardKind): number {
+  const doc = cardDoc(kind)
+  const cost = doc.cost.kind === 'const' ? doc.cost.value : 1
+  const effects = (doc.use ?? []).flatMap((variant) => variant.effects)
+  const raw =
+    magnitudeOf(effects, 'threat') * REWARD_SCORE.threat +
+    magnitudeOf(effects, 'heal') * REWARD_SCORE.heal +
+    magnitudeOf(effects, 'offset-threat') * REWARD_SCORE.offset +
+    magnitudeOf(effects, 'draw') * REWARD_SCORE.draw
+  return raw + (raw === 0 ? REWARD_SCORE.utility : 0) - cost * REWARD_SCORE.cost
+}
+
+/** 卡牌三选一：取评分最高者；最高分低于阈值且允许跳过时跳过 */
+function decideReward(
+  state: GameState,
+  p: PlayerIndex,
+  pending: Extract<Prompt, { kind: 'reward' }>,
+): Action {
+  if (pending.reward === 'service') return decideServiceReward(state, p)
+
+  const cards = pending.cards ?? []
+  if (cards.length === 0) {
+    return pending.allowSkip ? { kind: 'skip-reward' } : { kind: 'pick-reward' }
+  }
+  const best = [...cards].sort(
+    (a, b) => rewardCardScore(b) - rewardCardScore(a) || a.localeCompare(b),
+  )[0] as CardKind
+  if (pending.allowSkip && rewardCardScore(best) < REWARD_MIN_SCORE) {
+    return { kind: 'skip-reward' }
+  }
+  return { kind: 'pick-reward', card: best }
+}
+
+/**
+ * 服务三选一：
+ *  - 体力低于一半 → 回复；
+ *  - 牌组偏大或攻击牌占比过低 → 移除（具体移除哪张交给 pick-card 的 worstCards）；
+ *  - 否则 → 升级；
+ * 每次只提交当前可用的选项，绝不下发一个必被 legality 拒绝的动作。
+ */
+function decideServiceReward(state: GameState, p: PlayerIndex): Action {
+  const frame = currentRewardFrame(state)
+  const available = frame
+    ? serviceOptions(state, p, frame)
+    : { upgrade: false, remove: false, heal: false }
+  const player = state.players[p]
+
+  if (available.heal && player.hp * 2 < player.maxHp) {
+    return { kind: 'pick-reward', service: 'heal' }
+  }
+  if (available.remove) {
+    const own = ownCards(state, p)
+    const attacks = own.filter((card) => cardRole(card.kind) === 'attack').length
+    const ratio = own.length > 0 ? attacks / own.length : 1
+    if (own.length > REWARD_REMOVE_COUNT || ratio < REWARD_MIN_ATTACK_RATIO) {
+      return { kind: 'pick-reward', service: 'remove' }
+    }
+  }
+  if (available.upgrade) return { kind: 'pick-reward', service: 'upgrade' }
+  if (available.remove) return { kind: 'pick-reward', service: 'remove' }
+  return { kind: 'pick-reward', service: 'heal' }
+}
+
+/**
+ * 升级 / 移除的选牌。
+ * 升级优先挑攻击牌（提高输出），同档按奖励评分、再按 uid；
+ * 移除则沿用 `worstCards` 的优先级挑最不值得留的一张。
+ */
+function decidePickCard(pending: Extract<Prompt, { kind: 'pick-card' }>): Action {
+  const candidates = pending.candidates
+  if (candidates.length === 0) {
+    throw new RuleError('奖励选牌没有候选')
+  }
+  if (pending.purpose === 'upgrade') {
+    const priority = (card: Card): number =>
+      (cardRole(card.kind) === 'attack' ? 100 : 0) + rewardCardScore(card.kind)
+    const best = [...candidates].sort(
+      (a, b) => priority(b) - priority(a) || a.uid - b.uid,
+    )[0] as Card
+    return { kind: 'pick-own-card', card: best }
+  }
+  const worst = worstCards(candidates, 1)[0] as Card
+  return { kind: 'pick-own-card', card: worst }
 }

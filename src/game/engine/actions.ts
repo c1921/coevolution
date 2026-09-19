@@ -13,12 +13,16 @@ import {
   checkActivate,
   checkDiscard,
   checkEndPhase,
+  checkPickOwnCard,
+  checkPickReward,
   checkPlayCardAsDefend,
+  checkSkipReward,
   checkTriggerChoice,
   checkUseCard,
   ensure,
 } from '../rules/legality'
 import { finishPhaseBody } from '../rules/phase'
+import { applyPickOwnCard, applyPickReward, applySkipReward } from '../rules/reward'
 import { useVariantOf } from '../skills'
 import type { Action, Card, CardKind, GameState, PlayerIndex, VirtualCard } from '../types'
 import { RuleError } from '../util'
@@ -54,6 +58,12 @@ export function applyAction(state: GameState, action: Action): void {
       return applyTriggerChoice(state, action)
     case 'discard-cards':
       return applyDiscard(state, action)
+    case 'pick-reward':
+      return applyPickRewardAction(state, action)
+    case 'skip-reward':
+      return applySkipRewardAction(state)
+    case 'pick-own-card':
+      return applyPickOwnCardAction(state, action)
     case 'end-phase':
       return applyEndPhase(state)
     case 'cancel':
@@ -224,6 +234,42 @@ function applyEndPhase(state: GameState): void {
   log(state, `${playerLabel(state, pending.player)} 结束出牌阶段`)
   // 出牌阶段的效果已完成，交回回合循环执行「阶段结束时」并推进到弃牌阶段
   finishPhaseBody(state)
+}
+
+/**
+ * 奖励三选一：校验 → 应用 → 交回结算循环。
+ * 奖励发生在「回合开始时」，因此做完后不需要碰回合游标，`advance` 会自动继续。
+ */
+function applyPickRewardAction(
+  state: GameState,
+  action: Extract<Action, { kind: 'pick-reward' }>,
+): void {
+  const pending = state.pending
+  if (!pending || pending.kind !== 'reward') throw new RuleError('当前没有待选择的奖励')
+  const p = pending.player
+  ensure(checkPickReward(state, p, action))
+  applyPickReward(state, p, action)
+}
+
+/** 跳过卡牌奖励（服务奖励不可跳过，由 checkSkipReward 拒绝） */
+function applySkipRewardAction(state: GameState): void {
+  const pending = state.pending
+  if (!pending || pending.kind !== 'reward') throw new RuleError('当前没有待选择的奖励')
+  const p = pending.player
+  ensure(checkSkipReward(state, p))
+  applySkipReward(state, p)
+}
+
+/** 升级 / 移除服务选定一张自己的牌 */
+function applyPickOwnCardAction(
+  state: GameState,
+  action: Extract<Action, { kind: 'pick-own-card' }>,
+): void {
+  const pending = state.pending
+  if (!pending || pending.kind !== 'pick-card') throw new RuleError('当前没有待选牌的奖励')
+  const p = pending.player
+  ensure(checkPickOwnCard(state, p, action.card))
+  applyPickOwnCard(state, p, action.card)
 }
 
 function applyCancel(state: GameState): void {

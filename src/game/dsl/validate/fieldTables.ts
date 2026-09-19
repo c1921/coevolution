@@ -1,6 +1,7 @@
 import {
   BASE_KEYS,
   CONDITION_SPECS,
+  EFFECT_REQUIRED,
   EFFECT_SPECS,
   NODE_SPECS,
   PICK_KEYS,
@@ -93,6 +94,8 @@ export interface Ref {
   id: string
   /** 额外要求：牌种必须在该语境有用法（转化指令的 to 端） */
   expect?: 'use' | 'play'
+  /** 引用的来源语义：`upgradeTo` 需要额外检查"目标不得再声明 upgradeTo"（禁链式升级） */
+  role?: 'upgradeTo'
 }
 
 // 字段表的**实现**在 ../fieldSpecs（校验器与 schema 生成器共用的唯一来源）。
@@ -114,6 +117,9 @@ export const CONDITION_KEYS: Record<string, readonly string[]> = mapKinds(CONDIT
 
 /** 各效果节点允许的字段（键 = `Effect['kind']`） */
 export const EFFECT_KEYS: Record<string, readonly string[]> = mapKinds(EFFECT_SPECS)
+
+/** 各效果节点的**条件必填**字段（并表无法表达，由 checkEffect 读取） */
+export { EFFECT_REQUIRED }
 
 /** 各节点的 allowed / required（键与 `DefName` 一致） */
 export const DOC_FIELDS: Record<string, FieldSet> = Object.fromEntries(

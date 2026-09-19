@@ -8,6 +8,7 @@
   "short": "抵消自己 1 点威胁",
   "text": "消耗 1 点能量：抵消自己 1 点威胁（自己至少有 1 点威胁时才能使用）。",
   "cost": { "kind": "const", "value": 1 },
+  "upgradeTo": "defend-plus",
   "use": [
     {
       "context": "play",

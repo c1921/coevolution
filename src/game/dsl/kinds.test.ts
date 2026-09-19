@@ -9,6 +9,8 @@ import {
   LOG_ROOTS,
   PHASES,
   PICK_MODES,
+  RARITIES,
+  REWARD_KINDS,
   ROLES,
   TARGET_SCOPES,
   TIMING_KINDS,
@@ -58,10 +60,18 @@ describe('DSL 词表', () => {
       TIMING_KINDS,
       LOG_ROOTS,
       PHASES,
+      REWARD_KINDS,
+      RARITIES,
     }
     for (const [name, table] of Object.entries(tables)) {
       expect(new Set(table).size, `${name} 有重复项`).toBe(table.length)
     }
+  })
+
+  it('奖励词表：指令、奖励种类与稀有度都在词表里', () => {
+    expect(EFFECT_KINDS).toContain('offer-reward')
+    expect(REWARD_KINDS).toEqual(['card', 'service'])
+    expect(RARITIES).toEqual(['common', 'uncommon', 'rare'])
   })
 
   it('卡牌引用与取牌模式是封闭词表', () => {

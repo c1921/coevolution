@@ -14,6 +14,7 @@ import {
   offsetThreatFor,
   pushContestFrame,
   pushEffectsFrame,
+  pushRewardFrame,
   resolveDying,
   skipPhaseFor,
   spendEnergy,
@@ -159,6 +160,10 @@ export function runEffect(env: EvalEnv, effect: Effect): void {
       if (branch) runEffects(state, branch, ctx)
       return
     }
+
+    case 'offer-reward':
+      pushRewardFrame(state, env, effect)
+      return
 
     default:
       return assertNever(effect, '效果指令')

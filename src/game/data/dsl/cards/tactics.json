@@ -1,0 +1,27 @@
+{
+  "$schema": "../schema.json",
+  "dslVersion": 1,
+  "kind": "card",
+  "id": "tactics",
+  "priority": 100,
+  "name": "战术演习",
+  "short": "摸 2 张牌",
+  "text": "消耗 1 点能量：摸 2 张牌。",
+  "cost": { "kind": "const", "value": 1 },
+  "rarity": "common",
+  "use": [
+    {
+      "context": "play",
+      "effects": [
+        {
+          "kind": "move-cards",
+          "from": { "zone": "hand", "of": "self" },
+          "to": { "zone": "discard", "of": "self" },
+          "pick": { "mode": "played" }
+        },
+        { "kind": "draw", "target": "self", "count": { "kind": "const", "value": 2 } },
+        { "kind": "log", "template": "{self} 使用{usedAs}，摸 2 张牌{self.energyTag}" }
+      ]
+    }
+  ]
+}
