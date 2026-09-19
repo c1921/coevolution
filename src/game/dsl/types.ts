@@ -7,6 +7,7 @@ import type {
   ModifierOp,
   PickMode,
   RoleRef,
+  TargetCountMode,
   TargetDefault,
   TargetScope,
   TransformContext,
@@ -118,6 +119,8 @@ export type Effect =
   | { kind: 'resolve-dying'; of: RoleRef }
   | { kind: 'skip-phase'; phase: TurnPhase }
   | { kind: 'extra-phase'; phase: TurnPhase; position: 'next' | 'last' }
+  /** 对每个选定目标执行一次子效果（把 target 临时绑定为当前目标） */
+  | { kind: 'for-each-target'; effects: Effect[] }
   | { kind: 'if'; condition: Condition; then: Effect[]; else?: Effect[] }
 
 /** 数值修正 */
@@ -134,6 +137,11 @@ export interface Transform {
   contexts: TransformContext[]
 }
 
+/** 目标个数规格（见 kinds.ts 的 TARGET_COUNT_MODES） */
+export type TargetCount =
+  | { mode: Extract<TargetCountMode, 'all'> }
+  | { mode: Extract<TargetCountMode, 'exactly'>; count: Value }
+
 /** 目标选取规格 */
 export interface TargetSpec {
   scope: TargetScope
@@ -145,6 +153,11 @@ export interface TargetSpec {
   /** true 时要求距离在攻击范围内（打击） */
   range?: boolean
   conditions?: Condition[]
+  /**
+   * 目标个数；缺省为单选 1 个。`all` 作用于全部候选（无需选择），
+   * `exactly` 必须显式指定 N 个；出现 count 时忽略 required 且不允许 default。
+   */
+  count?: TargetCount
 }
 
 /** 触发型技能 */

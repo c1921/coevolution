@@ -12,6 +12,7 @@ import {
   PHASES,
   PICK_MODES,
   ROLES,
+  TARGET_COUNT_MODES,
   TARGET_DEFAULTS,
   TARGET_SCOPES,
   TIMING_KINDS,
@@ -57,6 +58,7 @@ type DefName =
   | 'pick'
   | 'zoneRef'
   | 'target'
+  | 'targetCount'
   | 'modifier'
   | 'transform'
   | 'timing'
@@ -134,6 +136,7 @@ const NODE_SPECS: Record<DefName, { kind?: readonly string[]; fields: Record<str
       need: VALUE,
       onMet: EFFECTS,
       onUnmet: EFFECTS,
+      effects: EFFECTS,
       condition: CONDITION,
       then: EFFECTS,
       else: EFFECTS,
@@ -163,6 +166,13 @@ const NODE_SPECS: Record<DefName, { kind?: readonly string[]; fields: Record<str
       alive: BOOLEAN,
       range: BOOLEAN,
       conditions: CONDITIONS,
+      count: { t: 'ref', name: 'targetCount' },
+    },
+  },
+  targetCount: {
+    fields: {
+      mode: { t: 'enum', values: TARGET_COUNT_MODES },
+      count: VALUE,
     },
   },
   modifier: {

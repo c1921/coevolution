@@ -401,3 +401,105 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
     )
   })
 })
+
+describe('DSL 校验器 · 多目标与逐目标指令', () => {
+  /** 把打击改成一张多目标牌，并替换它的效果列表 */
+  function multiTargetStrike(effects: unknown[]): RawFixtureDoc[] {
+    return mutateDoc('cards/strike.json', (doc) => {
+      const use = (doc.use as Record<string, unknown>[])[0] as Record<string, unknown>
+      use.target = { scope: 'any', alive: true, count: { mode: 'all' } }
+      use.effects = effects
+    })
+  }
+
+  /** 改一张牌的 use 变体的 target 规格 */
+  function withTarget(target: unknown): RawFixtureDoc[] {
+    return mutateDoc('cards/strike.json', (doc) => {
+      const use = (doc.use as Record<string, unknown>[])[0] as Record<string, unknown>
+      use.target = target
+    })
+  }
+
+  it('count 的未知键与非法模式会报错', () => {
+    expectSingle(withTarget({ scope: 'any', alive: true, count: { mode: 'all', extra: 1 } }), 'unknown-key')
+    expectSingle(withTarget({ scope: 'any', alive: true, count: { mode: 'some' } }), 'bad-type')
+    expectSingle(withTarget({ scope: 'any', alive: true, count: 'all' }), 'bad-type')
+  })
+
+  it('count 与 default 不能同时出现（多目标没有缺省单目标的概念）', () => {
+    expectSingle(
+      withTarget({ scope: 'any', alive: true, default: 'self', count: { mode: 'all' } }),
+      'bad-combination',
+    )
+  })
+
+  it('all 模式不需要个数', () => {
+    expectSingle(
+      withTarget({ scope: 'any', alive: true, count: { mode: 'all', count: { kind: 'const', value: 2 } } }),
+      'bad-combination',
+    )
+  })
+
+  it('exactly 模式必须给出 ≥ 1 的个数', () => {
+    expectSingle(
+      withTarget({ scope: 'any', alive: true, count: { mode: 'exactly' } }),
+      'missing-field',
+    )
+    expectSingle(
+      withTarget({
+        scope: 'any',
+        alive: true,
+        count: { mode: 'exactly', count: { kind: 'const', value: 0 } },
+      }),
+      'bad-number',
+    )
+  })
+
+  it('多目标效果的 target 引用必须写在 for-each-target 内', () => {
+    expectSingle(
+      multiTargetStrike([{ kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } }]),
+      'bad-combination',
+    )
+    // 日志占位符、move-cards 的牌区归属同样受限
+    expectSingle(multiTargetStrike([{ kind: 'log', template: '{target} 受到伤害' }]), 'bad-combination')
+
+    // 包进 for-each-target 后完全没有问题
+    expect(
+      issuesOf(
+        multiTargetStrike([
+          {
+            kind: 'for-each-target',
+            effects: [
+              { kind: 'log', template: '{target} 受到伤害' },
+              { kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } },
+            ],
+          },
+        ]),
+      ),
+    ).toEqual([])
+  })
+
+  it('for-each-target 的字段严格校验', () => {
+    expectSingle(
+      mutateDoc('cards/strike.json', (doc) => {
+        const use = (doc.use as Record<string, unknown>[])[0] as Record<string, unknown>
+        use.effects = [{ kind: 'for-each-target', effect: [] }]
+      }),
+      'unknown-key',
+    )
+  })
+
+  it('主动技暂不支持多目标', () => {
+    expectSingle(
+      mutateDoc('skills/roar.json', (doc) => {
+        delete doc.modifiers
+        doc.activate = {
+          timing: 'play',
+          target: { scope: 'any', alive: true, count: { mode: 'all' } },
+          effects: [{ kind: 'log', template: '{self} 发动' }],
+        }
+      }),
+      'bad-combination',
+    )
+  })
+})

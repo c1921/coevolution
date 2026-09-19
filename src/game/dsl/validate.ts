@@ -15,6 +15,7 @@ import {
   PHASES,
   PICK_MODES,
   ROLES,
+  TARGET_COUNT_MODES,
   TARGET_DEFAULTS,
   TARGET_SCOPES,
   TIMING_KINDS,
@@ -125,12 +126,15 @@ export interface FieldSet {
 /** 取牌对象的字段 */
 const PICK_KEYS = ['mode', 'count', 'cardKind', 'card']
 /** 目标规格的字段 */
-const TARGET_KEYS = ['scope', 'required', 'default', 'alive', 'range', 'conditions']
+const TARGET_KEYS = ['scope', 'required', 'default', 'alive', 'range', 'conditions', 'count']
+/** 目标个数规格的字段 */
+const TARGET_COUNT_KEYS = ['mode', 'count']
 
 export const DOC_FIELDS = {
   zoneRef: { allowed: ['zone', 'of'], required: ['zone'] },
   pick: { allowed: PICK_KEYS, required: ['mode'] },
   target: { allowed: TARGET_KEYS, required: ['scope', 'alive'] },
+  targetCount: { allowed: TARGET_COUNT_KEYS, required: ['mode'] },
   modifier: { allowed: ['channel', 'op', 'value'], required: ['channel', 'op', 'value'] },
   transform: { allowed: ['from', 'to', 'contexts'], required: ['from', 'to', 'contexts'] },
   timing: { allowed: ['at', 'phase'], required: ['at'] },
@@ -495,6 +499,7 @@ const EFFECT_KEYS: Record<string, string[]> = {
   'resolve-dying': ['kind', 'of'],
   'skip-phase': ['kind', 'phase'],
   'extra-phase': ['kind', 'phase', 'position'],
+  'for-each-target': ['kind', 'effects'],
   if: ['kind', 'condition', 'then', 'else'],
 }
 
@@ -654,6 +659,9 @@ function checkEffect(
       checkEnum(obj, 'phase', PHASES, path, issues)
       checkEnum(obj, 'position', ['next', 'last'], path, issues)
       break
+    case 'for-each-target':
+      checkEffects(obj.effects, `${path}#/effects`, context, issues, refs)
+      break
     case 'if':
       checkCondition(obj.condition, `${path}#/condition`, roles, issues, refs)
       checkEffects(obj.then, `${path}#/then`, context, issues, refs)
@@ -749,6 +757,7 @@ function checkTarget(
   path: string,
   issues: Issue[],
   refs: Ref[],
+  allowCount = true,
 ): void {
   const obj = asObj(node)
   if (!obj) {
@@ -769,6 +778,26 @@ function checkTarget(
   if (obj.range !== undefined && typeof obj.range !== 'boolean') {
     push(issues, `${path}#/range`, 'bad-type', 'range 必须是布尔值')
   }
+  if (obj.count !== undefined) {
+    if (!allowCount) {
+      push(
+        issues,
+        `${path}#/count`,
+        'bad-combination',
+        '多目标（count）目前只支持卡牌的使用变体，主动技仍是单选',
+      )
+    } else {
+      checkTargetCount(obj.count, `${path}#/count`, issues)
+    }
+    if (obj.default !== undefined) {
+      push(
+        issues,
+        path,
+        'bad-combination',
+        '多目标没有「缺省单目标」的概念：count 与 default 不能同时出现',
+      )
+    }
+  }
   if (obj.conditions !== undefined) {
     const list = asArray(obj.conditions)
     if (!list) {
@@ -779,6 +808,148 @@ function checkTarget(
       )
     }
   }
+}
+
+/** 目标个数规格：all 不需要个数；exactly 必须给出 ≥ 1 的个数表达式 */
+function checkTargetCount(node: unknown, path: string, issues: Issue[]): void {
+  const obj = asObj(node)
+  if (!obj) {
+    push(issues, path, 'bad-type', 'count 必须是对象')
+    return
+  }
+  checkKeys(obj, path, DOC_FIELDS.targetCount.allowed, DOC_FIELDS.targetCount.required, issues)
+  const mode = checkEnum(obj, 'mode', TARGET_COUNT_MODES, path, issues)
+
+  if (mode === 'all') {
+    if (obj.count !== undefined) {
+      push(issues, `${path}#/count`, 'bad-combination', 'all 模式不需要 count')
+    }
+    return
+  }
+  if (mode !== 'exactly') return
+  if (obj.count === undefined) {
+    push(issues, `${path}#/count`, 'missing-field', 'exactly 模式必须给出 count')
+    return
+  }
+  // 个数在「还没选出目标」的环境求值，因此只允许 self / active 角色
+  checkValue(obj.count, `${path}#/count`, ['self', 'active'], issues)
+  const value = asObj(obj.count)
+  if (value?.kind === 'const') {
+    const n = asNumber(value.value)
+    if (n !== undefined && n < 1) {
+      push(issues, `${path}#/count#/value`, 'bad-number', '目标个数必须 ≥ 1')
+    }
+  }
+}
+
+/** 目标规格是否声明了多目标 */
+function targetDeclaresCount(node: unknown): boolean {
+  const obj = asObj(node)
+  return obj !== undefined && obj.count !== undefined
+}
+
+/** 值表达式是否引用角色 target */
+function valueRefsTarget(value: unknown): boolean {
+  const obj = asObj(value)
+  if (!obj) return false
+  if (obj.kind === 'ref' || obj.kind === 'channel') return obj.of === 'target'
+  if (Array.isArray(obj.of)) return obj.of.some(valueRefsTarget)
+  if (isObj(obj.of)) return valueRefsTarget(obj.of)
+  if (obj.by !== undefined) return valueRefsTarget(obj.by)
+  return false
+}
+
+/** 条件是否引用角色 target */
+function conditionRefsTarget(node: unknown): boolean {
+  const obj = asObj(node)
+  if (!obj) return false
+  if (obj.of === 'target') return true
+  if (isObj(obj.of)) return conditionRefsTarget(obj.of)
+  if (Array.isArray(obj.of)) return obj.of.some(conditionRefsTarget)
+  for (const key of ['left', 'right', 'atLeast'] as const) {
+    if (obj[key] !== undefined && valueRefsTarget(obj[key])) return true
+  }
+  return false
+}
+
+/** 日志模板是否引用角色 target */
+function logRefsTarget(template: unknown): boolean {
+  if (typeof template !== 'string') return false
+  for (const match of template.matchAll(/\{([^{}]*)\}/g)) {
+    if ((match[1] ?? '').split('.')[0] === 'target') return true
+  }
+  return false
+}
+
+/** 单条效果是否直接引用角色 target */
+function effectRefsTarget(effect: unknown): boolean {
+  const obj = asObj(effect)
+  if (!obj) return false
+  switch (obj.kind) {
+    case 'damage':
+    case 'lose-hp':
+    case 'heal':
+    case 'draw':
+    case 'pay-energy':
+    case 'gain-energy':
+      return obj.target === 'target'
+    case 'record-card-use':
+    case 'resolve-dying':
+      return obj.of === 'target'
+    case 'contest':
+      return obj.responder === 'target'
+    case 'move-cards': {
+      const from = asObj(obj.from)
+      const to = asObj(obj.to)
+      return from?.of === 'target' || to?.of === 'target'
+    }
+    case 'log':
+      return logRefsTarget(obj.template)
+    case 'if':
+      return conditionRefsTarget(obj.condition)
+    default:
+      return false
+  }
+}
+
+/**
+ * 多目标变体的效果必须在 for-each-target 内引用 target。
+ * 否则 ctx.target 不会被绑定（多目标下不绑定），结算会在更深处抛错，
+ * 或者内容作者以为"对每个目标"却只作用于其中一个。
+ */
+function guardMultiTargetEffects(
+  node: unknown,
+  path: string,
+  issues: Issue[],
+  inside = false,
+): void {
+  const list = asArray(node)
+  if (!list) return
+  list.forEach((item, i) => {
+    const obj = asObj(item)
+    if (!obj) return
+    const childPath = `${path}/${i}`
+    if (obj.kind === 'for-each-target') {
+      guardMultiTargetEffects(obj.effects, `${childPath}#/effects`, issues, true)
+      return
+    }
+    if (!inside && effectRefsTarget(obj)) {
+      push(
+        issues,
+        childPath,
+        'bad-combination',
+        '多目标效果对 target 的引用必须写在 for-each-target 内',
+      )
+    }
+    if (obj.kind === 'if') {
+      guardMultiTargetEffects(obj.then, `${childPath}#/then`, issues, inside)
+      guardMultiTargetEffects(obj.else, `${childPath}#/else`, issues, inside)
+    }
+    if (obj.kind === 'contest') {
+      guardMultiTargetEffects(obj.onMet, `${childPath}#/onMet`, issues, inside)
+      guardMultiTargetEffects(obj.onUnmet, `${childPath}#/onUnmet`, issues, inside)
+    }
+  })
 }
 
 function checkModifier(node: unknown, path: string, issues: Issue[], refs: Ref[]): void {
@@ -1046,7 +1217,8 @@ function checkActivate(node: unknown, path: string, issues: Issue[], refs: Ref[]
     checkConditionList(obj.requires, `${path}#/requires`, CONTEXT_ROLES.activate, issues, refs)
   }
   if (obj.target !== undefined) {
-    checkTarget(obj.target, `${path}#/target`, issues, refs)
+    // 主动技仍是单选：count 只在卡牌的使用变体上生效
+    checkTarget(obj.target, `${path}#/target`, issues, refs, false)
   }
   checkEffects(obj.effects, `${path}#/effects`, 'activate', issues, refs)
   if (obj.after !== undefined) {
@@ -1140,6 +1312,13 @@ function checkCard(node: Obj, path: string, issues: Issue[], refs: Ref[]): void 
             issues,
             refs,
           )
+        }
+        // 多目标变体：目标引用必须写在 for-each-target 内（否则 ctx.target 不会绑定）
+        if (targetDeclaresCount(variant.target)) {
+          guardMultiTargetEffects(variant.effects, `${variantPath}#/effects`, issues)
+          if (variant.after !== undefined) {
+            guardMultiTargetEffects(variant.after, `${variantPath}#/after`, issues)
+          }
         }
       })
     }
@@ -1294,5 +1473,6 @@ export const DOC_SCHEMA_KEYS = {
   effect: EFFECT_KEYS,
   pick: PICK_KEYS,
   target: TARGET_KEYS,
+  targetCount: TARGET_COUNT_KEYS,
   timing: ['at', 'phase'],
 } as const

@@ -9,6 +9,7 @@ import {
   defaultTarget,
   hasTargetCandidate,
   resolveTargetChoice,
+  resolveTargetChoices,
   targetCandidates,
   targetScopeMembers,
 } from './target'
@@ -135,5 +136,101 @@ describe('目标选取', () => {
     expect(targetScopeMembers(env, healTarget('dying'))).toEqual([])
     const dying: EvalEnv = { state: env.state, ctx: { ...env.ctx, dying: 1 } }
     expect(targetScopeMembers(dying, healTarget('dying'))).toEqual([1])
+  })
+})
+
+describe('多目标选取', () => {
+  const allSpec: TargetSpec = { scope: 'any', alive: true, count: { mode: 'all' } }
+  const exactly = (count: number): TargetSpec => ({
+    scope: 'any',
+    alive: true,
+    count: { mode: 'exactly', count: { kind: 'const', value: count } },
+  })
+
+  it('all：不需要选择，作用于全部合法候选（按座次序）', () => {
+    const env = envOf('tiger', 'bear')
+    expect(resolveTargetChoices(env, allSpec)).toEqual({ ok: true, targets: [0, 1] })
+    // 显式给出同样的集合也接受
+    expect(resolveTargetChoices(env, allSpec, [1, 0])).toEqual({ ok: true, targets: [0, 1] })
+    expect(resolveTargetChoices(env, allSpec, [0])).toEqual({
+      ok: false,
+      reason: '该效果作用于全部合法目标，不能只指定其中一部分',
+    })
+  })
+
+  it('all：候选为空时拒绝（阵亡者不算候选）', () => {
+    const env = envOf('tiger', 'bear')
+    env.state.players[1].alive = false
+    const opponentOnly: TargetSpec = { scope: 'opponent', alive: true, count: { mode: 'all' } }
+    expect(resolveTargetChoices(env, opponentOnly)).toEqual({
+      ok: false,
+      reason: '没有符合条件的目标',
+    })
+  })
+
+  it('exactly：必须显式指定恰好 N 个互不重复的目标', () => {
+    const env = envOf('tiger', 'bear')
+    expect(resolveTargetChoices(env, exactly(2))).toEqual({ ok: false, reason: '必须指定 2 个目标' })
+    expect(resolveTargetChoices(env, exactly(2), [0, 1])).toEqual({ ok: true, targets: [0, 1] })
+    // 目标顺序按玩家指定的顺序保留（for-each-target 会照此结算）
+    expect(resolveTargetChoices(env, exactly(2), [1, 0])).toEqual({ ok: true, targets: [1, 0] })
+    expect(resolveTargetChoices(env, exactly(2), [0, 0])).toEqual({ ok: false, reason: '目标有重复' })
+    expect(resolveTargetChoices(env, exactly(2), [0])).toEqual({ ok: false, reason: '必须指定 2 个目标' })
+  })
+
+  it('exactly：候选不足时明确报「不足」', () => {
+    const env = envOf('tiger', 'bear')
+    env.state.players[1].alive = false
+    expect(resolveTargetChoices(env, exactly(2))).toEqual({
+      ok: false,
+      reason: '符合条件的目标不足 2 个',
+    })
+  })
+
+  it('exactly 1 等价于「必须指定一个目标」', () => {
+    const env = envOf('tiger', 'bear')
+    expect(resolveTargetChoices(env, exactly(1))).toEqual({ ok: false, reason: '必须指定 1 个目标' })
+    expect(resolveTargetChoices(env, exactly(1), [1])).toEqual({ ok: true, targets: [1] })
+  })
+
+  it('多目标同样按条件过滤，并沿用文档 reason', () => {
+    const wounded: TargetSpec = {
+      scope: 'any',
+      alive: true,
+      count: { mode: 'exactly', count: { kind: 'const', value: 2 } },
+      conditions: [
+        {
+          kind: 'compare',
+          op: 'lt',
+          left: { kind: 'ref', ref: 'hp', of: 'target' },
+          right: { kind: 'ref', ref: 'maxHp', of: 'target' },
+          reason: '目标角色体力已满，无法回复',
+        },
+      ],
+    }
+    const bothWounded = envOf('deer', 'bear', { playerHp: 2, aiHp: 2 })
+    expect(resolveTargetChoices(bothWounded, wounded, [0, 1])).toEqual({ ok: true, targets: [0, 1] })
+    expect(resolveTargetChoices(bothWounded, wounded, [0])).toEqual({
+      ok: false,
+      reason: '必须指定 2 个目标',
+    })
+
+    const onlyPlayerWounded = envOf('deer', 'bear', { playerHp: 2 })
+    expect(resolveTargetChoices(onlyPlayerWounded, wounded, [0, 1])).toEqual({
+      ok: false,
+      reason: '目标角色体力已满，无法回复',
+    })
+    expect(resolveTargetChoices(onlyPlayerWounded, wounded, [0])).toEqual({
+      ok: false,
+      reason: '符合条件的目标不足 2 个',
+    })
+  })
+
+  it('单选规格仍拒绝多个目标（resolveTargetChoices 入口）', () => {
+    const env = envOf('tiger', 'bear')
+    expect(resolveTargetChoices(env, strikeTarget(), [0, 1])).toEqual({
+      ok: false,
+      reason: '该效果只能指定一个目标',
+    })
   })
 })

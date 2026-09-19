@@ -84,6 +84,7 @@ export const EFFECT_KINDS = [
   'resolve-dying',
   'skip-phase',
   'extra-phase',
+  'for-each-target',
   'if',
 ] as const
 export type EffectKind = (typeof EFFECT_KINDS)[number]
@@ -129,6 +130,15 @@ export type TargetScope = (typeof TARGET_SCOPES)[number]
 /** 未显式指定目标时的缺省对象（缺省字段缺失时按"唯一候选"回退） */
 export const TARGET_DEFAULTS = ['self', 'opponent'] as const
 export type TargetDefault = (typeof TARGET_DEFAULTS)[number]
+
+/**
+ * 目标个数规格：
+ *  - all     ：不需要玩家选择，结算作用于全部合法候选（按座次序）
+ *  - exactly ：必须显式指定恰好 N 个目标（N 由 Value 表达式给出）
+ * 目标规格缺省没有 count，即单选 1 个，语义与既有内容完全一致。
+ */
+export const TARGET_COUNT_MODES = ['all', 'exactly'] as const
+export type TargetCountMode = (typeof TARGET_COUNT_MODES)[number]
 
 /**
  * 技能的分类，由文档结构派生（见 registry.ts 的 skillKinds）：

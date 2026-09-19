@@ -4,6 +4,7 @@ import { isInRange } from '../rules/distance'
 import { evalCondition, firstFailed } from './condition'
 import type { EvalEnv } from './runtime'
 import type { TargetSpec } from './types'
+import { evalValue } from './value'
 
 /**
  * 目标选取：把 TargetSpec 解析成具体候选与最终目标。
@@ -65,8 +66,11 @@ export function defaultTarget(env: EvalEnv, spec: TargetSpec): PlayerIndex | und
 
 export type TargetResolution = { ok: true; target?: PlayerIndex } | { ok: false; reason: string }
 
-/** 某个具体目标为什么不合格：优先用条件自带的 reason */
-function targetFailureReason(
+/** 多目标解析结果（单目标也会返回长度为 1 的列表） */
+export type TargetsResolution = { ok: true; targets: PlayerIndex[] } | { ok: false; reason: string }
+
+/** 某个具体目标为什么不合格：优先用条件自带的 reason（界面选择器与报错共用） */
+export function targetFailureReason(
   env: EvalEnv,
   spec: TargetSpec,
   target: PlayerIndex,
@@ -76,21 +80,69 @@ function targetFailureReason(
   return failed?.reason
 }
 
-/** 解析最终目标：显式目标必须在候选内；可省略时必须能得到合法缺省 */
-export function resolveTargetChoice(
+/** 两个目标集合是否完全一致（不看重数，targets 已保证无重复） */
+function sameTargets(a: PlayerIndex[], b: PlayerIndex[]): boolean {
+  return a.length === b.length && a.every((index) => b.includes(index))
+}
+
+/**
+ * 解析最终目标集合。三种形态：
+ *  - 缺省（无 count）：单选，语义与历史完全一致（显式目标 / required / default / 唯一候选 / 自己）
+ *  - count.mode = all：作用于全部合法候选；显式目标必须与候选集一致
+ *  - count.mode = exactly：必须显式指定恰好 N 个互不重复的合法目标
+ *
+ * 候选为空时一律拒绝——声明了 target 就不能"无目标地"继续结算，
+ * 否则效果里引用 target 时会在更深处抛错（攻击范围、存活条件都能让候选变空）。
+ */
+export function resolveTargetChoices(
   env: EvalEnv,
   spec: TargetSpec,
-  chosen?: PlayerIndex,
-): TargetResolution {
+  chosen?: PlayerIndex[],
+): TargetsResolution {
   const candidates = targetCandidates(env, spec)
-  if (chosen !== undefined) {
-    if (!candidates.includes(chosen)) {
+
+  if (spec.count?.mode === 'all') {
+    if (candidates.length === 0) return { ok: false, reason: '没有符合条件的目标' }
+    if (chosen !== undefined && !sameTargets(chosen, candidates)) {
+      return { ok: false, reason: '该效果作用于全部合法目标，不能只指定其中一部分' }
+    }
+    return { ok: true, targets: candidates }
+  }
+
+  if (spec.count?.mode === 'exactly') {
+    const size = Math.max(1, Math.floor(evalValue(env, spec.count.count)))
+    const picked = chosen ?? []
+    if (picked.length !== size) {
       return {
         ok: false,
-        reason: targetFailureReason(env, spec, chosen) ?? '指定的目标不符合该效果的条件',
+        reason:
+          candidates.length < size ? `符合条件的目标不足 ${size} 个` : `必须指定 ${size} 个目标`,
       }
     }
-    return { ok: true, target: chosen }
+    if (new Set(picked).size !== picked.length) return { ok: false, reason: '目标有重复' }
+    for (const target of picked) {
+      if (!candidates.includes(target)) {
+        return {
+          ok: false,
+          reason: targetFailureReason(env, spec, target) ?? '指定的目标不符合该效果的条件',
+        }
+      }
+    }
+    return { ok: true, targets: picked }
+  }
+
+  if (chosen !== undefined && chosen.length > 1) {
+    return { ok: false, reason: '该效果只能指定一个目标' }
+  }
+  const single = chosen?.[0]
+  if (single !== undefined) {
+    if (!candidates.includes(single)) {
+      return {
+        ok: false,
+        reason: targetFailureReason(env, spec, single) ?? '指定的目标不符合该效果的条件',
+      }
+    }
+    return { ok: true, targets: [single] }
   }
   if (spec.required) {
     if (candidates.length === 0) return { ok: false, reason: '没有符合条件的目标' }
@@ -109,5 +161,16 @@ export function resolveTargetChoice(
       reason: targetFailureReason(env, spec, target) ?? '缺省目标不符合该效果的条件',
     }
   }
-  return { ok: true, target }
+  return { ok: true, targets: [target] }
+}
+
+/** 单选解析：主动技与既有调用点的入口（多目标路径请用 resolveTargetChoices） */
+export function resolveTargetChoice(
+  env: EvalEnv,
+  spec: TargetSpec,
+  chosen?: PlayerIndex,
+): TargetResolution {
+  const resolved = resolveTargetChoices(env, spec, chosen === undefined ? undefined : [chosen])
+  if (!resolved.ok) return resolved
+  return { ok: true, target: resolved.targets[0] }
 }

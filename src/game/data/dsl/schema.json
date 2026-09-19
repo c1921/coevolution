@@ -276,6 +276,12 @@
             "$ref": "#/$defs/effect"
           }
         },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        },
         "condition": {
           "$ref": "#/$defs/condition"
         },
@@ -324,6 +330,7 @@
             "resolve-dying",
             "skip-phase",
             "extra-phase",
+            "for-each-target",
             "if"
           ]
         }
@@ -422,11 +429,32 @@
           "items": {
             "$ref": "#/$defs/condition"
           }
+        },
+        "count": {
+          "$ref": "#/$defs/targetCount"
         }
       },
       "required": [
         "scope",
         "alive"
+      ]
+    },
+    "targetCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "all",
+            "exactly"
+          ]
+        },
+        "count": {
+          "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "mode"
       ]
     },
     "modifier": {

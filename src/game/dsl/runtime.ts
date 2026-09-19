@@ -13,8 +13,10 @@ export interface EffectContext {
   self: PlayerIndex
   /** 事件发生时的回合角色 */
   active: PlayerIndex
-  /** 目标（主动技的选择结果 / 卡牌的使用目标） */
+  /** 目标（主动技的选择结果 / 卡牌的使用目标）；多目标时不绑定，见 targets */
   target?: PlayerIndex
+  /** 本次结算的全部目标；for-each-target 逐个绑定到 target 后执行子效果 */
+  targets?: PlayerIndex[]
   /** 伤害来源 / 卡牌使用者 */
   source?: PlayerIndex
   /** 濒死者 */

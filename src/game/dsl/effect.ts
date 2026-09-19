@@ -2,6 +2,7 @@ import { log } from '../log'
 import { loseHp } from '../rules/damage'
 import { recordCardUse, recordSkillUse } from '../rules/usage'
 import type { GameState } from '../types'
+import { RuleError } from '../util'
 import { evalCondition } from './condition'
 import {
   addExtraPhaseFor,
@@ -130,6 +131,24 @@ export function runEffect(env: EvalEnv, effect: Effect): void {
     case 'extra-phase':
       addExtraPhaseFor(state, effect.phase, effect.position)
       return
+
+    case 'for-each-target': {
+      // 多目标结算：逐个把 target 绑定到目标上再执行子效果。
+      // 每次迭代用**子上下文**，因此迭代内的 lastAmount / picked 不会冒泡到外层。
+      const targets =
+        ctx.targets && ctx.targets.length > 0
+          ? ctx.targets
+          : ctx.target === undefined
+            ? []
+            : [ctx.target]
+      if (targets.length === 0) {
+        throw new RuleError('for-each-target 需要目标，但当前结算语境没有绑定 target')
+      }
+      for (const target of targets) {
+        runEffects(state, effect.effects, { ...ctx, target })
+      }
+      return
+    }
 
     case 'if': {
       const branch = evalCondition(env, effect.condition) ? effect.then : effect.else

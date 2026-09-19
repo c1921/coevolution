@@ -347,3 +347,79 @@ describe('效果解释器 · 帧与延迟', () => {
     expect(lastLog(state)).toBe('1')
   })
 })
+
+describe('效果解释器 · for-each-target', () => {
+  it('对每个选定目标各执行一次，并逐目标绑定 target', () => {
+    const { state, ctx } = scenario('tiger', 'bear')
+    ctx.targets = [0, 1]
+    runEffects(
+      state,
+      [
+        {
+          kind: 'for-each-target',
+          effects: [
+            { kind: 'log', template: '{target} 受到测试效果' },
+            { kind: 'lose-hp', target: 'target', amount: CONST(1) },
+          ],
+        },
+      ],
+      ctx,
+    )
+    expect(state.players[0].hp).toBe(3)
+    expect(state.players[1].hp).toBe(3)
+    // 多目标下外层不绑定 target，效果必须写在 for-each-target 内
+    expect(ctx.target).toBeUndefined()
+    expect(state.log.filter((entry) => entry.text.includes('受到测试效果'))).toHaveLength(2)
+  })
+
+  it('单目标语境退化为执行一次', () => {
+    const { state, ctx } = scenario('tiger', 'bear')
+    ctx.target = 1
+    runEffects(
+      state,
+      [
+        {
+          kind: 'for-each-target',
+          effects: [{ kind: 'lose-hp', target: 'target', amount: CONST(1) }],
+        },
+      ],
+      ctx,
+    )
+    expect(state.players[0].hp).toBe(4)
+    expect(state.players[1].hp).toBe(3)
+  })
+
+  it('迭代内的上下文写入不会冒泡到外层', () => {
+    const { state, ctx } = scenario('tiger', 'bear')
+    ctx.targets = [0, 1]
+    runEffects(
+      state,
+      [
+        {
+          kind: 'for-each-target',
+          effects: [{ kind: 'draw', target: 'target', count: CONST(1) }],
+        },
+      ],
+      ctx,
+    )
+    expect(ctx.lastAmount).toBeUndefined()
+    expect(state.players[0].hand).toHaveLength(1)
+    expect(state.players[1].hand).toHaveLength(1)
+  })
+
+  it('没有绑定任何目标时抛错（文档与调用点不匹配）', () => {
+    const { state, ctx } = scenario('tiger', 'bear')
+    expect(() =>
+      runEffects(
+        state,
+        [
+          {
+            kind: 'for-each-target',
+            effects: [{ kind: 'lose-hp', target: 'target', amount: CONST(1) }],
+          },
+        ],
+        ctx,
+      ),
+    ).toThrow(/for-each-target/)
+  })
+})
