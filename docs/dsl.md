@@ -352,9 +352,8 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 ```json
 "cards": [
-  { "kind": "strike", "count": 11 },
-  { "kind": "defend", "count": 6 },
-  { "kind": "heal", "count": 3 }
+  { "kind": "strike", "count": 8 },
+  { "kind": "defend", "count": 4 }
 ]
 ```
 
@@ -467,8 +466,8 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 
 **每个条件都可以带 `reason: string`**：条件不成立时，合法性判定会把这句话直接回给玩家，
 所以"为什么不能这么做"也是内容，写在文档里而不是散落在引擎分支中。例如
-`cards/heal.json` 的 `requires` 带 `"reason": "你的体力已满，无法使用【回复】"`，
-`cards/first-aid.json` 的目标条件带 `"reason": "目标角色体力已满，无法回复"`。
+`cards/defend.json` 的 `requires` 带 `"reason": "你没有需要抵消的威胁"`，
+`cards/plunder.json` 的 `requires` 带 `"reason": "对手没有手牌"`。
 没有 `reason` 的条件失败时返回通用说明（`firstFailed` 只报最外层不成立的节点）。
 
 `ZoneName`（`ZONE_NAMES`）：`hand` / `discard` / `processing` / `deck`。
@@ -757,9 +756,30 @@ export interface EffectContext {
 
 **`conditions` 求值时会临时把 `target` 绑定为该候选**（`ctx.target = index`），因此 `{ "kind": "ref", "ref": "hp", "of": "target" }` 读取的是候选的体力。合法性判定与结算共用 `target.ts` 的同一套规则，避免「校验通过但结算取到别的目标」。
 
-### 9.1 已有例子：急救
+### 9.1 例子：任意已受伤角色
 
-`cards/first-aid.json` 的目标规格要求候选「已受伤」：
+内置内容**已删除全部回血牌**（回复 / 急救及其升级版），但 `scope: any` + 条件过滤这条规格仍然有效。
+下面是等价的规格（测试用 `fixtures.ts` 的合成牌 `test-aid` 注入同一份规格）：
+
+```json
+"target": {
+  "scope": "any",
+  "required": false,
+  "default": "self",
+  "alive": true,
+  "conditions": [
+    {
+      "kind": "compare",
+      "op": "lt",
+      "left": { "kind": "ref", "ref": "hp", "of": "target" },
+      "right": { "kind": "ref", "ref": "maxHp", "of": "target" },
+      "reason": "目标角色体力已满，无法回复"
+    }
+  ]
+}
+```
+
+（旧版此处引用 `cards/first-aid.json`；该牌已随「删除回血牌」移除。）
 
 ```json
 "target": {
@@ -1055,7 +1075,7 @@ export interface EffectContext {
 | `src/game/dsl/registry.test.ts` | 内置内容全部通过校验；代号/牌种顺序；`skillsOf` 排序；`DslLoadError` 携带全部问题且按路径排序；`withRegistry` 注入与还原 |
 | `src/game/dsl/value.test.ts` | 常量与四则运算、`floor-div` / `clamp`、读取角色数值、消耗战表达式、通道聚合（蓄能）、修正值可为表达式、通道自引用报错 |
 | `src/game/dsl/condition.test.ts` | 每种条件（`always`/`not`/`all`/`any`、`compare`、`alive`/`has-cards`/`card-kind-count`、`in-processing`、`card-transformed`/`picked-count`、`skill-unused`/`is-active`/`phase-is`） |
-| `src/game/dsl/target.test.ts` | 急救候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
+| `src/game/dsl/target.test.ts` | 「任意已受伤角色」候选与缺省目标（内联规格）、打击的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
 | `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`threat`/`offset-threat`/`lose-hp`/`heal`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
 | `src/game/dsl/effects.test.ts` | 效果树结构查询：`effectsInclude` 递归进 `if` / `contest` / `for-each-target`；`effectsHarmChosenTarget` 区分「打向选定目标」与「打向自己」；`findEffect` 返回命中的节点 |
@@ -1106,6 +1126,7 @@ export interface EffectContext {
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
 | 数值递归上限 16 | 表达式/通道递归超过 16 层抛 `RuleError`；这是防自引用与防栈溢出的硬保护 |
 | 没有 native 逃生舱 | 效果必须表达为数据；无法表达的新机制只能扩展指令集（改词表、类型、校验器、解释器、schema），不能绕过校验直接调函数 |
+| 没有回血牌：濒死即阵亡 | 内容层已删除全部回血牌（回复 / 急救及其升级版），没有任何牌声明 `dying` 变体；濒死询问走完「濒死者 → 对手」后必定阵亡。引擎仍支持 `dying` 语境与 `resolve-dying`，加一张带 `dying` 变体的牌即可恢复救援（测试用 `fixtures.ts` 的合成牌 `test-mend` 覆盖这条链路） |
 | 奖励帧一次抽好双方共享的候选 | `offer-reward` 压帧时抽一次候选，两名玩家从同一组里选；没有「各自重抽」或「刷新候选」的字段，要改就调 `candidates` / `weights` / 周期 |
 | 奖励的交互顺序由帧栈决定 | `offer-reward` 只压帧不立即询问，同一时机上的多份奖励规则「priority 大者先弹」；想要确定的顺序就必须显式写 `priority` |
 | 手牌上限 = `min(体力, 6)`、守恒/能量不变式、RNG、距离仍在引擎 | 这些是机器不变量，不属于内容；见第 1 节的边界表 |
