@@ -12,7 +12,7 @@ import type { Effect, Value } from '../dsl/types'
 import type { UseContext } from '../dsl/kinds'
 import { canPayEnergy } from '../rules/energy'
 import { checkUseCard } from '../rules/legality'
-import { ownCards, serviceOptions } from '../rules/reward'
+import { removeCandidates, serviceOptions } from '../rules/reward'
 import {
   activationCostCards,
   activationTargetChoice,
@@ -80,12 +80,11 @@ export const REWARD_SCORE = {
 } as const
 /** 卡牌奖励的最低接受分：最高分低于它且允许跳过时就跳过 */
 export const REWARD_MIN_SCORE = 1.5
-/** 服务奖励：体力低于最大体力的这个比例时优先回复 */
-export const REWARD_HEAL_RATIO = 0.5
-/** 服务奖励：自己的牌多到这个数就优先移除 */
-export const REWARD_REMOVE_COUNT = 26
-/** 服务奖励：攻击牌占比低于这个值就优先移除 */
-export const REWARD_MIN_ATTACK_RATIO = 0.35
+/**
+ * 服务奖励：体力低到这个值时才优先回复。
+ * 回复量只有 1 点，平时不如删掉一张低质量初始牌；只有真的快死了才值得拿它续命。
+ */
+export const REWARD_DANGER_HP = 3
 
 /**
  * 规则式 AI：读取当前待输入项并返回一个动作。
@@ -618,10 +617,35 @@ function decideReward(
 }
 
 /**
- * 服务三选一：
- *  - 体力低于一半 → 回复；
- *  - 牌组偏大或攻击牌占比过低 → 移除（具体移除哪张交给 pick-card 的 worstCards）；
- *  - 否则 → 升级；
+ * 牌组循环（deck cycling）的核心思路：**删掉低质量初始牌**。
+ * 牌组越薄，关键牌的上手率越高，因此「未升级的初始牌」不如「升级版 / 奖励牌」值得留。
+ * 这些判定完全由文档结构派生（有没有 `upgradeTo` 即是否未升级），不含任何牌种 id。
+ */
+function isUnupgraded(card: Card): boolean {
+  return cardDoc(card.kind).upgradeTo !== undefined
+}
+
+/** 移除优先级：未升级攻击 → 未升级其他 → 其他攻击 → 其余；同级按 uid 升序 */
+function removalRank(card: Card): number {
+  const attack = cardRole(card.kind) === 'attack'
+  if (isUnupgraded(card) && attack) return 0
+  if (isUnupgraded(card)) return 1
+  if (attack) return 2
+  return 3
+}
+
+/** 最该移除的一张（先删未升级的初始牌，尤其是未升级的攻击） */
+function removalTarget(candidates: Card[]): Card {
+  return [...candidates].sort((a, b) => removalRank(a) - removalRank(b) || a.uid - b.uid)[0] as Card
+}
+
+/**
+ * 服务三选一。牌组循环的最优解是把低质量初始牌删掉：牌组越薄，关键牌上手率越高，
+ * 因此 AI 在「有未升级的初始牌可删」时优先移除，而不是无脑升级。
+ *  - 体力危险（≤ REWARD_DANGER_HP）且回复可用 → 先回复保命；
+ *  - 有未升级的初始牌可删 → 移除（具体删哪张交给 pick-card 的 removalTarget）；
+ *  - 否则 → 升级（把好牌变强）；
+ *  - 再否则 → 有牌就删，最后才是回复。
  * 每次只提交当前可用的选项，绝不下发一个必被 legality 拒绝的动作。
  */
 function decideServiceReward(state: GameState, p: PlayerIndex): Action {
@@ -631,16 +655,11 @@ function decideServiceReward(state: GameState, p: PlayerIndex): Action {
     : { upgrade: false, remove: false, heal: false }
   const player = state.players[p]
 
-  if (available.heal && player.hp * 2 < player.maxHp) {
+  if (available.heal && player.hp <= REWARD_DANGER_HP) {
     return { kind: 'pick-reward', service: 'heal' }
   }
-  if (available.remove) {
-    const own = ownCards(state, p)
-    const attacks = own.filter((card) => cardRole(card.kind) === 'attack').length
-    const ratio = own.length > 0 ? attacks / own.length : 1
-    if (own.length > REWARD_REMOVE_COUNT || ratio < REWARD_MIN_ATTACK_RATIO) {
-      return { kind: 'pick-reward', service: 'remove' }
-    }
+  if (available.remove && removeCandidates(state, p).some(isUnupgraded)) {
+    return { kind: 'pick-reward', service: 'remove' }
   }
   if (available.upgrade) return { kind: 'pick-reward', service: 'upgrade' }
   if (available.remove) return { kind: 'pick-reward', service: 'remove' }
@@ -650,7 +669,7 @@ function decideServiceReward(state: GameState, p: PlayerIndex): Action {
 /**
  * 升级 / 移除的选牌。
  * 升级优先挑攻击牌（提高输出），同档按奖励评分、再按 uid；
- * 移除则沿用 `worstCards` 的优先级挑最不值得留的一张。
+ * 移除则先删低质量初始牌（未升级的攻击最优先），见 `removalTarget`。
  */
 function decidePickCard(pending: Extract<Prompt, { kind: 'pick-card' }>): Action {
   const candidates = pending.candidates
@@ -665,6 +684,5 @@ function decidePickCard(pending: Extract<Prompt, { kind: 'pick-card' }>): Action
     )[0] as Card
     return { kind: 'pick-own-card', card: best }
   }
-  const worst = worstCards(candidates, 1)[0] as Card
-  return { kind: 'pick-own-card', card: worst }
+  return { kind: 'pick-own-card', card: removalTarget(candidates) }
 }

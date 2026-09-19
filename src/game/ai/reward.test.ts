@@ -107,8 +107,20 @@ describe('AI 服务三选一', () => {
     expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'remove' })
   })
 
-  it('否则选择升级', () => {
+  it('有未升级的初始牌可删时优先移除（牌组循环：删低质量初始牌）', () => {
     const state = serviceState({ aiHp: 10 })
+    expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'remove' })
+  })
+
+  it('移除被下限挡住时改为升级', () => {
+    const state = serviceState({ aiHp: 10 })
+    // 只剩 5 张牌：移除后不足下限 5，只能升级（牌都是未升级的基础牌）
+    state.players[1].deck = []
+    state.players[1].discard = []
+    state.players[1].hand = Array.from({ length: 5 }, (_, i) => ({
+      uid: 300 + i,
+      kind: 'strike',
+    }))
     expect(aiDecide(state)).toEqual({ kind: 'pick-reward', service: 'upgrade' })
   })
 })
