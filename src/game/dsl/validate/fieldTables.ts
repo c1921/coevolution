@@ -65,11 +65,17 @@ export interface ValidatedDocs {
 /** 文档对象（`unknown` 收敛前的形态） */
 export type Obj = Record<string, unknown>
 
-/** 效果所处的语境，决定可用角色与允许的指令 */
-export type EffectContext =
+/**
+ * 内容所处的**文档语境**，决定可用角色与允许的指令。
+ *
+ * 名字刻意区别于运行时的 `EffectContext`（`dsl/runtime.ts`）：那个是结算用的数据
+ * 上下文（self / target / damage…），这个是**校验期**从文档位置推出的语境标签。
+ * 两者过去同名，读代码时要靠 import 来源区分。
+ */
+export type DocContext =
   'activate' | 'use-play' | 'use-dying' | 'play' | 'trigger' | 'contest' | 'rule' | 'modifier'
 
-export const CONTEXT_ROLES: Record<EffectContext, readonly RoleRef[]> = {
+export const CONTEXT_ROLES: Record<DocContext, readonly RoleRef[]> = {
   activate: ['self', 'target', 'active', 'opponent'],
   'use-play': ['self', 'target', 'active', 'opponent'],
   'use-dying': ['self', 'target', 'dying', 'active', 'opponent'],

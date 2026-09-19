@@ -12,7 +12,7 @@ import type { Frame, GameState } from '../types'
  *
  * 这里是**结算帧栈**（continuation stack）的唯一消费者：`stepFrame` 每次处理
  * 栈顶一帧，返回 true 表示"已经生成待输入项，应立刻返回给调用方"。
- * 帧的**压入**分散在效果指令（dsl/internal.ts）与规则（rules/*）里，
+ * 帧的**压入**分散在效果指令（dsl/primitives.ts）与规则（rules/*）里，
  * 但顺序保证只由这里的循环决定，因此顺序可测、可读。
  */
 

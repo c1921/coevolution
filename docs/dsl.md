@@ -6,7 +6,8 @@
 
 - 词表（所有判别式 `kind` 的唯一事实来源）：`src/game/dsl/kinds.ts`
 - IR 类型：`src/game/dsl/types.ts`
-- 加载期校验器：`src/game/dsl/validate.ts`
+- 字段表（唯一事实来源）：`src/game/dsl/fieldSpecs.ts`
+- 加载期校验器：`src/game/dsl/validate/`（`index.ts` 是入口与公开导出）
 - 注册表与查询：`src/game/dsl/registry.ts`
 - 运行时上下文与角色解析：`src/game/dsl/runtime.ts`
 - 求值：`src/game/dsl/value.ts`（数值 + 通道聚合）、`condition.ts`、`target.ts`
@@ -35,7 +36,7 @@ DSL 只承载**内容**，不承载**结算机器**。判断一段逻辑该不�
 | 机械 | 位置 |
 |---|---|
 | 阶段游标与剩余阶段队列 `phase` / `phaseStage` / `phaseQueue` | `src/game/rules/phase.ts` |
-| 结算帧栈 `state.stack` 与待输入项 `state.pending`（`Frame` / `Prompt`） | `src/game/engine.ts`、`src/game/types.ts` |
+| 结算帧栈 `state.stack` 与待输入项 `state.pending`（`Frame` / `Prompt`） | `src/game/engine/`（`stack.ts` 推动、`actions.ts` 应用）、`src/game/types.ts` |
 | 濒死询问与死亡结算 | `src/game/rules/dying.ts`、`src/game/rules/death.ts` |
 | 手牌上限 = 当前体力值 | `src/game/rules/turn.ts` 的 `handLimit` |
 | 牌数守恒不变式 | `src/game/rules/cardZones.ts` 的 `assertConservation` |
@@ -74,7 +75,7 @@ DSL 文档校验失败（2 项）：
   /ghost [dead-doc] 技能 ghost 没有被任何代号引用
 ```
 
-校验契约（见 `validate.ts` 顶注）：只要 `issues` 非空，调用方必须抛错，绝不能使用返回的 `docs`——结构校验不通过时这些对象不具备 IR 的字段保证。
+校验契约（见 `validate/index.ts` 顶注）：只要 `issues` 非空，调用方必须抛错，绝不能使用返回的 `docs`——结构校验不通过时这些对象不具备 IR 的字段保证。
 
 ### 2.2 顺序即结算顺序
 
@@ -285,7 +286,7 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | 通道 | 基准含义 | 引擎消费点 | 修正语义 |
 |---|---|---|---|
 | `energy-max` | 每回合能量上限（3） | `rules/energy.ts` `energyMax` | 绝对值，`set` 即覆盖上限 |
-| `defend-need-against` | **占位**：对抗机制里抵消一次攻击需要的响应牌张数（1） | 仅 `contest` 帧（`dsl/internal.ts` `pushContest`）；内置内容没有 `play` 变体，实战不可达 | 绝对值，当前无内置内容使用 |
+| `defend-need-against` | **占位**：对抗机制里抵消一次攻击需要的响应牌张数（1） | 仅 `contest` 帧（`dsl/primitives.ts` `pushContest`）；内置内容没有 `play` 变体，实战不可达 | 绝对值，当前无内置内容使用 |
 | `threat-per-attack` | 每次攻击叠加的威胁点数（1） | `skills/index.ts` `threatPerAttack`（【打击】的 `threat` 效果） | 绝对值；内置内容不改该通道，技能修正可覆盖 |
 | `draw-count` | 摸牌阶段摸几张（2） | `rules/turn.ts` `drawCount` | 偏移量：先手首回合再 −1 |
 | `hand-limit` | 手牌上限相对体力的偏移（0） | `rules/turn.ts` `handLimit` | 偏移量：上限 = 体力 + 修正 |
@@ -732,8 +733,8 @@ export interface EffectContext {
 单选时 `mustChoose = spec.required === true || candidates.length > 1 || fallback === undefined`；
 返回 `null` 表示现在不能用（没有对应的变体，或声明了 `target` 却一个候选都没有，此时按钮不出现）。
 
-- `activeOptions` 与 `checkActivate` 共用它：前者按「存在一个合法候选」决定按钮是否出现，后者用玩家最终选定的目标重算 `requires`，所以**可用 ⟺ 提交必成功**。卡牌侧同样：`stores/game.ts` 的 `legalOptions` 用 `cardTargetChoice` 判定牌面是否可用，`checkUseCard` 用 `resolveTargetChoices` 校验提交的目标。
-- 多候选或缺省目标不合格时，界面进入目标选择态（`stores/game.ts` 的 `pendingTarget`，技能与卡牌共用），候选列表由 `dsl/target.ts` 的 `targetScopeMembers` 给出**过滤前**的 scope 成员，不可选的候选附上 `conditions` 里的 `reason`；多目标需要勾选后点「确定」。
+- `activeOptions` 与 `checkActivate` 共用它：前者按「存在一个合法候选」决定按钮是否出现，后者用玩家最终选定的目标重算 `requires`，所以**可用 ⟺ 提交必成功**。卡牌侧同样：`stores/selectors.ts` 的 `legalOptions` 用 `cardTargetChoice` 判定牌面是否可用，`checkUseCard` 用 `resolveTargetChoices` 校验提交的目标。
+- 多候选或缺省目标不合格时，界面进入目标选择态（`stores/state.ts` 的 `pendingTarget`、`stores/selection.ts` 的 `chooseTarget`，技能与卡牌共用），候选列表由 `dsl/target.ts` 的 `targetScopeMembers` 给出**过滤前**的 scope 成员，不可选的候选附上 `conditions` 里的 `reason`；多目标需要勾选后点「确定」。
 - AI（`game/ai/index.ts`）同样由文档结构派生：`chooseActivationTarget` 与 `chooseCardTargets` 对「伤害 `target`」的效果选对手、其余选自己，再退回 `fallback` 与候选顺序；`all` 模式不传目标（由引擎作用于全部候选）。
 
 ---
@@ -750,7 +751,7 @@ export interface EffectContext {
 
 要点：
 
-- **`after-damage` 是目前引擎唯一 emit 的事件类时机**，也是唯一允许 `optional: true` 的时机（`validate.ts` 明确拒绝其它时机 + `optional: true`，报 `bad-combination`）。
+- **`after-damage` 是目前引擎唯一 emit 的事件类时机**，也是唯一允许 `optional: true` 的时机（`validate/docs.ts` 的 `checkSkill` 明确拒绝其它时机 + `optional: true`，报 `bad-combination`）。
 - **触发点已从「直接造成伤害」改到「回合结束时威胁结算」**：攻击只叠威胁（`threat` 指令），承受到伤害的方式是自己在回合结束时让剩余威胁结算为等量伤害，`dealDamage` 在这一刻 emit `after-damage`，随后做濒死检查。因此同一回合里先叠的威胁不会立刻触发「受到伤害后」技能。
 - 触发型的其它字段：`on`（必填）、`optional?`（当前只有 `after-damage` 可为 `true`）、`when?`（非空条件数组）、`effects`（必填）、`after?`。
 - 非可选的时机技能与 `rule` 按注册顺序（`priority`, `id`）依次执行；`trigger` 里可选的技能由引擎询问玩家，玩家应答后再结算其 `effects`。
@@ -956,7 +957,8 @@ export interface EffectContext {
 
 只有下列情况需要改代码，且改动是「扩展指令集」而不是「加内容」：
 
-- 需要一条现有 `EFFECT_KINDS` 无法表达的效果 → 在 `kinds.ts` 增加 `kind`，同步 `types.ts` 的联合类型与字段、`validate.ts` 的字段表与组合约束、解释器的 `switch`（`never` 穷尽断言会强制补全）、`schema.ts` 的类型表；
+- 需要一条现有 `EFFECT_KINDS` 无法表达的效果 → 在 `kinds.ts` 增加 `kind`，在 `fieldSpecs.ts` 的 `EFFECT_SPECS` 加一条（字段与类型一起写），解释器的 `switch` 补一支（`never` 穷尽断言会强制补全）。
+  漏改 `fieldSpecs.ts` 或 `types.ts` 的联合类型都会**编译失败**，不需要再手工核对字段表；
 - 需要引擎 emit 一个新的事件时机（新 `TIMING_KINDS`）→ 在引擎的 emit 点接入，并更新 `TIMING_KINDS` 词表；
 - 需要新的可读数值（`VALUE_REF_NAMES`）或新的修正通道（`CHANNELS`，同时补 `ruleset.channels`）。
 
@@ -976,9 +978,10 @@ export interface EffectContext {
 | `src/game/dsl/target.test.ts` | 急救候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
 | `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`threat`/`offset-threat`/`lose-hp`/`heal`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
+| `src/game/dsl/effects.test.ts` | 效果树结构查询：`effectsInclude` 递归进 `if` / `contest` / `for-each-target`；`effectsHarmChosenTarget` 区分「打向选定目标」与「打向自己」；`findEffect` 返回命中的节点 |
 | `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（反击）、不可选触发立即执行、可选触发只支持 `after-damage` |
-| `src/game/dsl/schema.test.ts` | `uncoveredFields()` 为空；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
-| `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、扫描非空跑 |
+| `src/game/dsl/schema.test.ts` | 没有孤儿 `$defs` 节点；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
+| `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、**运行时依赖图零环**（强连通分量比对）、README 测试表覆盖全部测试文件、stores 只从 barrel 进入 |
 | `src/game/dsl/channels.test.ts` | 通道接线验收：七条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、每次攻击叠加的威胁、占位对抗的抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
 | `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限、使用时选目标的牌、多目标牌都只改文档即可端到端生效 |
 
@@ -988,16 +991,17 @@ export interface EffectContext {
 
 ### 14.2 `schema.json` 是生成物
 
-`src/game/data/dsl/schema.json`（JSON Schema draft 2020-12）由 `src/game/dsl/schema.ts` 从 `kinds.ts` 的词表与 `validate.ts` 的字段表（`DOC_SCHEMA_KEYS` / `DOC_FIELDS`）生成，**不是手写的**：
+`src/game/data/dsl/schema.json`（JSON Schema draft 2020-12）由 `src/game/dsl/schema.ts` 从 `kinds.ts` 的词表与 `fieldSpecs.ts` 的字段表生成，**不是手写的**：
 
-- 字段表是校验器与生成器共用的唯一来源；新增字段必须同时改字段表与 `schema.ts` 的 `NODE_SPECS`，否则 `uncoveredFields()` 非空、`schema.test.ts` 失败。
+- 字段表（`fieldSpecs.ts`）是校验器与生成器共用的唯一来源，allowed 字段集合由字段表的键派生，
+  因此不存在"校验器认识、schema 不认识"这种漂移；`schema.test.ts` 只额外检查没有孤儿 `$defs` 节点。
 - `schema.test.ts` 把提交的 `schema.json` 与 `schemaJson()` 逐字节比对。字段/词表变了但没更新生成物时，用以下命令重新生成：
 
   ```bash
   UPDATE_DSL_SCHEMA=1 npx vitest run src/game/dsl/schema.test.ts
   ```
 
-- schema 只覆盖**结构**：文档结构、允许/必填字段、判别式枚举、嵌套节点与取值类型。语义约束（引用完整性、费用 ≥ 1、牌区组合、占位符与角色可用性）无法用 JSON Schema 表达，由 `validate.ts` 在加载期强制——这是刻意的分工。
+- schema 只覆盖**结构**：文档结构、允许/必填字段、判别式枚举、嵌套节点与取值类型。语义约束（引用完整性、费用 ≥ 1、牌区组合、占位符与角色可用性）无法用 JSON Schema 表达，由 `validate/` 在加载期强制——这是刻意的分工。
 - 每份内容文档都以 `"$schema": "../schema.json"` 指向它，编辑器因此能补全与提示。
 
 ---

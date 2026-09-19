@@ -18,7 +18,7 @@ import {
   skipPhaseFor,
   spendEnergy,
   threatFor,
-} from './internal'
+} from './primitives'
 import { assertNever, requireRole } from './runtime'
 import type { EffectContext, EvalEnv } from './runtime'
 import { renderLog } from './template'
@@ -31,7 +31,7 @@ import type { Effect } from './types'
  * 语义约定（见 docs/dsl.md 第 7 节）：
  *  - **effects 立即按声明顺序执行**；需要"等当前结算链走完再执行"的指令写在 `after` 里，
  *    由 runEffectGroup 压成 Frame.effects（LIFO），例如「先失去体力濒死、存活后才摸牌」。
- *  - 解释器不判断内容，只按文档派发；具体机制全部落在 internal.ts 的原语上。
+ *  - 解释器不判断内容，只按文档派发；具体机制全部落在 primitives.ts 的原语上。
  *  - switch 以 assertNever 收尾：新增指令种类时漏实现会直接编译报错。
  */
 

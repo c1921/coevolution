@@ -184,14 +184,19 @@ npm run build          # 类型检查 + 生产构建
 由 `src/game/dsl/**` 的**单一解释器**执行：
 
 - **词表与类型**：`dsl/kinds.ts`（判别式词表，唯一事实来源）+ `dsl/types.ts`（IR 类型）。
-- **加载期校验**：`dsl/validate.ts` 拒绝未知键/未知判别式/悬空引用/死文档/费用 < 1 等，
+- **字段表单一事实源**：`dsl/fieldSpecs.ts` 声明「哪个节点/判别式允许哪些字段、各是什么类型」，
+  校验器与 schema 生成器读同一份表；漏改任一边由**编译期断言**拦下。
+- **加载期校验**：`dsl/validate/`（按职责分文件）拒绝未知键/未知判别式/悬空引用/死文档/费用 < 1 等，
   一次报出全部问题（`DslLoadError` 带 JSON 路径）；`dsl/registry.ts` 导入即校验。
 - **求值**：`dsl/value.ts`（数值表达式 + 修正通道聚合）、`dsl/condition.ts`（条件，可带 `reason` 失败说明）、
   `dsl/target.ts`（目标选取，含多目标 `count` 与 `resolveTargetChoices`）、`dsl/template.ts`（战报模板）。
-- **执行**：`dsl/effect.ts` 是全部效果指令的唯一入口（含逐个目标执行的 `for-each-target`），`dsl/internal.ts` 提供牌区/体力/威胁/能量/帧等引擎原语；
-  `dsl/event.ts` 把"规则文档 + 技能触发"统一到同一套时机派发上。
+- **执行**：`dsl/effect.ts` 是全部效果指令的唯一入口（含逐个目标执行的 `for-each-target`），`dsl/primitives.ts` 提供牌区/体力/威胁/能量/帧等引擎原语；
+  `dsl/event.ts` 把"规则文档 + 技能触发"统一到同一套时机派发上，触发**收集**在 `dsl/triggers.ts`
+  （不依赖解释器，因此引擎原语可以放心地用，不会形成循环依赖）。
+- **效果树查询**：`dsl/effects.ts` 提供 `effectsInclude` / `effectsHarmChosenTarget` 等结构查询，
+  AI 的用途判定与注册表的卡牌角色派生共用一份递归形状。
 - **规范文本**：`docs/dsl.md`（节点全表、语义、扩展指南）；`data/dsl/schema.json` 由
-  `dsl/schema.ts` 从词表与字段表**生成**，`schema.test.ts` 逐字节比对防止漂移。
+  `dsl/schema.ts` 从 `fieldSpecs.ts` **生成**，`schema.test.ts` 逐字节比对防止漂移。
 
 扩展的验收标准：**新增技能 / 卡牌 / 代号只需要加 JSON**，引擎、legality、AI、界面一行都不用改——
 `dsl/extensibility.test.ts` 用一个全新主动技、一张全新攻击牌（含牌组与守恒）、一次体力上限调整、**一张使用时选目标的牌**与**一张多目标牌**做了端到端验证。
@@ -202,14 +207,20 @@ npm run build          # 类型检查 + 生产构建
 src/
   game/                    # 规则引擎（纯 TS，不依赖 Vue）
     types.ts               # 领域类型：Card / VirtualCard / Prompt / Action / Frame / Phase / GameState
-    engine.ts              # createGame / rollDraft / getPending / submit / advance
+    engine/                # index（submit / isOver 门面）+ setup（抽将建局）
+                           # stack（结算帧栈与推进循环）+ actions（各动作的 applier）
     rng.ts                 # mulberry32 + 种子化洗牌（可复现）
     log.ts                 # 中文战报
     testUtils.ts           # 测试用状态构造器
     data/                  # 内容视图：species / cardDefs / deck（实时由 DSL 注册表派生）
       dsl/                 # **内容文档**：ruleset、rules、decks、cards、skills、species + schema.json
-    dsl/                   # **DSL 运行时**：kinds/types/validate/registry/value/condition
-                           # target/modifier/template/internal/effect/event/schema
+    dsl/                   # **DSL 运行时**
+                           # kinds（词表）· types（IR）· fieldSpecs（字段表唯一来源）
+                           # validate/（分文件校验器：fieldTables/primitives/四类节点/docs/refs）
+                           # registry · runtime · value · condition · target · modifier
+                           # template · effect（解释器）· primitives（引擎原语）
+                           # triggers（触发收集）· event（时机派发）· effects（效果树查询）
+                           # schema（JSON Schema 生成器）
     rules/                 # phase（六阶段、时机、跳过/额外阶段）
                            # turn（回合推进、摸牌数、手牌上限、回合结束威胁结算）
                            # threat（叠加／抵消威胁、威胁不变式 —— 基础伤害机制）
@@ -218,7 +229,13 @@ src/
                            # legality / damage / dying / death / cardZones / distance
     skills/                # index（牌面生成、主动技枚举、目标选择解析、通道读取）
     ai/                    # 规则式 AI（按文档派生的用途决策与选目标，确定性）
-  stores/game.ts           # reactive 状态 + 目标选择态 + AI 驱动循环（pumpToken 防竞态）
+  stores/                  # 界面状态层：game.ts 是唯一 barrel（export * 转发下面六个模块）
+    state.ts               # 只有 ref：screen / draftOptions / gameState / 选择态（叶子）
+    selectors.ts           # 只读派生：按钮列表、文案、目标选择器的候选与标题
+    actions.ts             # act 与各 submit：唯一清空选择态、捕获 RuleError 的地方
+    aiDriver.ts            # AI 驱动循环与 pumpToken 竞态守卫（唯一的异步副作用）
+    selection.ts           # 手牌选择与目标选择态（先进入选择态再提交）
+    session.ts             # 抽将 / 开局 / 回首页（三个入口都先让旧 AI 回调失效）
   components/              # StartScreen / DraftScreen / GameBoard / PlayerPanel / HandCard
                            # ActionBar / PromptOverlay / LogPanel / HealthBar
 ```

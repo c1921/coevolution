@@ -203,7 +203,7 @@ function runtimeCycles(): string[][] {
  * 允许存在的运行时循环依赖。**当前为空：应用代码的依赖图是一条 DAG。**
  *
  * 这里曾经列着 5 个文件构成的强连通分量 ——
- * `dsl/effect` ⇄ `dsl/event` ⇄ `dsl/internal` ⇄ `rules/damage` ⇄ `rules/threat`。
+ * `dsl/effect` ⇄ `dsl/event` ⇄ `dsl/primitives` ⇄ `rules/damage` ⇄ `rules/threat`。
  * 根因是 `rules/damage.ts` 为了收集「受到伤害后」触发而 import `dsl/event.ts`，
  * 而 event 依赖解释器 `dsl/effect.ts`，解释器又反过来 import damage 与 threat。
  * 修法是把触发收集拆到 `dsl/triggers.ts`（不依赖解释器），

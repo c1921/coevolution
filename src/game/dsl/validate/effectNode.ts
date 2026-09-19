@@ -10,7 +10,7 @@ import {
   PICK_MODES,
 } from '../kinds'
 import type { RoleRef, ZoneName } from '../kinds'
-import type { EffectContext, Issue, Obj, Ref } from './fieldTables'
+import type { DocContext, Issue, Obj, Ref } from './fieldTables'
 import { CONTEXT_ROLES, DOC_FIELDS, EFFECT_KEYS } from './fieldTables'
 import {
   asArray,
@@ -80,7 +80,7 @@ export function checkLogTemplate(
 export function checkEffects(
   node: unknown,
   path: string,
-  context: EffectContext,
+  context: DocContext,
   issues: Issue[],
   refs: Ref[],
 ): void {
@@ -99,7 +99,7 @@ export function checkEffects(
 export function checkEffect(
   node: unknown,
   path: string,
-  context: EffectContext,
+  context: DocContext,
   issues: Issue[],
   refs: Ref[],
 ): void {
@@ -218,7 +218,7 @@ export function checkEffect(
 function checkMoveCards(
   obj: Obj,
   path: string,
-  context: EffectContext,
+  context: DocContext,
   roles: readonly RoleRef[],
   issues: Issue[],
   refs: Ref[],
