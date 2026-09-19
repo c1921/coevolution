@@ -5,13 +5,16 @@
 
 - 技术栈：Vue 3 + TypeScript + Vite 8 + Tailwind CSS v4
 - 规则引擎：纯 TypeScript、零 Vue 依赖、状态可序列化、随机确定性
-- 测试：vitest 单元测试（316 个用例，含 200 局 AI 自对局不变式校验）
+- 测试：vitest 单元测试（含 200 局 AI 自对局不变式校验，用例数见 `npm test` 输出）
 
 ```bash
 npm install
-npm run dev     # 开发服务器
-npm test        # 运行全部测试
-npm run build   # 类型检查 + 生产构建
+npm run dev            # 开发服务器
+npm test               # 运行全部测试
+npm run lint           # ESLint 静态检查
+npm run format:check   # Prettier 风格检查
+npm run typecheck      # vue-tsc 类型检查
+npm run build          # 类型检查 + 生产构建
 ```
 
 ---
@@ -222,7 +225,10 @@ src/
 
 引擎以 **prompt 驱动的状态机**对外：`submit(state, action)` 先校验再应用，然后 `advance()` 自动推进系统步骤，直到停在需要人或 AI 决策的点上。回合推进由 `(阶段, 子步骤)` 游标加剩余阶段队列 `phaseQueue` 表示，规则效果按「时机」注册。界面用 `reactive()` 包裹同一份状态对象，引擎就地修改它即自动刷新，引擎本身永远不 import Vue。
 
-## 测试覆盖（316 个用例）
+## 测试覆盖
+
+> 用例总数不写在这里（写死的数字必然会过期）：跑 `npm test` 看汇总。
+> `guards.test.ts` 会机械检查本表列出了每一个 `*.test.ts`，所以新增测试文件时**必须**补一行。
 
 | 文件 | 覆盖内容 |
 |---|---|
@@ -253,7 +259,7 @@ src/
 | `dsl/effect.test.ts` | 全部效果指令（含 `threat` / `offset-threat`）、四种取牌模式、对抗帧与抵消（占位机制）、濒死脱离、`for-each-target` 逐目标执行与单目标退化、after 延迟语义 |
 | `dsl/event.test.ts` | 时机匹配、消耗战规则、触发收集与 when 条件、runTrigger（【反击】）、不可选触发立即执行 |
 | `dsl/schema.test.ts` | 字段覆盖率、生成物逐字节一致、每份内容文档过 schema、schema 能拒绝错误 |
-| `dsl/guards.test.ts` | 应用代码零内容 id、白名单不过期、不 import node 内置模块、扫描非空跑 |
+| `dsl/guards.test.ts` | 应用代码零内容 id、白名单不过期、不 import node 内置模块、扫描非空跑；**运行时依赖图零环**（强连通分量比对，`import type` 不算边）；README 测试覆盖表列出全部测试文件 |
 | `dsl/extensibility.test.ts` | 新主动技 / 新攻击牌（含牌组与守恒）/ 改体力上限 / **使用时选目标的牌** / **多目标牌** 都只改文档 |
 | `engine.test.ts` | **200 局 AI 自对局**全终局且牌数守恒、能量与威胁不变式、4×4 代号组合、完全确定性复现、回归：曾经的死循环组合；私有牌组：开局各 20 张且构成正确、摸牌不影响对手、跨池取牌后全局仍守恒（合成技能） |
 | `stores/game.test.ts` | 抽将→选将→对局→终局全链路、只提供合法操作、出牌扣能量、能量见底只能结束阶段、弃牌校验、非法操作显示文档 reason、再来一局不被旧回调污染（固定种子）；目标选择器：技能与卡牌两条路径的「按钮可用→进入选择态→候选含文档 reason→选定提交 / 取消不提交」、多目标勾选与数量不足时确认被拦下 |
