@@ -236,6 +236,10 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 `UseVariant`：`context`（`play` / `dying`）、`target?`、`requires?`、`effects`、`after?`。
 `PlayVariant`：`respondsTo`（它响应哪种牌开启的对抗）、`requires?`、`effects`。
 
+**卡牌的目标是「使用时选择」的**：`use.target` 与主动技的 `target` 规格完全同源（第 9 节），
+候选不唯一或声明了 `required` 时界面会弹目标选择器，提交走 `Action.use-card.targets`。
+`count`（多目标）只允许出现在卡牌的 `use` 变体上——主动技的 `target` 带 `count` 会被 `bad-combination` 拒绝。
+
 `cards/defend.json`（节选，响应变体）：
 
 ```json
@@ -454,7 +458,29 @@ function order<T extends { id: string; priority?: number }>(docs: T[]): T[] {
 | `resolve-dying` | `of: RoleRef` | 结束濒死结算；**只能出现在卡牌的 `dying` 变体** |
 | `skip-phase` | `phase: TurnPhase` | 从本回合剩余阶段计划中删除该阶段 |
 | `extra-phase` | `phase: TurnPhase`、`position: 'next' \| 'last'` | 插入一个额外阶段 |
+| `for-each-target` | `effects: Effect[]` | 对每个选定目标各执行一次子效果：迭代时把 `target` 临时绑定为当前目标（多目标牌的唯一正确写法） |
 | `if` | `condition: Condition`、`then: Effect[]`、`else?: Effect[]` | 条件分支；`then` / `else` 都是非空效果列表 |
+
+`for-each-target` 的语义细节：
+
+- 目标来自 `ctx.targets`（多目标解析结果）；单目标语境下退化为执行一次；
+- 每次迭代使用**子上下文**，因此迭代内的 `{amount}` / `{picked}` 等绑定**不会**冒泡到外层；
+- 一个目标都没有（既没有 `ctx.targets` 也没有 `ctx.target`）时抛 `RuleError`，属于文档与调用点不匹配；
+- 声明了 `count` 的变体里，任何**不在** `for-each-target` 内、直接引用角色 `target` 的效果
+  （含日志占位符与条件）都会被加载期校验器以 `bad-combination` 拒绝——多目标下 `ctx.target` 不绑定，
+  这样能避免「以为打了全体、实际只打了一个」。
+
+示例——`cards/storm.json`（对每名角色造成 1 点伤害）：
+
+```json
+{
+  "kind": "for-each-target",
+  "effects": [
+    { "kind": "log", "template": "{target} 受到 1 点伤害" },
+    { "kind": "damage", "target": "target", "amount": { "kind": "const", "value": 1 } }
+  ]
+}
+```
 
 `ZoneRef`：`{ zone: MOVE_ZONES, of?: RoleRef }`，其中 `MOVE_ZONES = hand / discard / processing`。**`deck` 不能被 `move-cards` 直接引用**，只能通过 `draw` 访问，避免绕过洗回逻辑。
 
@@ -604,6 +630,18 @@ export interface EffectContext {
 | `alive` | 是 | `boolean` | `true` 时过滤掉阵亡角色 |
 | `range` | 否 | `boolean` | `true` 时要求距离在攻击范围内（打击） |
 | `conditions` | 否 | `Condition[]` | 对候选逐个求值 |
+| `count` | 否 | `TargetCount` | 目标个数；缺省为单选 1 个 |
+
+`count` 的两种模式（`TARGET_COUNT_MODES`）：
+
+| 模式 | 含义 |
+|---|---|
+| `{ "mode": "all" }` | 不需要玩家选择，结算作用于**全部合法候选**（按座次序）；显式目标必须与候选集完全一致 |
+| `{ "mode": "exactly", "count": Value }` | 必须显式指定恰好 N 个互不重复的合法目标；候选不足 N 时报「符合条件的目标不足 N 个」 |
+
+`count` 的额外约束：与 `default` 不能同时出现（多目标没有「缺省单目标」的概念，`bad-combination`）；
+`exactly` 的个数表达式在**还没选出目标**的环境求值，因此只允许 `self` / `active` 角色，`const` 时须 ≥ 1。
+多目标变体里的效果必须用 `for-each-target` 引用 `target`（见第 6 节）。主动技暂不支持 `count`。
 
 `scope` 的候选集合：`self` → 自己；`any` → 双方；`opponent` → 对手；`others` → 除自己外；`dying` → `ctx.dying`（没有濒死者则为空）。候选再依次按 `alive`、`range`、`conditions` 过滤。
 
@@ -630,26 +668,37 @@ export interface EffectContext {
 }
 ```
 
-`resolveTargetChoice` 的规则：显式目标必须在候选内；`required: true` 时必须提供；否则用 `default`（再退化为唯一候选 → 自己）；**候选为空时返回 `{ ok: false, reason: '没有符合条件的目标' }`**——声明了 `target` 就不能"无目标地"继续结算，否则效果里引用 `target` 时会在更深处抛错（攻击范围、存活条件这类修正都能让候选变空）。
+`resolveTargetChoices` 的规则：显式目标必须在候选内；`required: true` 时必须提供；否则用 `default`（再退化为唯一候选 → 自己）；`count.mode = all` 直接返回全部候选，`exactly` 则要求恰好 N 个；**候选为空时返回 `{ ok: false, reason: '没有符合条件的目标' }`**——声明了 `target` 就不能"无目标地"继续结算，否则效果里引用 `target` 时会在更深处抛错（攻击范围、存活条件这类修正都能让候选变空）。
+单选路径由 `resolveTargetChoice`（内部调用 `resolveTargetChoices` 并取第一个目标）承担，既有调用点不必改。
 
-### 9.2 主动技的目标选择（界面 / AI 接线）
+### 9.2 目标选择入口（界面 / AI / 合法性接线）
 
-主动技的目标解析只有 `game/skills/index.ts` 的 `activationTargetChoice(state, p, skill)` 一个入口，它给出：
+目标解析只有 `game/skills/index.ts` 的 `targetChoice(state, p, spec, dying?)` 一个核心入口，
+主动技与卡牌各有一个薄封装：
+
+| 入口 | 用途 |
+|---|---|
+| `targetChoice(state, p, spec, dying?)` | 核心：把 `TargetSpec` 解析成候选、缺省目标与「要不要选、选几个」 |
+| `activationTargetChoice(state, p, skill)` | 主动技：取 `skillDoc(skill).activate?.target` |
+| `cardTargetChoice(state, p, kind, context, dying?)` | 卡牌：取 `useVariantOf(kind, context)?.target`（濒死语境需传濒死者绑定 `scope: dying`） |
+
+三者返回同一个 `TargetChoice`：
 
 | 字段 | 说明 |
 |---|---|
-| `spec` | 目标规格；技能没有声明 `target` 时为 `undefined`（提交不带目标） |
+| `spec` | 目标规格；没有声明 `target` 时为 `undefined`（提交不带目标） |
 | `candidates` | 已按 `alive` / 距离 / `conditions` 过滤的合法候选 |
-| `fallback` | 不需要玩家选择时提交所用的目标（= 合法的文档缺省目标） |
+| `fallback` | 单选且不需要玩家选择时提交所用的目标（= 合法的文档缺省目标） |
 | `mustChoose` | 界面/AI 是否必须先选定目标 |
+| `multi` | 是否需要选定多个（`exactly` 且 N > 1） |
+| `size` | 需要选定的目标个数（`all` 模式为候选个数） |
 
-`mustChoose = spec.required === true || candidates.length > 1 || fallback === undefined`；返回 `null` 表示现在不能发动（没有 `activate`，或声明了 `target` 却一个候选都没有，此时按钮不出现）。
+单选时 `mustChoose = spec.required === true || candidates.length > 1 || fallback === undefined`；
+返回 `null` 表示现在不能用（没有对应的变体，或声明了 `target` 却一个候选都没有，此时按钮不出现）。
 
-- `activeOptions` 与 `checkActivate` 共用它：前者按"存在一个合法候选"决定按钮是否出现，后者用玩家最终选定的目标重算 `requires`，所以**可用 ⟺ 提交必成功**。
-- 多候选或缺省目标不合格时，界面进入目标选择态（`stores/game.ts` 的 `pendingSkillTarget`），候选列表由 `dsl/target.ts` 的 `targetScopeMembers` 给出**过滤前**的 scope 成员，不可选的候选附上 `conditions` 里的 `reason`。
-- AI（`game/ai/index.ts` 的 `chooseActivationTarget`）同样由文档结构派生：对 `target` 造成伤害/失去体力/扣能量的效果选对手，其余选自己，再退回 `fallback` 与第一个候选。
-
-**卡牌用法仍未接通**：`Action.use-card` 没有 `target` 字段，`UseVariant.target` 只能走文档缺省目标（现有【打击】= 唯一候选对手、【回复】= 自己 / 濒死者），所以暂时写不出"使用时选目标"或多目标的牌。
+- `activeOptions` 与 `checkActivate` 共用它：前者按「存在一个合法候选」决定按钮是否出现，后者用玩家最终选定的目标重算 `requires`，所以**可用 ⟺ 提交必成功**。卡牌侧同样：`stores/game.ts` 的 `legalOptions` 用 `cardTargetChoice` 判定牌面是否可用，`checkUseCard` 用 `resolveTargetChoices` 校验提交的目标。
+- 多候选或缺省目标不合格时，界面进入目标选择态（`stores/game.ts` 的 `pendingTarget`，技能与卡牌共用），候选列表由 `dsl/target.ts` 的 `targetScopeMembers` 给出**过滤前**的 scope 成员，不可选的候选附上 `conditions` 里的 `reason`；多目标需要勾选后点「确定」。
+- AI（`game/ai/index.ts`）同样由文档结构派生：`chooseActivationTarget` 与 `chooseCardTargets` 对「伤害 `target`」的效果选对手、其余选自己，再退回 `fallback` 与候选顺序；`all` 模式不传目标（由引擎作用于全部候选）。
 
 ---
 
@@ -823,6 +872,12 @@ export interface EffectContext {
 
 注意 `move-cards` 的约束：`played` 从手牌取（使用/打出的那张），`specific` 只能从处理区取；`to.zone = "processing"` 只允许从手牌进入。
 
+**要写「使用时选目标」的牌**：在 `use.target` 上给目标规格（第 9 节）。候选不唯一或缺省目标不合格时界面会自动弹选择器，
+提交带上 `Action.use-card.targets`；引擎与合法性判定都不需要改。
+
+**要写多目标牌**：给 `use.target` 加 `count`，效果里用 `for-each-target` 包住所有引用 `target` 的指令。
+范例见 `cards/storm.json`（`{ "mode": "all" }` 对每名角色造成 1 点伤害）与 `dsl/extensibility.test.ts` 的 `exactly` 用例。
+
 ### 13.3 新增一个物种
 
 1. 新建 `src/game/data/dsl/species/<id>.json`，字段 `name` / `emoji` / `maxHp` / `skills` / `deck`。
@@ -843,7 +898,7 @@ export interface EffectContext {
   `createRegistry(...)`；再用 `withRegistry(synthetic, () => { ... })` 包住要跑的流程（结束时自动还原）。
   必须用完整内容集，否则牌数守恒与引用完整性会失败。
 - **手写最小夹具**：只想测校验/求值时用 `fixtures.ts` 的 `baseDocs()` + `mutateDoc()` 更快。
-- 端到端范例见 `src/game/dsl/extensibility.test.ts`（新主动技、新攻击牌 + 牌组、改体力上限）。
+- 端到端范例见 `src/game/dsl/extensibility.test.ts`（新主动技、新攻击牌 + 牌组、改体力上限、使用时选目标的牌、多目标牌）。
 
 ### 13.6 什么时候必须动引擎
 
@@ -866,14 +921,14 @@ export interface EffectContext {
 | `src/game/dsl/registry.test.ts` | 内置内容全部通过校验；物种/牌种顺序；`skillsOf` 排序；`DslLoadError` 携带全部问题且按路径排序；`withRegistry` 注入与还原 |
 | `src/game/dsl/value.test.ts` | 常量与四则运算、`floor-div` / `clamp`、读取角色数值、消耗战表达式、通道聚合（怒吼/威压）、修正值可为表达式、通道自引用报错 |
 | `src/game/dsl/condition.test.ts` | 每种条件（`always`/`not`/`all`/`any`、`compare`、`alive`/`has-cards`/`card-kind-count`、`in-processing`、`card-transformed`/`picked-count`、`skill-unused`/`is-active`/`phase-is`） |
-| `src/game/dsl/target.test.ts` | 疗愈候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range` |
+| `src/game/dsl/target.test.ts` | 疗愈候选与缺省目标、打击/回复的 scope、`required`、`alive` 过滤、`range`；多目标 `resolveTargetChoices`：`all` / `exactly`、候选不足、重复目标、条件 reason 沿用、单选规格拒绝多目标 |
 | `src/game/dsl/template.test.ts` | 普通/转化使用、濒死救援、`{cost}`、`vars` 优先于自动绑定、能量标签反映修正后的上限、未定义字段抛错 |
-| `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`lose-hp`/`heal`/`damage`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`after` 的延迟语义 |
+| `src/game/dsl/effect.test.ts` | 每条效果指令：`log`/`lose-hp`/`heal`/`damage`/`draw`/能量/计数/阶段、四种取牌模式、`contest` 与 `contest-contribute`、`resolve-dying`、`for-each-target`（逐目标执行、单目标退化、上下文不冒泡、无目标报错）、`after` 的延迟语义 |
 | `src/game/dsl/event.test.ts` | `sameTiming`、消耗战规则按回合生效、触发收集与 `when` 条件、`runTrigger`（夺食/狡计）、不可选触发立即执行、可选触发只支持 `after-damage` |
 | `src/game/dsl/schema.test.ts` | `uncoveredFields()` 为空；提交的 `schema.json` 与代码生成逐字节一致；每份内容文档过一遍 schema；schema 能拒绝多余键与错误判别式；每份文档 `$schema` 指向 `../schema.json` |
 | `src/game/dsl/guards.test.ts` | 应用代码零内容 id（白名单不过期）、不 import node 内置模块、扫描非空跑 |
 | `src/game/dsl/channels.test.ts` | 通道接线验收：六条通道逐条注入修正并断言**引擎行为**随之改变（摸牌数、手牌上限、费用与费用下限 1、攻击范围、能量上限、抵消张数）；探针表与 `CHANNELS` 必须一一对应（新增通道忘了接线即失败） |
-| `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限都只改文档即可端到端生效 |
+| `src/game/dsl/extensibility.test.ts` | 扩展验收：新主动技、新攻击牌（含牌组与守恒校验）、改体力上限、使用时选目标的牌、多目标牌都只改文档即可端到端生效 |
 
 `src/game/dsl/fixtures.ts` 提供跨测试复用的夹具：`baseDocs()`（覆盖 ruleset + 1 牌 + 1 牌组 + 1 技能 + 1 物种的最小自洽文档集）、`mutateDoc(path, change)`（深拷贝后就地改某份文档，用来逐项制造错误）与 `contentWith(docs)`（以完整内容集为底按 id 替换/新增文档）。它不命名为 `*.test.ts`，避免被 vitest 当作测试文件收集。
 
@@ -901,7 +956,10 @@ export interface EffectContext {
 |---|---|
 | 内容是构建期打包，不做热更新 | `registry.ts` 用 `import.meta.glob(..., { eager: true })` 静态导入；改 JSON 需重新构建/刷新，不存在运行时重新加载内容的入口 |
 | `optional: true` 只支持 `after-damage` | 其它时机 + `optional: true` 会被校验器以 `bad-combination` 拒绝 |
-| 目标选择器只覆盖主动技 | `ActivateSpec.target` 已接通（`activationTargetChoice` 同时服务可用性、校验、结算、界面与 AI）；`Action.use-card` 没有 `target` 字段，卡牌的 `UseVariant.target` 仍走文档缺省目标 |
+| 目标选择同时覆盖主动技与卡牌 | `activationTargetChoice` / `cardTargetChoice` 共用 `targetChoice`，服务可用性、校验、结算、界面与 AI；`Action.use-card.targets` 承载卡牌的目标选择结果 |
+| 多目标只支持卡牌的使用变体 | `UseVariant.target.count` 已接通（`all` / `exactly` + `for-each-target`）；主动技的 `target` 带 `count` 会被 `bad-combination` 拒绝，仍是单选 |
+| 多目标下 `ctx.target` 不绑定 | 声明了 `count` 的变体必须在 `for-each-target` 内引用 `target`（加载期守卫）；迭代内的上下文写入不冒泡到外层 |
+| 对称伤害同时归零时按座次结算 | 伤害帧按目标顺序压栈、结算栈后进先出，因此 1v1 里【风暴】把双方同时打到 0 时，下标 0 的角色获胜 |
 | 只声明引擎会 emit 的时机 | 校验器接受全部 `TIMING_KINDS`，但引擎今天只执行四个回合/阶段边界的 `rule` 时机，并且只 emit `after-damage` 这一个事件；声明其它事件时机不会报错，但永远不会触发 |
 | `move-cards` 不能访问 `deck` | 牌组只能通过 `draw` 访问，以免绕过洗回逻辑 |
 | 牌面费用下限恒为 1 | `card-cost` 通道可以把费用压低，但 `energyCost` 最终夹到 ≥ 1；要与「【打击】没有次数限制」共存，这条下限不能放开 |
