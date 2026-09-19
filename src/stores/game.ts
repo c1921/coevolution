@@ -10,21 +10,31 @@ import { ATTRITION_TURN } from '../game/rules/turn'
 import { CARD_NAME } from '../game/data/cardDefs'
 import { skillDoc } from '../game/dsl/registry'
 import { baseContext } from '../game/dsl/runtime'
-import { resolveTargetChoice, targetScopeMembers } from '../game/dsl/target'
+import type { UseContext } from '../game/dsl/kinds'
+import type { TargetSpec } from '../game/dsl/types'
+import {
+  targetCandidates,
+  targetFailureReason,
+  targetScopeMembers,
+} from '../game/dsl/target'
 import {
   activationCostCards,
   activationTargetChoice,
   activeOptions,
+  cardTargetChoice,
   dyingRescueOptions,
   dyingUsableLabel,
   optionLabel,
   playOptions,
   useOptions,
+  useVariantOf,
   type CardOption,
+  type TargetChoice,
 } from '../game/skills'
 import type {
   Action,
   Card,
+  CardKind,
   GameState,
   SpeciesId,
   PlayerIndex,
@@ -45,8 +55,14 @@ export const draftOptions = ref<SpeciesId[]>([])
 export const gameState = ref<GameState | null>(null)
 export const selected = ref<number[]>([])
 export const errorMessage = ref<string | null>(null)
-/** 正在为哪个主动技选择目标；null 表示不在目标选择态 */
-export const pendingSkillTarget = ref<SkillId | null>(null)
+/** 正在为哪个主动技或哪张牌选择目标；null 表示不在目标选择态 */
+export type PendingTarget =
+  | { kind: 'skill'; skill: SkillId; cards?: Card[] }
+  | { kind: 'card'; card: Card; as: CardKind; via?: SkillId }
+
+export const pendingTarget = ref<PendingTarget | null>(null)
+/** 多选时已勾选的目标（单选点一下即提交，不留状态） */
+export const chosenTargets = ref<PlayerIndex[]>([])
 
 let pumpToken = 0
 let seed = 0
@@ -62,7 +78,8 @@ export function beginDraft(seedOverride?: number): void {
   gameState.value = null
   selected.value = []
   errorMessage.value = null
-  pendingSkillTarget.value = null
+  pendingTarget.value = null
+  chosenTargets.value = []
   screen.value = 'draft'
 }
 
@@ -71,7 +88,8 @@ export function chooseSpecies(species: SpeciesId): void {
   pumpToken += 1
   selected.value = []
   errorMessage.value = null
-  pendingSkillTarget.value = null
+  pendingTarget.value = null
+  chosenTargets.value = []
   gameState.value = reactive(createGame({ seed, playerSpecies: species })) as GameState
   screen.value = 'battle'
   pump()
@@ -82,7 +100,8 @@ export function backToStart(): void {
   gameState.value = null
   selected.value = []
   errorMessage.value = null
-  pendingSkillTarget.value = null
+  pendingTarget.value = null
+  chosenTargets.value = []
   screen.value = 'start'
 }
 
@@ -94,7 +113,8 @@ export function act(action: Action): void {
     submit(state, action)
     errorMessage.value = null
     selected.value = []
-    pendingSkillTarget.value = null
+    pendingTarget.value = null
+  chosenTargets.value = []
     pump()
   } catch (error) {
     errorMessage.value = error instanceof RuleError ? error.message : String(error)
@@ -204,9 +224,23 @@ export function legalOptions(card: Card): CardOption[] {
       (o) => checkPlayCardAsDefend(state, HUMAN, card, o.as, o.via).ok,
     )
   }
-  return useOptions(state, HUMAN, card).filter(
-    (o) => checkUseCard(state, HUMAN, card, o.as, o.via).ok,
-  )
+  // 濒死语境的 scope=dying 需要传入濒死者；出牌阶段用 play 变体
+  const dying = pending.kind === 'dying' ? pending.dying : undefined
+  const context: UseContext = dying === undefined ? 'play' : 'dying'
+  return useOptions(state, HUMAN, card).filter((o) => {
+    // 需要选目标的牌面：用「存在合法目标」判定可用性，与主动技的 activeOptions 同一手法，
+    // 保证「按钮可用 ⟺ 进入选择态后必能提交成功」。
+    const choice = cardTargetChoice(state, HUMAN, o.as, context, dying)
+    if (choice === null) return false
+    const bound = choice.multi
+      ? choice.candidates.slice(0, choice.size)
+      : choice.mustChoose
+        ? [choice.fallback ?? choice.candidates[0]].filter(
+            (index): index is PlayerIndex => index !== undefined,
+          )
+        : []
+    return checkUseCard(state, HUMAN, card, o.as, o.via, bound.length > 0 ? bound : undefined).ok
+  })
 }
 
 export function optionText(option: CardOption): string {
@@ -286,10 +320,20 @@ export const pendingHint = computed(() => {
 })
 
 export function submitOption(card: Card, option: CardOption): void {
+  const state = gameState.value
   const pending = humanPending.value
-  if (!pending) return
+  if (!state || !pending) return
   if (pending.kind === 'respond') {
     act({ kind: 'play-card', card, as: option.as, via: option.via })
+    return
+  }
+  const context: UseContext = pending.kind === 'dying' ? 'dying' : 'play'
+  // 濒死语境的目标由结算决定（濒死者），不需要也不能让玩家选
+  if (pending.kind !== 'dying' && cardTargetChoice(state, HUMAN, option.as, context)?.mustChoose) {
+    // 需要选目标：先进入选择态，绝不让玩家点出一个必失败的按钮
+    pendingTarget.value = { kind: 'card', card, as: option.as, via: option.via }
+    chosenTargets.value = []
+    errorMessage.value = null
     return
   }
   act({ kind: 'use-card', card, as: option.as, via: option.via })
@@ -319,77 +363,144 @@ export interface TargetOption {
   reason?: string
 }
 
+/** 目标选择态对应的目标规格（主动技或卡牌的文档） */
+export function pendingTargetSpec(): TargetSpec | undefined {
+  const pending = pendingTarget.value
+  if (!pending) return undefined
+  if (pending.kind === 'skill') return skillDoc(pending.skill).activate?.target
+  return useVariantOf(pending.as, 'play')?.target
+}
+
+/** 目标选择态的解析结果：界面据此知道要不要多选、要选几个 */
+export const pendingTargetChoice = computed<TargetChoice | null>(() => {
+  const state = gameState.value
+  const pending = pendingTarget.value
+  if (!state || !pending) return null
+  return pending.kind === 'skill'
+    ? activationTargetChoice(state, HUMAN, pending.skill)
+    : cardTargetChoice(state, HUMAN, pending.as, 'play')
+})
+
 /**
  * 目标选择器的候选列表：scope 的成员**全部**列出，
  * 不合法的附上目标规格里条件的 `reason`（界面不自己编理由）。
  */
-export function skillTargetOptions(skill: SkillId): TargetOption[] {
+export function targetOptionsFor(spec: TargetSpec): TargetOption[] {
   const state = gameState.value
   if (!state) return []
-  const spec = skillDoc(skill).activate?.target
-  if (!spec) return []
-
   const env = { state, ctx: baseContext(state, HUMAN) }
+  const candidates = targetCandidates(env, spec)
   return targetScopeMembers(env, spec).map((index) => {
-    const resolved = resolveTargetChoice(env, spec, index)
     const player = state.players[index]
     const side = index === HUMAN ? '你' : '对手'
+    const selectable = candidates.includes(index)
     const option: TargetOption = {
       index,
       label: `${playerLabel(state, index)}（${side}） ${player.hp}/${player.maxHp}`,
-      selectable: resolved.ok,
+      selectable,
     }
-    if (!resolved.ok) option.reason = resolved.reason
+    if (!selectable) {
+      option.reason = targetFailureReason(env, spec, index) ?? '该目标当前不可选'
+    }
     return option
   })
 }
 
 /** 当前目标选择态下的候选列表（不在选择态时为空） */
-export const pendingSkillTargetOptions = computed<TargetOption[]>(() =>
-  pendingSkillTarget.value === null ? [] : skillTargetOptions(pendingSkillTarget.value),
-)
+export const pendingTargetOptions = computed<TargetOption[]>(() => {
+  const spec = pendingTargetSpec()
+  return spec ? targetOptionsFor(spec) : []
+})
+
+/** 多选时已勾选的目标是否达到要求（单选恒为 true，点击即提交） */
+export const targetsReady = computed(() => {
+  const choice = pendingTargetChoice.value
+  if (!pendingTarget.value || !choice) return false
+  return !choice.multi || chosenTargets.value.length === choice.size
+})
+
+/**
+ * 选定一个目标：单选点一下即提交；多选（count.mode = exactly）切换勾选，
+ * 由界面上的「确定」调用 confirmTargets。
+ */
+export function chooseTarget(index: PlayerIndex): void {
+  const choice = pendingTargetChoice.value
+  if (!pendingTarget.value || !choice) return
+  if (!choice.multi) {
+    submitTargets([index])
+    return
+  }
+  const at = chosenTargets.value.indexOf(index)
+  if (at >= 0) chosenTargets.value.splice(at, 1)
+  else if (chosenTargets.value.length < choice.size) chosenTargets.value.push(index)
+}
+
+/** 多选：确认已勾选的目标，数量不符时给出可照做的提示 */
+export function confirmTargets(): void {
+  const choice = pendingTargetChoice.value
+  if (!pendingTarget.value || !choice) return
+  if (chosenTargets.value.length !== choice.size) {
+    errorMessage.value = `需要选择 ${choice.size} 个目标`
+    return
+  }
+  submitTargets([...chosenTargets.value])
+}
+
+/** 带着目标提交：主动技走 activate，卡牌走 use-card */
+function submitTargets(targets: PlayerIndex[]): void {
+  const pending = pendingTarget.value
+  if (!pending) return
+  pendingTarget.value = null
+  chosenTargets.value = []
+
+  if (pending.kind === 'skill') {
+    const action: Extract<Action, { kind: 'activate' }> = { kind: 'activate', skill: pending.skill }
+    if (pending.cards && pending.cards.length > 0) action.cards = pending.cards
+    if (targets.length > 0) action.target = targets[0]
+    act(action)
+    return
+  }
+  act({
+    kind: 'use-card',
+    card: pending.card,
+    as: pending.as,
+    ...(pending.via !== undefined ? { via: pending.via } : {}),
+    ...(targets.length > 0 ? { targets } : {}),
+  })
+}
 
 /**
  * 发动主动技：需要弃牌的技能把已选手牌作为费用传给引擎。
  *
  * 文档要求选目标（required / 多候选 / 缺省目标不合格）时先进入目标选择态，
- * 由 chooseSkillTarget 带着 target 再提交——绝不让玩家点出一个必失败的按钮。
+ * 由 chooseTarget 带着目标再提交——绝不让玩家点出一个必失败的按钮。
  */
-export function submitActivate(skill: SkillId, target?: PlayerIndex): void {
+export function submitActivate(skill: SkillId): void {
   const state = gameState.value
   if (!state) return
 
   const action: Extract<Action, { kind: 'activate' }> = { kind: 'activate', skill }
   const need = activationCostCards(state, HUMAN, skill)
-  if (need > 0) {
-    const cards = selectedCards.value.slice(0, need)
-    if (cards.length < need) {
-      errorMessage.value = `发动【${skillDef(skill).name}】需要先点选 ${need} 张手牌`
-      return
-    }
-    action.cards = cards
+  const cards = need > 0 ? selectedCards.value.slice(0, need) : []
+  if (cards.length < need) {
+    errorMessage.value = `发动【${skillDef(skill).name}】需要先点选 ${need} 张手牌`
+    return
   }
+  if (need > 0) action.cards = cards
 
-  if (target === undefined && activationTargetChoice(state, HUMAN, skill)?.mustChoose) {
-    pendingSkillTarget.value = skill
+  if (activationTargetChoice(state, HUMAN, skill)?.mustChoose) {
+    pendingTarget.value = need > 0 ? { kind: 'skill', skill, cards } : { kind: 'skill', skill }
+    chosenTargets.value = []
     errorMessage.value = null
     return
   }
-  if (target !== undefined) action.target = target
   act(action)
 }
 
-/** 在目标选择态里选定目标并提交（非法目标由引擎给出文档 reason） */
-export function chooseSkillTarget(index: PlayerIndex): void {
-  const skill = pendingSkillTarget.value
-  if (skill === null) return
-  pendingSkillTarget.value = null
-  submitActivate(skill, index)
-}
-
 /** 放弃选择目标，回到出牌阶段（已选手牌保留） */
-export function cancelSkillTarget(): void {
-  pendingSkillTarget.value = null
+export function cancelTarget(): void {
+  pendingTarget.value = null
+  chosenTargets.value = []
 }
 
 export function submitEndPhase(): void {
@@ -415,7 +526,9 @@ export function submitDiscard(): void {
   act({ kind: 'discard-cards', cards })
 }
 
-/** 待输入项变化时清空选择，避免残留过期手牌 */
+/** 待输入项变化时清空选择，避免残留过期手牌与过期的目标选择态 */
 watch(humanPending, () => {
   selected.value = []
+  pendingTarget.value = null
+  chosenTargets.value = []
 })

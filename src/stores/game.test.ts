@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiDecide } from '../game/ai'
 import { isOver } from '../game/engine'
+import { contentWith } from '../game/dsl/fixtures'
+import { withRegistry } from '../game/dsl/registry'
 import { assertEnergyBounds, energyCost } from '../game/rules/energy'
 import { makeState } from '../game/testUtils'
 import type { MakeStateOptions } from '../game/testUtils'
@@ -228,10 +230,10 @@ describe('界面状态与驱动循环', () => {
     store.submitActivate('mend')
 
     expect(store.errorMessage.value).toBeNull()
-    expect(store.pendingSkillTarget.value).toBe('mend')
+    expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'mend' })
     expect(state.players[1].hp).toBe(2) // 还没结算
 
-    const options = store.pendingSkillTargetOptions.value
+    const options = store.pendingTargetOptions.value
     expect(options.map((option) => option.index)).toEqual([0, 1])
     expect(options.find((option) => option.index === 1)).toMatchObject({ selectable: true })
     // 不可选的候选带上文档里的 reason
@@ -240,10 +242,10 @@ describe('界面状态与驱动循环', () => {
       reason: '目标角色体力已满，无法回复',
     })
 
-    store.chooseSkillTarget(1)
+    store.chooseTarget(1)
 
     expect(store.errorMessage.value).toBeNull()
-    expect(store.pendingSkillTarget.value).toBeNull()
+    expect(store.pendingTarget.value).toBeNull()
     expect(state.players[1].hp).toBe(3)
     expect(state.players[0].hp).toBe(3)
   })
@@ -259,15 +261,15 @@ describe('界面状态与驱动循环', () => {
 
     store.pickCard(state.players[0].hand[0]!.uid)
     store.submitActivate('mend')
-    expect(store.pendingSkillTarget.value).toBe('mend')
+    expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'mend' })
     expect(
-      store.pendingSkillTargetOptions.value.map((option) => [option.index, option.selectable]),
+      store.pendingTargetOptions.value.map((option) => [option.index, option.selectable]),
     ).toEqual([
       [0, true],
       [1, true],
     ])
 
-    store.chooseSkillTarget(1)
+    store.chooseTarget(1)
 
     expect(state.players[1].hp).toBe(3)
     expect(state.players[0].hp).toBe(2) // 没有治疗自己
@@ -285,7 +287,7 @@ describe('界面状态与驱动循环', () => {
     store.pickCard(state.players[0].hand[0]!.uid)
     store.submitActivate('mend')
 
-    expect(store.pendingSkillTarget.value).toBeNull()
+    expect(store.pendingTarget.value).toBeNull()
     expect(store.errorMessage.value).toContain('当前无法发动')
   })
 
@@ -300,13 +302,144 @@ describe('界面状态与驱动循环', () => {
 
     store.pickCard(state.players[0].hand[0]!.uid)
     store.submitActivate('mend')
-    expect(store.pendingSkillTarget.value).toBe('mend')
+    expect(store.pendingTarget.value).toMatchObject({ kind: 'skill', skill: 'mend' })
 
-    store.cancelSkillTarget()
+    store.cancelTarget()
 
-    expect(store.pendingSkillTarget.value).toBeNull()
+    expect(store.pendingTarget.value).toBeNull()
     expect(state.players[1].hp).toBe(2)
     expect(state.players[0].hand).toHaveLength(1)
     expect(store.selectedCards.value).toHaveLength(1)
+  })
+
+  it('使用卡牌需要选目标时先进入选择态，选中后才结算', () => {
+    const state = loadState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      aiHp: 2,
+      playerHand: [{ kind: 'first-aid' }],
+    })
+    const card = state.players[0].hand[0]!
+    const option = store.legalOptions(card).find((o) => o.as === 'first-aid')!
+
+    store.pickCard(card.uid)
+    store.submitOption(card, option)
+
+    expect(store.errorMessage.value).toBeNull()
+    expect(store.pendingTarget.value).toMatchObject({ kind: 'card', as: 'first-aid' })
+    expect(state.players[1].hp).toBe(2) // 还没结算
+    expect(
+      store.pendingTargetOptions.value.map((o) => [o.index, o.selectable]),
+    ).toEqual([
+      [0, true],
+      [1, true],
+    ])
+
+    // 取消不提交
+    store.cancelTarget()
+    expect(store.pendingTarget.value).toBeNull()
+    expect(state.players[1].hp).toBe(2)
+
+    // 重新进入并治疗对手
+    store.submitOption(card, option)
+    store.chooseTarget(1)
+    expect(store.pendingTarget.value).toBeNull()
+    expect(state.players[1].hp).toBe(3)
+  })
+
+  it('多目标牌必须选够个数才能确认（合成 exactly=2 的牌）', () => {
+    const synthetic = contentWith([
+      {
+        path: 'cards/dual.json',
+        value: {
+          dslVersion: 1,
+          kind: 'card',
+          id: 'dual',
+          name: '双震',
+          short: '对两名角色各造成 1 点伤害',
+          text: '消耗 1 点能量：选择两名角色，各造成 1 点伤害。',
+          cost: { kind: 'const', value: 1 },
+          use: [
+            {
+              context: 'play',
+              target: {
+                scope: 'any',
+                alive: true,
+                count: { mode: 'exactly', count: { kind: 'const', value: 2 } },
+              },
+              effects: [
+                {
+                  kind: 'move-cards',
+                  from: { zone: 'hand', of: 'self' },
+                  to: { zone: 'discard', of: 'self' },
+                  pick: { mode: 'played' },
+                },
+                {
+                  kind: 'for-each-target',
+                  effects: [
+                    { kind: 'damage', target: 'target', amount: { kind: 'const', value: 1 } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        path: 'decks/aggressive.json',
+        value: {
+          dslVersion: 1,
+          kind: 'deck',
+          id: 'aggressive',
+          priority: 20,
+          cards: [
+            { kind: 'strike', count: 10 },
+            { kind: 'defend', count: 5 },
+            { kind: 'heal', count: 2 },
+            { kind: 'first-aid', count: 1 },
+            { kind: 'storm', count: 1 },
+            { kind: 'dual', count: 1 },
+          ],
+        },
+      },
+    ])
+
+    withRegistry(synthetic, () => {
+      const state = loadState({
+        playerSpecies: 'tiger',
+        aiSpecies: 'bear',
+        playerHp: 4,
+        aiHp: 4,
+        playerHand: [{ kind: 'dual' }],
+      })
+      const card = state.players[0].hand[0]!
+      const option = store.legalOptions(card).find((o) => o.as === 'dual')!
+      expect(option, '多目标牌必须出现在可用牌面里').toBeDefined()
+
+      store.pickCard(card.uid)
+      store.submitOption(card, option)
+
+      expect(store.pendingTargetChoice.value).toMatchObject({ multi: true, size: 2 })
+      expect(store.targetsReady.value).toBe(false)
+      expect(store.pendingTargetOptions.value.map((o) => o.index)).toEqual([0, 1])
+
+      store.chooseTarget(0)
+      expect(store.chosenTargets.value).toEqual([0])
+      expect(store.targetsReady.value).toBe(false)
+
+      // 数量不够时确认会被拦下
+      store.confirmTargets()
+      expect(store.errorMessage.value).toContain('需要选择 2 个目标')
+      expect(state.players[0].hp).toBe(4)
+
+      store.chooseTarget(1)
+      expect(store.targetsReady.value).toBe(true)
+      store.confirmTargets()
+
+      expect(store.pendingTarget.value).toBeNull()
+      expect(state.players[0].hp).toBe(3)
+      expect(state.players[1].hp).toBe(3)
+    })
   })
 })

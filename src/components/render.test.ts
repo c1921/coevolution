@@ -12,9 +12,11 @@ import {
   chooseSpecies,
   draftOptions,
   gameState,
+  legalOptions,
   pickCard,
   screen,
   submitActivate,
+  submitOption,
 } from '../stores/game'
 
 /**
@@ -83,6 +85,29 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     expect(html).toContain('选择目标')
     expect(html).toContain(SPECIES.bear.name)
     expect(html).toContain('目标角色体力已满，无法回复')
+
+    backToStart()
+  })
+
+  it('使用卡牌需要选目标时同样弹出目标选择器（牌名与提示可见）', async () => {
+    backToStart()
+    gameState.value = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      aiHp: 2,
+      playerHand: [{ kind: 'first-aid' }],
+    })
+    screen.value = 'battle'
+
+    const card = gameState.value.players[0].hand[0]!
+    pickCard(card.uid)
+    submitOption(card, legalOptions(card).find((o) => o.as === 'first-aid')!)
+
+    const html = await renderApp()
+    expect(html).toContain(`使用【${CARD_NAME['first-aid']}】`)
+    expect(html).toContain('选择目标')
+    expect(html).toContain(SPECIES.bear.name)
 
     backToStart()
   })

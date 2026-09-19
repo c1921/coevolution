@@ -1,47 +1,84 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { CARD_NAME } from '../game/data/cardDefs'
 import { skillDef } from '../game/data/species'
 import {
   backToStart,
   beginDraft,
-  cancelSkillTarget,
-  chooseSkillTarget,
+  cancelTarget,
+  chooseTarget,
+  chosenTargets,
+  confirmTargets,
+  errorMessage,
   humanPending,
   over,
-  pendingSkillTarget,
-  pendingSkillTargetOptions,
+  pendingTarget,
+  pendingTargetChoice,
+  pendingTargetOptions,
   resultText,
   submitTrigger,
+  targetsReady,
 } from '../stores/game'
 import { BTN, BTN_GHOST, BTN_PRIMARY } from './ui'
+
+/** 目标选择器的标题：主动技显示技能名，卡牌显示牌名 */
+const targetTitle = computed(() => {
+  const pending = pendingTarget.value
+  if (!pending) return ''
+  return pending.kind === 'skill'
+    ? `发动【${skillDef(pending.skill).name}】`
+    : `使用【${CARD_NAME[pending.as]}】`
+})
+
+const targetHint = computed(() => {
+  const choice = pendingTargetChoice.value
+  if (!choice) return '选择目标'
+  return choice.multi ? `选择 ${choice.size} 个目标` : '选择目标'
+})
 </script>
 
 <template>
-  <!-- 主动技的目标选择器：候选来自文档的 TargetSpec，不可选的附文档 reason -->
+  <!-- 目标选择器：候选来自文档的 TargetSpec，不可选的附文档 reason；多目标需勾选后确认 -->
   <div
-    v-if="pendingSkillTarget && humanPending?.kind === 'play'"
+    v-if="pendingTarget && humanPending?.kind === 'play'"
     class="fixed inset-0 z-20 grid place-items-center bg-black/60 p-4"
   >
     <div class="w-full max-w-sm rounded-xl border border-table-600 bg-table-800 p-5">
-      <p class="text-center text-lg font-semibold text-ink-100">
-        发动【{{ skillDef(pendingSkillTarget).name }}】
-      </p>
-      <p class="mt-1 text-center text-sm text-ink-300">选择目标</p>
+      <p class="text-center text-lg font-semibold text-ink-100">{{ targetTitle }}</p>
+      <p class="mt-1 text-center text-sm text-ink-300">{{ targetHint }}</p>
 
       <div class="mt-4 flex flex-col gap-2">
-        <div v-for="option in pendingSkillTargetOptions" :key="option.index">
+        <div v-for="option in pendingTargetOptions" :key="option.index">
           <button
-            :class="[option.selectable ? BTN_PRIMARY : BTN, 'w-full']"
+            :class="[
+              option.selectable
+                ? chosenTargets.includes(option.index)
+                  ? BTN
+                  : BTN_PRIMARY
+                : BTN,
+              'w-full',
+            ]"
             :disabled="!option.selectable"
-            @click="chooseSkillTarget(option.index)"
+            @click="chooseTarget(option.index)"
           >
-            {{ option.label }}
+            {{ option.label }}{{ chosenTargets.includes(option.index) ? ' ✓' : '' }}
           </button>
           <p v-if="option.reason" class="mt-1 text-xs text-ink-500">{{ option.reason }}</p>
         </div>
       </div>
 
-      <div class="mt-5 flex justify-center">
-        <button :class="BTN_GHOST" @click="cancelSkillTarget">取消</button>
+      <p v-if="errorMessage" class="mt-3 text-center text-sm text-ember-400">{{ errorMessage }}</p>
+
+      <div class="mt-5 flex justify-center gap-3">
+        <button
+          v-if="pendingTargetChoice?.multi"
+          :class="BTN_PRIMARY"
+          :disabled="!targetsReady"
+          @click="confirmTargets"
+        >
+          确定（{{ chosenTargets.length }}/{{ pendingTargetChoice.size }}）
+        </button>
+        <button :class="BTN_GHOST" @click="cancelTarget">取消</button>
       </div>
     </div>
   </div>

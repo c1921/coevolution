@@ -4,7 +4,7 @@ import { withRegistry } from '../dsl/registry'
 import type { Registry } from '../dsl/types'
 import { makeState } from '../testUtils'
 import type { Action } from '../types'
-import { aiDecide, chooseActivationTarget } from './index'
+import { aiDecide, chooseActivationTarget, chooseCardTargets } from './index'
 
 /**
  * AI 选目标：完全由文档结构派生。
@@ -144,5 +144,84 @@ describe('AI 选目标', () => {
       expect(action).toMatchObject({ skill: 'rites', target: 0 })
       expect(action.cards).toHaveLength(2)
     })
+  })
+})
+
+describe('AI 使用卡牌时的目标', () => {
+  it('急救：优先治疗自己；只有对手受伤时治疗对手', () => {
+    const bothWounded = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      aiHp: 2,
+      playerHand: [{ kind: 'first-aid' }],
+    })
+    expect(chooseCardTargets(bothWounded, 0, 'first-aid', 'play')).toEqual([0])
+
+    const onlyOpponent = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      aiHp: 2,
+      playerHand: [{ kind: 'first-aid' }],
+    })
+    expect(chooseCardTargets(onlyOpponent, 0, 'first-aid', 'play')).toEqual([1])
+  })
+
+  it('风暴：all 模式不传目标（由引擎作用于全部合法候选）', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [{ kind: 'storm' }],
+    })
+    expect(chooseCardTargets(state, 0, 'storm', 'play')).toEqual([])
+  })
+
+  it('进攻型主动技【猛扑】：手牌有余量时发动，并带上目标与费用牌', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHand: [
+        { kind: 'strike' },
+        { kind: 'strike' },
+        { kind: 'defend' },
+        { kind: 'defend' },
+      ],
+    })
+    const action = activationOf(aiDecide(state))
+    expect(action).toMatchObject({ skill: 'pounce', target: 1 })
+    expect(action.cards).toHaveLength(1)
+  })
+
+  it('会伤到自己的牌只在能直接终结对手时使用', () => {
+    // 对手满血：风暴会连自己一起打，AI 选择结束阶段
+    const healthy = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      aiHp: 4,
+      playerHand: [{ kind: 'storm' }],
+    })
+    expect(aiDecide(healthy)).toEqual({ kind: 'end-phase' })
+
+    // 对手只剩 1 点体力、自己扛得住：风暴成为终结技
+    const finish = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 3,
+      aiHp: 1,
+      playerHand: [{ kind: 'storm' }],
+    })
+    expect(aiDecide(finish)).toMatchObject({ kind: 'use-card', as: 'storm' })
+  })
+
+  it('AI 打出的牌都带齐目标或明确不带（不会提交必失败的牌）', () => {
+    const state = makeState({
+      playerSpecies: 'tiger',
+      aiSpecies: 'bear',
+      playerHp: 2,
+      aiHp: 2,
+      playerHand: [{ kind: 'first-aid' }, { kind: 'strike' }],
+    })
+    // 先治疗自己（带目标 0），而不是无目标地提交
+    expect(aiDecide(state)).toMatchObject({ kind: 'use-card', as: 'first-aid', targets: [0] })
   })
 })
