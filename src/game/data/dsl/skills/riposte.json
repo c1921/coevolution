@@ -5,12 +5,16 @@
   "id": "riposte",
   "priority": 40,
   "name": "反击",
-  "text": "当你受到一次威胁时，你可以令来源获得 1 点威胁。",
+  "text": "每回合限一次：当你受到威胁时，你可以令来源获得 1 点威胁。",
   "trigger": {
     "on": { "at": "after-threat" },
     "optional": true,
-    "when": [{ "kind": "alive", "of": "source" }],
+    "when": [
+      { "kind": "alive", "of": "source" },
+      { "kind": "skill-unused", "skill": "riposte" }
+    ],
     "effects": [
+      { "kind": "record-skill-use", "skill": "riposte" },
       { "kind": "threat", "target": "source", "amount": { "kind": "const", "value": 1 } },
       { "kind": "log", "template": "{self} 发动【反击】，向 {source} 反击" }
     ]

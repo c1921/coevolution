@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { advance, submit } from '../engine'
 import { makeState } from '../testUtils'
 import { assertConservation } from './cardZones'
+import { skillUsed } from './usage'
 import { addThreat, assertThreatBounds, resolveThreatAtTurnEnd } from './threat'
 
 /**
@@ -86,6 +87,23 @@ describe('威胁结算', () => {
     submit(state, { kind: 'trigger-choice', accept: true })
 
     expect(state.players[1].threat).toBe(1)
+    expect(state.pending).not.toMatchObject({ kind: 'trigger' })
+    assertConservation(state)
+  })
+
+  it('【反击】每回合限一次：同一回合的第二次威胁不再询问', () => {
+    const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive' })
+
+    addThreat(state, 0, 1, 1)
+    advance(state)
+    expect(state.pending).toMatchObject({ kind: 'trigger', player: 0, skill: 'riposte' })
+    submit(state, { kind: 'trigger-choice', accept: true })
+    expect(state.players[1].threat).toBe(1)
+    expect(skillUsed(state, 0, 'riposte')).toBe(true)
+
+    // 同一回合内再来一次威胁：技能已用过，不再收集触发、也不再询问
+    addThreat(state, 0, 1, 1)
+    advance(state)
     expect(state.pending).not.toMatchObject({ kind: 'trigger' })
     assertConservation(state)
   })

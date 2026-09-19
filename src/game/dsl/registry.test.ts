@@ -152,9 +152,18 @@ describe('内置内容文档', () => {
     ])
   })
 
-  it('反击挂在「受到威胁后」上，且内部内容没有任何 after-damage 触发', () => {
+  it('反击挂在「受到威胁后」上、每回合限一次，且内部内容没有任何 after-damage 触发', () => {
     expect(skillDoc('riposte').trigger?.on).toEqual({ at: 'after-threat' })
     expect(skillDoc('riposte').trigger?.optional).toBe(true)
+    // 每回合限一次的写法：when 里查 skill-unused、effects 里先 record-skill-use
+    expect(skillDoc('riposte').trigger?.when).toEqual([
+      { kind: 'alive', of: 'source' },
+      { kind: 'skill-unused', skill: 'riposte' },
+    ])
+    expect(skillDoc('riposte').trigger?.effects[0]).toEqual({
+      kind: 'record-skill-use',
+      skill: 'riposte',
+    })
     expect(
       registry.skills.filter((doc) => doc.trigger?.on.at === 'after-damage'),
       '内置内容不应再有 after-damage 触发（伤害帧仍由测试的合成技能守护）',
