@@ -9,7 +9,7 @@ import { energyCost, energyMax } from '../game/rules/energy'
 import { ATTRITION_TURN } from '../game/rules/turn'
 import { CARD_NAME } from '../game/data/cardDefs'
 import { skillDoc } from '../game/dsl/registry'
-import { baseContext } from '../game/dsl/runtime'
+import { assertNever, baseContext } from '../game/dsl/runtime'
 import type { UseContext } from '../game/dsl/kinds'
 import type { TargetSpec } from '../game/dsl/types'
 import { targetCandidates, targetFailureReason, targetScopeMembers } from '../game/dsl/target'
@@ -317,6 +317,10 @@ export const pendingHint = computed(() => {
       return `弃牌阶段（手牌上限 = 当前体力）：请选择 ${pending.count} 张手牌弃置`
     case 'trigger':
       return `是否发动【${skillDef(pending.skill).name}】？`
+    default:
+      // Prompt 的变体已穷尽；assertNever 让新增变体在编译期报错，
+      // 同时满足 vue/return-in-computed-property 的"所有路径都返回值"
+      return assertNever(pending)
   }
 })
 
