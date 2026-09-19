@@ -5,9 +5,9 @@
   "id": "riposte",
   "priority": 40,
   "name": "反击",
-  "text": "当你受到伤害后，你可以令伤害来源获得 1 点威胁。",
+  "text": "当你受到一次威胁时，你可以令来源获得 1 点威胁。",
   "trigger": {
-    "on": { "at": "after-damage" },
+    "on": { "at": "after-threat" },
     "optional": true,
     "when": [{ "kind": "alive", "of": "source" }],
     "effects": [

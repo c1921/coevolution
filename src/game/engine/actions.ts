@@ -194,8 +194,8 @@ function applyTriggerChoice(
   ensure(checkTriggerChoice(state, p))
 
   const top = state.stack[state.stack.length - 1]
-  if (!top || top.kind !== 'damage') {
-    throw new RuleError('结算栈异常：缺少伤害结算帧')
+  if (!top || (top.kind !== 'damage' && top.kind !== 'threat')) {
+    throw new RuleError('结算栈异常：缺少触发结算帧')
   }
   const trigger = top.triggers.shift()
   if (trigger === undefined || trigger.skill !== pending.skill) {
@@ -207,7 +207,7 @@ function applyTriggerChoice(
     return
   }
 
-  runTrigger(state, trigger, { damage: top.ctx })
+  runTrigger(state, trigger, top.kind === 'damage' ? { damage: top.ctx } : { threat: top.ctx })
 }
 
 function applyDiscard(state: GameState, action: Extract<Action, { kind: 'discard-cards' }>): void {

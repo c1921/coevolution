@@ -152,6 +152,15 @@ describe('内置内容文档', () => {
     ])
   })
 
+  it('反击挂在「受到威胁后」上，且内部内容没有任何 after-damage 触发', () => {
+    expect(skillDoc('riposte').trigger?.on).toEqual({ at: 'after-threat' })
+    expect(skillDoc('riposte').trigger?.optional).toBe(true)
+    expect(
+      registry.skills.filter((doc) => doc.trigger?.on.at === 'after-damage'),
+      '内置内容不应再有 after-damage 触发（伤害帧仍由测试的合成技能守护）',
+    ).toEqual([])
+  })
+
   it('技能查询按 priority 排序，且只返回该物种的技能', () => {
     expect(skillsOf('offensive').map((skill) => skill.id)).toEqual(['assault'])
     expect(skillsOf('counter').map((skill) => skill.id)).toEqual(['riposte'])

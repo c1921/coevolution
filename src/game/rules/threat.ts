@@ -1,3 +1,4 @@
+import { collectTriggers } from '../dsl/triggers'
 import { log, playerLabel } from '../log'
 import type { GameState, PlayerIndex } from '../types'
 import { otherPlayer } from '../util'
@@ -33,6 +34,16 @@ export function addThreat(
     state,
     `${playerLabel(state, source)} 使 ${playerLabel(state, target)} 获得 ${value} 点威胁（威胁 ${before} → ${player.threat}）`,
   )
+
+  // 「受到威胁后」触发：压入威胁帧逐个询问/执行（照抄伤害帧的做法）。
+  // 两条守卫避免自伤与无限连锁：
+  //  - source === target 的自己给自己叠威胁不触发；
+  //  - 已经在威胁帧里（即这次威胁本身就是反击造成的）不再二次触发。
+  if (source === target) return
+  if (state.stack.some((frame) => frame.kind === 'threat')) return
+  const ctx = { source, target, amount: value }
+  const triggers = collectTriggers(state, { at: 'after-threat' }, target, { threat: ctx })
+  if (triggers.length > 0) state.stack.push({ kind: 'threat', ctx, triggers })
 }
 
 /** 抵消威胁，返回实际抵消的点数（不会低于 0） */

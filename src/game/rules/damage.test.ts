@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { advance, submit } from '../engine'
+import { contentWith } from '../dsl/fixtures'
+import { withRegistry } from '../dsl/registry'
 import { makeState } from '../testUtils'
 import { assertConservation } from './cardZones'
 import { dealDamage, loseHp } from './damage'
@@ -21,26 +23,50 @@ describe('伤害结算', () => {
   })
 
   it('时机顺序：扣减体力 → 受到伤害后技能 → 濒死检查', () => {
-    const state = makeState({
-      playerSpecies: 'offensive',
-      aiSpecies: 'counter',
-      aiHp: 1,
+    // 内置的【反击】现在挂在 after-threat 上；这里注入一份等价的 after-damage 版本，
+    // 继续守住「伤害帧先跑触发、再做濒死检查」这条顺序（内置内容已无 after-damage 触发）。
+    const syntheticRiposte = contentWith([
+      {
+        path: 'skills/riposte.json',
+        value: {
+          dslVersion: 1,
+          kind: 'skill',
+          id: 'riposte',
+          priority: 40,
+          name: '反击',
+          text: '测试用：受到伤害后，你可以令伤害来源获得 1 点威胁。',
+          trigger: {
+            on: { at: 'after-damage' },
+            optional: true,
+            when: [{ kind: 'alive', of: 'source' }],
+            effects: [{ kind: 'threat', target: 'source', amount: { kind: 'const', value: 1 } }],
+          },
+        },
+      },
+    ])
+
+    withRegistry(syntheticRiposte, () => {
+      const state = makeState({
+        playerSpecies: 'offensive',
+        aiSpecies: 'counter',
+        aiHp: 1,
+      })
+
+      dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
+      advance(state)
+
+      // 先询问反击型的【反击】，此时体力已经扣到 0
+      expect(state.players[1].hp).toBe(0)
+      expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'riposte' })
+
+      submit(state, { kind: 'trigger-choice', accept: true })
+
+      // 触发结算完才进入濒死
+      expect(state.players[1].threat).toBe(0)
+      expect(state.players[0].threat).toBe(1)
+      expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
+      assertConservation(state)
     })
-
-    dealDamage(state, { source: 0, target: 1, amount: 1, card: null })
-    advance(state)
-
-    // 先询问反击型的【反击】，此时体力已经扣到 0
-    expect(state.players[1].hp).toBe(0)
-    expect(state.pending).toMatchObject({ kind: 'trigger', player: 1, skill: 'riposte' })
-
-    submit(state, { kind: 'trigger-choice', accept: true })
-
-    // 触发结算完才进入濒死
-    expect(state.players[1].threat).toBe(0)
-    expect(state.players[0].threat).toBe(1)
-    expect(state.pending).toMatchObject({ kind: 'dying', player: 1, dying: 1 })
-    assertConservation(state)
   })
 
   it('「失去体力」不触发受到伤害后技能，也不压入伤害帧', () => {

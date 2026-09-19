@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { advance, submit } from '../engine'
 import { makeState } from '../testUtils'
 import { assertConservation } from './cardZones'
-import { assertThreatBounds, resolveThreatAtTurnEnd } from './threat'
+import { addThreat, assertThreatBounds, resolveThreatAtTurnEnd } from './threat'
 
 /**
  * 威胁机制（基础伤害机制）：
@@ -63,20 +63,30 @@ describe('威胁结算', () => {
     assertConservation(state)
   })
 
-  it('受到伤害后会询问可选技能：【反击】把威胁还给伤害来源', () => {
-    const state = makeState({
-      playerSpecies: 'counter',
-      aiSpecies: 'defensive',
-      playerThreat: 1,
-      phase: 'turn-end',
-    })
+  it('受到威胁后会询问可选技能：【反击】把 1 点威胁还给来源', () => {
+    const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive' })
 
+    // 对手（1 号）给反击型（0 号）叠 1 点威胁 → 触发【受到威胁后】
+    addThreat(state, 0, 1, 1)
     advance(state)
 
-    // 伤害来源是唯一对手，反击型可以令其获得 1 点威胁
     expect(state.pending).toMatchObject({ kind: 'trigger', player: 0, skill: 'riposte' })
     submit(state, { kind: 'trigger-choice', accept: true })
     expect(state.players[1].threat).toBe(1)
+    assertConservation(state)
+  })
+
+  it('反击造成的新威胁不会再触发一次反击（避免无限连锁）', () => {
+    // 双方都是反击型：0 号受威胁 → 反击 1 号 → 这次威胁不再触发 1 号的反击
+    const state = makeState({ playerSpecies: 'counter', aiSpecies: 'counter' })
+
+    addThreat(state, 0, 1, 1)
+    advance(state)
+    expect(state.pending).toMatchObject({ kind: 'trigger', player: 0, skill: 'riposte' })
+    submit(state, { kind: 'trigger-choice', accept: true })
+
+    expect(state.players[1].threat).toBe(1)
+    expect(state.pending).not.toMatchObject({ kind: 'trigger' })
     assertConservation(state)
   })
 

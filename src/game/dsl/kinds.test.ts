@@ -79,5 +79,6 @@ describe('DSL 词表', () => {
     expect(PICK_MODES).toContain('random')
     expect(ROLES).toContain('opponent')
     expect(TIMING_KINDS).toContain('after-damage')
+    expect(TIMING_KINDS).toContain('after-threat')
   })
 })

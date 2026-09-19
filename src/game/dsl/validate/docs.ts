@@ -175,12 +175,12 @@ export function checkSkill(node: Obj, path: string, issues: Issue[], refs: Ref[]
         push(issues, `${path}#/trigger#/optional`, 'bad-type', 'optional 必须是布尔值')
       }
       const at = asObj(trigger.on)?.at
-      if (trigger.optional === true && at !== 'after-damage') {
+      if (trigger.optional === true && at !== 'after-damage' && at !== 'after-threat') {
         push(
           issues,
           `${path}#/trigger#/optional`,
           'bad-combination',
-          '当前只有 after-damage 时机的技能支持可选发动',
+          '只有 after-damage / after-threat 时机的技能支持可选发动',
         )
       }
       if (trigger.when !== undefined) {

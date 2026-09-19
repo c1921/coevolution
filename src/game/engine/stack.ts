@@ -85,6 +85,22 @@ function stepFrame(state: GameState, top: Frame): boolean {
       return false
     }
 
+    case 'threat': {
+      // 威胁帧：威胁已经叠加，这里只负责逐个询问 / 执行「受到威胁后」触发
+      const trigger = top.triggers[0]
+      if (trigger) {
+        if (!trigger.optional) {
+          top.triggers.shift()
+          runTrigger(state, trigger, { threat: top.ctx })
+          return false
+        }
+        state.pending = { kind: 'trigger', player: trigger.owner, skill: trigger.skill }
+        return true
+      }
+      state.stack.pop()
+      return false
+    }
+
     case 'dying': {
       const next = top.ask[0]
       if (next === undefined) {

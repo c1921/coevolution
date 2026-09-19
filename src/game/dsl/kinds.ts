@@ -173,6 +173,7 @@ export const TIMING_KINDS = [
   'phase-start',
   'phase-end',
   'after-damage',
+  'after-threat',
 ] as const
 export type TimingKind = (typeof TIMING_KINDS)[number]
 

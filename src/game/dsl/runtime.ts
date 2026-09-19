@@ -1,5 +1,5 @@
 import { RuleError } from '../util'
-import type { Card, DamageCtx, GameState, PlayerIndex, VirtualCard } from '../types'
+import type { Card, DamageCtx, GameState, PlayerIndex, ThreatCtx, VirtualCard } from '../types'
 import type { CardRef, RoleRef } from './kinds'
 
 /**
@@ -33,6 +33,8 @@ export interface EffectContext {
   lastAmount?: number
   /** 触发事件里的伤害上下文 */
   damage?: DamageCtx
+  /** 触发事件里的威胁上下文（after-threat） */
+  threat?: ThreatCtx
 }
 
 /** 求值环境：状态 + 上下文 */

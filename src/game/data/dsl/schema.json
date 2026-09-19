@@ -561,7 +561,8 @@
             "turn-end",
             "phase-start",
             "phase-end",
-            "after-damage"
+            "after-damage",
+            "after-threat"
           ]
         },
         "phase": {

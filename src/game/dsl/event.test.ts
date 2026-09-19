@@ -3,7 +3,7 @@ import { makeState } from '../testUtils'
 import { moveHandToProcessing } from '../rules/cardZones'
 import { baseDocs } from './fixtures'
 import { createRegistry, withRegistry } from './registry'
-import type { DamageCtx } from '../types'
+import type { DamageCtx, ThreatCtx } from '../types'
 import type { TriggerSpec } from './types'
 import { applyTimingRules, collectTriggers, emitTiming, runTrigger, sameTiming } from './event'
 
@@ -140,23 +140,23 @@ describe('时机派发', () => {
     })
   })
 
-  it('技能触发：when 不成立时不收集（【反击】要求伤害来源存活）', () => {
+  it('技能触发：when 不成立时不收集（【反击】要求威胁来源存活）', () => {
     const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive' })
-    const damage: DamageCtx = { source: 1, target: 0, amount: 1, card: null }
+    const threat: ThreatCtx = { source: 1, target: 0, amount: 1 }
 
-    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([
+    expect(collectTriggers(state, { at: 'after-threat' }, 0, { threat })).toEqual([
       { owner: 0, skill: 'riposte', optional: true },
     ])
 
     state.players[1].alive = false
-    expect(collectTriggers(state, { at: 'after-damage' }, 0, { damage })).toEqual([])
+    expect(collectTriggers(state, { at: 'after-threat' }, 0, { threat })).toEqual([])
   })
 
-  it('runTrigger：执行【反击】，令伤害来源获得 1 点威胁', () => {
+  it('runTrigger：执行【反击】，令威胁来源获得 1 点威胁', () => {
     const state = makeState({ playerSpecies: 'counter', aiSpecies: 'defensive' })
-    const damage: DamageCtx = { source: 1, target: 0, amount: 1, card: null }
+    const threat: ThreatCtx = { source: 1, target: 0, amount: 1 }
 
-    runTrigger(state, { owner: 0, skill: 'riposte', optional: true }, { damage })
+    runTrigger(state, { owner: 0, skill: 'riposte', optional: true }, { threat })
 
     expect(state.players[1].threat).toBe(1)
     expect(state.log.map((entry) => entry.text).join('\n')).toContain('发动【反击】')

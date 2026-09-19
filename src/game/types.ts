@@ -125,6 +125,16 @@ export type PhaseStage = 'start' | 'body' | 'end'
  */
 export type Phase = 'turn-start' | TurnPhase | 'turn-end' | 'game-over'
 
+/**
+ * 威胁上下文：供「受到威胁后」技能使用。
+ * 每次 `threat` 效果施加威胁时都会带上它（不逐笔累积，只有这一次的来源/目标/点数）。
+ */
+export interface ThreatCtx {
+  source: PlayerIndex
+  target: PlayerIndex
+  amount: number
+}
+
 /** 伤害上下文：供「受到伤害后」技能与日志使用 */
 export interface DamageCtx {
   source: PlayerIndex
@@ -244,6 +254,8 @@ export type Frame =
     }
   /** 伤害已扣减体力：先依次询问「受到伤害后」技能，再做濒死检查 */
   | { kind: 'damage'; ctx: DamageCtx; triggers: TriggerRef[] }
+  /** 威胁已叠加：先依次询问「受到威胁后」技能，再继续当前结算 */
+  | { kind: 'threat'; ctx: ThreatCtx; triggers: TriggerRef[] }
   /** 濒死询问队列：按顺序逐个询问是否使用【回复】 */
   | { kind: 'dying'; dying: PlayerIndex; ask: PlayerIndex[] }
   /** 结算收尾：把仍在处理区的牌按归属移入各自的弃牌堆（已被取走的牌自动跳过） */

@@ -352,7 +352,7 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
     )
   })
 
-  it('可选发动的触发技能目前只支持 after-damage', () => {
+  it('可选发动的触发技能只支持 after-damage / after-threat', () => {
     expectSingle(
       mutateDoc('skills/charge.json', (doc) => {
         delete doc.modifiers
@@ -364,6 +364,18 @@ describe('DSL 校验器 · 技能与卡牌结构', () => {
       }),
       'bad-combination',
     )
+  })
+
+  it('after-threat 是合法时机，可选发动不会被拒', () => {
+    const docs = mutateDoc('skills/charge.json', (doc) => {
+      delete doc.modifiers
+      doc.trigger = {
+        on: { at: 'after-threat' },
+        optional: true,
+        effects: [{ kind: 'threat', target: 'source', amount: { kind: 'const', value: 1 } }],
+      }
+    })
+    expect(issuesOf(docs)).toEqual([])
   })
 
   it('转化的语境必须是 use / play', () => {

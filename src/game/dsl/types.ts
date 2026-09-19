@@ -33,6 +33,7 @@ export type Timing =
   | { at: 'phase-start'; phase: TurnPhase }
   | { at: 'phase-end'; phase: TurnPhase }
   | { at: 'after-damage' }
+  | { at: 'after-threat' }
 
 /** 数值表达式 */
 export type Value =
