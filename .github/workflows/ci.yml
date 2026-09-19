@@ -1,0 +1,43 @@
+name: CI
+
+# 与本地验收完全同序：装依赖 → 风格 → 静态检查 → 类型 → 测试 → 构建。
+# 顺序刻意把最快、最容易被 review 漏掉的两步（风格、lint）放在最前，尽早失败。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支的新推送取消上一次未完成的运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm ci 严格按 package-lock.json 安装，锁文件不同步会直接失败
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 代码风格（Prettier）
+        run: npm run format:check
+
+      - name: 静态检查（ESLint）
+        run: npm run lint
+
+      - name: 类型检查（vue-tsc）
+        run: npm run typecheck
+
+      - name: 单元测试（vitest）
+        run: npm test
+
+      - name: 生产构建
+        run: npm run build
