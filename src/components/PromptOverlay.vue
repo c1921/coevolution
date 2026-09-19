@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { CARD_NAME } from '../game/data/cardDefs'
 import { skillDef } from '../game/data/species'
 import {
   backToStart,
@@ -17,24 +15,17 @@ import {
   pendingTargetOptions,
   resultText,
   submitTrigger,
+  targetPickerHint,
+  targetPickerTitle,
   targetsReady,
 } from '../stores/game'
 import { BTN, BTN_GHOST, BTN_PRIMARY } from './ui'
 
-/** 目标选择器的标题：主动技显示技能名，卡牌显示牌名 */
-const targetTitle = computed(() => {
-  const pending = pendingTarget.value
-  if (!pending) return ''
-  return pending.kind === 'skill'
-    ? `发动【${skillDef(pending.skill).name}】`
-    : `使用【${CARD_NAME[pending.as]}】`
-})
-
-const targetHint = computed(() => {
-  const choice = pendingTargetChoice.value
-  if (!choice) return '选择目标'
-  return choice.multi ? `选择 ${choice.size} 个目标` : '选择目标'
-})
+/**
+ * 覆盖层：目标选择器、可选技能的询问、终局结算。
+ * 标题与说明文案来自 store 的选择器（`targetPickerTitle` / `targetPickerHint`），
+ * 组件只负责渲染。
+ */
 </script>
 
 <template>
@@ -44,8 +35,8 @@ const targetHint = computed(() => {
     class="fixed inset-0 z-20 grid place-items-center bg-black/60 p-4"
   >
     <div class="w-full max-w-sm rounded-xl border border-table-600 bg-table-800 p-5">
-      <p class="text-center text-lg font-semibold text-ink-100">{{ targetTitle }}</p>
-      <p class="mt-1 text-center text-sm text-ink-300">{{ targetHint }}</p>
+      <p class="text-center text-lg font-semibold text-ink-100">{{ targetPickerTitle }}</p>
+      <p class="mt-1 text-center text-sm text-ink-300">{{ targetPickerHint }}</p>
 
       <div class="mt-4 flex flex-col gap-2">
         <div v-for="option in pendingTargetOptions" :key="option.index">

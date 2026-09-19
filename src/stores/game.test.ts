@@ -167,6 +167,8 @@ describe('界面状态与驱动循环', () => {
     // 手牌上限 = 当前体力 = 2 → 需要弃 2 张
     advance(state)
     expect(store.humanPending.value).toMatchObject({ kind: 'discard', count: 2 })
+    // 视图派生：选不满时「确认弃置」不可点
+    expect(store.canConfirmDiscard.value).toBe(false)
 
     // 选不满时拒绝提交
     store.submitDiscard()
@@ -175,10 +177,44 @@ describe('界面状态与驱动循环', () => {
     const hand = state.players[0].hand
     for (const card of hand.slice(0, 2)) store.pickCard(card.uid)
     expect(store.selectedCards.value).toHaveLength(2)
+    expect(store.canConfirmDiscard.value).toBe(true)
 
     store.submitDiscard()
     expect(store.errorMessage.value).toBeNull()
     expect(state.players[0].hand).toHaveLength(2)
+  })
+
+  it('视图派生集中在 store：操作按钮、放弃文案与费用求值', () => {
+    const state = loadState({
+      playerSpecies: 'offensive',
+      aiSpecies: 'defensive',
+      playerHand: [{ kind: 'strike' }, { kind: 'defend' }],
+    })
+    advance(state)
+    expect(store.humanPending.value?.kind).toBe('play')
+
+    // 没选牌 → 没有操作按钮；选一张 → 按钮把手牌与牌面绑在一起
+    expect(store.actionButtons.value).toEqual([])
+    const strike = state.players[0].hand.find((c) => c.kind === 'strike')!
+    store.pickCard(strike.uid)
+    expect(store.actionButtons.value).toHaveLength(1)
+    expect(store.actionButtons.value[0]!.card.uid).toBe(strike.uid)
+    expect(store.actionButtons.value[0]!.label).toContain('能量')
+
+    // 出牌阶段的「放弃」是放弃响应
+    expect(store.cancelLabel.value).toContain('放弃响应')
+
+    // 费用按当前对局求值（card-cost 通道可修正），组件不再自己调规则
+    expect(store.cardCost('strike')).toBe(energyCost(state, 0, 'strike'))
+
+    // 濒死阶段：文案区分自救与救援
+    // 注意：必须写进 store 里的响应式代理，直接改 makeState 返回的裸对象不会触发 computed 失效
+    loadState({ playerSpecies: 'offensive', aiSpecies: 'defensive', playerHp: 0 })
+    const live = store.gameState.value!
+    live.pending = { kind: 'dying', player: 0, dying: 0 }
+    expect(store.cancelLabel.value).toBe('放弃自救')
+    live.pending = { kind: 'dying', player: 0, dying: 1 }
+    expect(store.cancelLabel.value).toBe('放弃救援')
   })
 
   it('再来一局会重置对局，旧的 AI 回调不会污染新对局', () => {
@@ -365,6 +401,9 @@ describe('界面状态与驱动循环', () => {
       [0, true],
       [1, true],
     ])
+    // 选择器的标题与说明也由 store 给出（组件不自己拼文案）
+    expect(store.targetPickerTitle.value).toContain('急救')
+    expect(store.targetPickerHint.value).toBe('选择目标')
 
     // 取消不提交
     store.cancelTarget()
@@ -453,6 +492,8 @@ describe('界面状态与驱动循环', () => {
       expect(store.pendingTargetChoice.value).toMatchObject({ multi: true, size: 2 })
       expect(store.targetsReady.value).toBe(false)
       expect(store.pendingTargetOptions.value.map((o) => o.index)).toEqual([0, 1])
+      // 多选时说明行告知要选几个
+      expect(store.targetPickerHint.value).toBe('选择 2 个目标')
 
       store.chooseTarget(0)
       expect(store.chosenTargets.value).toEqual([0])

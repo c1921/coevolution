@@ -7,7 +7,7 @@ import { PHASE_NAME } from '../game/rules/phase'
 import { checkPlayCardAsDefend, checkUseCard } from '../game/rules/legality'
 import { energyCost, energyMax } from '../game/rules/energy'
 import { ATTRITION_TURN } from '../game/rules/turn'
-import { CARD_NAME } from '../game/data/cardDefs'
+import { CARD_DEFS, CARD_NAME } from '../game/data/cardDefs'
 import { skillDoc } from '../game/dsl/registry'
 import { assertNever, baseContext } from '../game/dsl/runtime'
 import type { UseContext } from '../game/dsl/kinds'
@@ -242,6 +242,45 @@ export function optionText(option: CardOption): string {
   return `${optionLabel(option, verb)}（${cost} 能量）`
 }
 
+/* ------------------------------------------------------------ 视图派生：给组件用
+ * 组件的职责是渲染，不是推导。这里把「按钮列表」「按钮文案」这类派生集中起来，
+ * 组件里只剩 v-for / v-if。好处是这些文案与判定都能被 stores/game.test.ts 直接断言，
+ * 不必挂载组件。
+ */
+
+/** 一个操作按钮：把手牌与它的一种合法用法绑在一起，模板里无需再做空值判断 */
+export interface ActionButton {
+  card: Card
+  option: CardOption
+  label: string
+}
+
+/** 已选中那张手牌在当前时机的全部合法操作（没选牌时为空） */
+export const actionButtons = computed<ActionButton[]>(() => {
+  const card = selectedCards.value[0]
+  if (!card) return []
+  return legalOptions(card).map((option) => ({ card, option, label: optionText(option) }))
+})
+
+/** 弃牌阶段的「确认弃置」是否可点：已选张数正好等于应弃张数 */
+export const canConfirmDiscard = computed(() => selectedCards.value.length === discardCount.value)
+
+/**
+ * 放弃按钮的文案。濒死阶段的「放弃」有两个意思，靠"濒死的是不是自己"区分；
+ * 其余时机统一是放弃响应。
+ */
+export const cancelLabel = computed(() => {
+  const pending = humanPending.value
+  if (pending?.kind === 'dying') return pending.dying === HUMAN ? '放弃自救' : '放弃救援'
+  return '放弃响应（承受伤害）'
+})
+
+/** 某牌种在当前对局里要付的能量（card-cost 通道可修正）；无对局时退回文档基准费用 */
+export function cardCost(kind: CardKind): number {
+  const state = gameState.value
+  return state ? energyCost(state, HUMAN, kind) : CARD_DEFS[kind].cost
+}
+
 export function isSelectable(card: Card): boolean {
   const pending = humanPending.value
   if (!pending) return false
@@ -411,6 +450,21 @@ export function targetOptionsFor(spec: TargetSpec): TargetOption[] {
 export const pendingTargetOptions = computed<TargetOption[]>(() => {
   const spec = pendingTargetSpec()
   return spec ? targetOptionsFor(spec) : []
+})
+
+/** 目标选择器的标题：主动技显示技能名，卡牌显示牌名 */
+export const targetPickerTitle = computed(() => {
+  const pending = pendingTarget.value
+  if (!pending) return ''
+  return pending.kind === 'skill'
+    ? `发动【${skillDef(pending.skill).name}】`
+    : `使用【${CARD_NAME[pending.as]}】`
+})
+
+/** 目标选择器的说明行：多选时告知要选几个，其余就是「选择目标」 */
+export const targetPickerHint = computed(() => {
+  const choice = pendingTargetChoice.value
+  return choice?.multi ? `选择 ${choice.size} 个目标` : '选择目标'
 })
 
 /** 多选时已勾选的目标是否达到要求（单选恒为 true，点击即提交） */

@@ -64,6 +64,8 @@ describe('界面渲染：视图 Proxy 必须容忍 Vue 的内部键探测', () =
     expect(html).toContain('结束出牌阶段')
     // 威胁是本作的基础伤害机制：面板上必须能看到它
     expect(html).toContain('威胁')
+    // 阶段说明整体走 store 的 pendingHint（组件不再自己拼这句话）
+    expect(html).toContain('你的出牌阶段')
 
     backToStart()
   })

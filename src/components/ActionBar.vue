@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { CardOption } from '../game/skills'
-import type { Card, SkillId } from '../game/types'
 import {
+  actionButtons,
+  canConfirmDiscard,
+  cancelLabel,
   discardCount,
   errorMessage,
   humanPending,
   humanSkills,
-  humanThreat,
-  legalOptions,
-  optionText,
+  pendingHint,
   selectedCards,
   skillButtonLabel,
   submitActivate,
@@ -20,29 +18,11 @@ import {
 } from '../stores/game'
 import { BTN, BTN_GHOST, BTN_PRIMARY } from './ui'
 
-interface ActionButton {
-  card: Card
-  option: CardOption
-  label: string
-}
-
-/** 已选手牌的合法操作；把牌与选项绑在一起，模板里无需再做空值判断 */
-const actionButtons = computed<ActionButton[]>(() => {
-  const card = selectedCards.value[0]
-  if (!card) return []
-  return legalOptions(card).map((option) => ({
-    card,
-    option,
-    label: optionText(option),
-  }))
-})
-
-const canDiscard = computed(() => selectedCards.value.length === discardCount.value)
-
-/** 主动技按钮文案由 store 按技能文档生成（需要先选牌时提示） */
-function skillButtonText(skill: SkillId): string {
-  return skillButtonLabel(skill)
-}
+/**
+ * 操作栏。这里**不做任何推导**：按钮列表、文案、可点状态全部来自 store 的选择器，
+ * 组件只负责把它们摆出来。威胁与阶段提示统一走 `pendingHint`
+ * （曾在这里另写一份，与 store 的文案重复且只在这一处可见）。
+ */
 </script>
 
 <template>
@@ -65,7 +45,7 @@ function skillButtonText(skill: SkillId): string {
             :class="BTN"
             @click="submitActivate(skill)"
           >
-            {{ skillButtonText(skill) }}
+            {{ skillButtonLabel(skill) }}
           </button>
           <button :class="BTN_GHOST" @click="submitEndPhase">结束出牌阶段</button>
         </template>
@@ -80,7 +60,7 @@ function skillButtonText(skill: SkillId): string {
           >
             {{ item.label }}
           </button>
-          <button :class="BTN_GHOST" @click="submitCancel">放弃响应（承受伤害）</button>
+          <button :class="BTN_GHOST" @click="submitCancel">{{ cancelLabel }}</button>
         </template>
 
         <!-- 濒死求【回复】 -->
@@ -93,14 +73,12 @@ function skillButtonText(skill: SkillId): string {
           >
             {{ item.label }}
           </button>
-          <button :class="BTN_GHOST" @click="submitCancel">
-            {{ humanPending.dying === 0 ? '放弃自救' : '放弃救援' }}
-          </button>
+          <button :class="BTN_GHOST" @click="submitCancel">{{ cancelLabel }}</button>
         </template>
 
         <!-- 弃牌阶段 -->
         <template v-else-if="humanPending.kind === 'discard'">
-          <button :class="BTN_PRIMARY" :disabled="!canDiscard" @click="submitDiscard">
+          <button :class="BTN_PRIMARY" :disabled="!canConfirmDiscard" @click="submitDiscard">
             确认弃置（{{ selectedCards.length }}/{{ discardCount }}）
           </button>
         </template>
@@ -108,13 +86,8 @@ function skillButtonText(skill: SkillId): string {
         <!-- 可选发动技能由 PromptOverlay 处理 -->
         <span v-else class="text-sm text-ink-500">请选择是否发动技能</span>
 
-        <span v-if="humanPending.kind !== 'trigger'" class="text-sm text-ink-500">
-          {{ selectedCards.length === 0 ? '（先点选一张手牌）' : '' }}
-        </span>
-        <!-- 威胁会在自己的回合结束时结算为伤害：出牌阶段给一句可直接照做的提示 -->
-        <span v-if="humanPending.kind === 'play' && humanThreat > 0" class="text-sm text-ember-400">
-          你身上有 {{ humanThreat }} 点威胁：回合结束时结算为伤害，可打出【防御】抵消
-        </span>
+        <!-- 阶段说明：唯一事实来源在 store 的 pendingHint（含威胁提示） -->
+        <span v-if="pendingHint" class="text-sm text-ink-300">{{ pendingHint }}</span>
       </template>
 
       <span v-else class="text-sm text-ink-500">等待对手行动…</span>
